@@ -1,46 +1,81 @@
 """
-Calorie tracker -
-
-- Creates log for each day
-
-E.g. input for foods:
-<number><unit>_<food_item>
-- 200g chicken
-- 350ml milk
-- 2 cheese
-
-Writes data to <data.txt>
-
-TODO -
-- Add argv CLI functionality
+sys.args:
+    -v / --view: see today's eaten foods
+    -l / --log: add entries
 """
 
-import datetime
+# TODO - consumption_log is resetting each time. Need to seperate read & write to persist
+
 import json
 import os
-from pathlib import Path
+import sys
+from pprint import pprint
 
-DATA_DIR = Path("data")
-DATA_FILE = "calorie_logs.json"
+from common import get_current_date
 
-def init_data_file():
-    # Initialise the file if it doesn't exist
-    if not os.path.exists(DATA_FILE):
-        with open(DATA_FILE, 'w') as f:
-            json.dump({}, f)
+DATA_FILE = os.path.join("data", "consumption_log.json")
 
-def get_current_date():
-    # Returns current date in DD-MM-YYYY format
-    return datetime.now().strftime("%Y-%m-%d")
-# Other format - print(date.strftime("%A: %d/%B"))
+def load_file():
+    try:
+        with open(DATA_FILE, "r") as file:
+            data = json.load(file)
+    except FileNotFoundError:
+        data = {}
+    return data
 
-def add_food_entry(food_name, serving_size, date=None):
-    """
-    Log a food consumption, references food database
-    Args:
-        food_name (str): Name of the food
-        serving_size (float): Amount of food consumed
-        date (str, optional): Date in YYYY-MM-DD format
-    """
-    if date is None:
-        date = get_current_date()
+def write_file(log):
+    with open(DATA_FILE, "w") as file:
+        json.dump(log, file, indent=4)
+
+def read_file():
+    try:
+        with open(DATA_FILE, "r") as file:
+            data = json.load(file)
+            # data.close()
+    except FileNotFoundError:
+        print("Missing file")
+        data = {}
+    return data
+
+
+def log_foods():
+    consumed = []
+    output = {}
+    date = get_current_date()
+    output["date"] = date
+    output["foods"] = []
+
+    # Takes line by line input of what user has eaten
+    # Format: <measurement><unit>_<food_item>
+    while True:
+        try:
+            foods = input("What have you eaten today?\n~ to save:\n")
+            consumed.append(foods)
+            if foods == '~':
+                break
+        except (KeyboardInterrupt, EOFError):
+            break
+        output["foods"] = consumed
+    write_file(output)
+
+def view_food(log_file):
+    pprint(log_file)
+
+
+def main():
+    
+    if sys.argv[1] == "l" or sys.argv[1] == "--log":
+        try:
+            log_foods()
+        except (IndexError):
+            print("Missing command-line argument: -l or -v")
+            pass
+    elif sys.argv[1] == "-v" or sys.argv[1] == "--view":
+        try:
+            logs = read_file()
+            view_food(logs)
+        except IndexError:
+            pass
+
+if __name__ == "__main__":
+    main()
