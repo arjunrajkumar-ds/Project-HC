@@ -1,0 +1,248 @@
+{% extends 'base.html' %}
+{% block title %}Progression{% endblock %}
+
+{% block extra_css %}
+<style>
+.prog-list { display: flex; flex-direction: column; gap: 14px; }
+
+.prog-card {
+    background: var(--surface);
+    border-radius: 14px;
+    padding: 16px;
+}
+.prog-card.t1 { border-left: 3px solid var(--t1-fg); }
+.prog-card.t2 { border-left: 3px solid var(--t2-fg); }
+
+/* Header row */
+.pc-head {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 12px; flex-wrap: wrap;
+}
+.pc-name   { font-weight: 700; font-size: 1rem; color: #fff; flex: 1; }
+.pc-muscle { font-size: 0.78rem; color: var(--dim); }
+
+/* Weight + target */
+.pc-target {
+    display: flex; align-items: baseline; gap: 14px;
+    margin-bottom: 14px; flex-wrap: wrap;
+}
+.pc-weight {
+    font-size: 1.7rem; font-weight: 800; color: #fff; line-height: 1;
+}
+.pc-weight-unit { font-size: 0.85rem; color: var(--dim); }
+.pc-arrow  { font-size: 1rem; color: var(--dim); }
+.pc-reps   {
+    font-size: 1.1rem; font-weight: 700;
+    color: var(--pull-fg);
+}
+.pc-stage-lbl {
+    font-size: 0.72rem; color: var(--dim); margin-left: auto;
+    white-space: nowrap;
+}
+
+/* Stage track */
+.stage-track {
+    display: flex; align-items: center; gap: 4px;
+    margin-bottom: 14px; flex-wrap: wrap;
+}
+.stage-group {
+    display: flex; align-items: center; gap: 3px;
+}
+.stage-sep {
+    width: 8px; height: 2px;
+    background: var(--border); border-radius: 1px; flex-shrink: 0;
+}
+.stage-dot {
+    width: 11px; height: 11px; border-radius: 50%;
+    flex-shrink: 0; position: relative;
+    transition: transform .1s;
+}
+.stage-dot.done    { background: #4ade80; }
+.stage-dot.current {
+    background: #fff;
+    box-shadow: 0 0 0 3px var(--t1-fg);
+    width: 13px; height: 13px;
+}
+.t2 .stage-dot.current { box-shadow: 0 0 0 3px var(--t2-fg); }
+.stage-dot.future  { background: var(--border); }
+
+/* Rep-group labels under track */
+.stage-labels {
+    display: flex; gap: 4px; margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+.stage-group-lbl {
+    font-size: 0.62rem; color: var(--dim); flex-shrink: 0;
+    white-space: nowrap;
+}
+
+/* Actions */
+.pc-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.btn-advance {
+    background: var(--accent); color: #fff;
+    border: none; border-radius: 8px; cursor: pointer;
+    font-family: inherit; font-size: 0.88rem; font-weight: 700;
+    min-height: 44px; padding: 10px 18px;
+    flex: 1;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-advance.last-stage {
+    background: var(--t1-fg); color: #fff;
+}
+.t2 .btn-advance.last-stage { background: var(--t2-fg); }
+
+.set-weight-form {
+    display: flex; gap: 6px; align-items: stretch; flex: 1;
+}
+.set-weight-form input {
+    min-height: 44px; padding: 10px 12px;
+    font-size: 16px; width: 90px; flex-shrink: 0;
+    text-align: center;
+}
+.btn-set-wt {
+    background: var(--surface-2); color: var(--muted);
+    border: 1px solid var(--border); border-radius: 8px;
+    cursor: pointer; font-family: inherit; font-size: 0.82rem; font-weight: 600;
+    min-height: 44px; padding: 10px 12px; white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* empty state */
+.prog-empty {
+    background: var(--surface); border-radius: 12px; padding: 24px;
+    text-align: center; color: var(--dim); font-size: 0.9rem;
+}
+.prog-empty a { color: var(--pull-fg); }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Progression</h1>
+<p style="font-size:0.85rem;color:var(--muted);margin-bottom:20px">
+    Linear progression for Tier 1 &amp; 2 lifts.
+    Complete every stage at a given weight to unlock +{{ '%.4g' % 2.5 }} kg.
+</p>
+
+{% if items %}
+
+{# ── Tier 1 ────────────────────────────────────────────────────── #}
+{% set t1 = items | selectattr('tier', 'eq', 1) | list %}
+{% set t2 = items | selectattr('tier', 'eq', 2) | list %}
+
+{% for group, label in [(t1, 'Tier 1 — Heavy Compounds'), (t2, 'Tier 2 — Supporting Compounds')] %}
+{% if group %}
+<section class="section">
+    <p class="section-title">{{ label }}</p>
+    <div class="prog-list">
+    {% for p in group %}
+    <div class="prog-card t{{ p.tier }}">
+        <div class="pc-head">
+            <span class="tier-badge t{{ p.tier }}">T{{ p.tier }}</span>
+            <span class="pc-name">{{ p.name }}</span>
+            <span class="pc-muscle">{{ p.muscle_group }}</span>
+        </div>
+
+        <div class="pc-target">
+            <span class="pc-weight">{{ p.weight_kg | int if p.weight_kg == p.weight_kg | int else p.weight_kg }}</span>
+            <span class="pc-weight-unit">kg</span>
+            <span class="pc-arrow">→</span>
+            <span class="pc-reps">{{ p.target_sets }} × {{ p.target_reps }} reps</span>
+            <span class="pc-stage-lbl">Stage {{ p.stage + 1 }}/{{ p.total_stages }}</span>
+        </div>
+
+        {# Stage track #}
+        <div class="stage-track">
+            {% set ns = namespace(prev_reps=None) %}
+            {% for i, step in p.ladder | enumerate %}
+            {% if ns.prev_reps is not none and step.reps != ns.prev_reps %}
+            <div class="stage-sep"></div>
+            {% endif %}
+            <div class="stage-dot {{ 'done' if i < p.stage else ('current' if i == p.stage else 'future') }}"
+                 title="{{ step.reps }}r × {{ step.sets }}s"></div>
+            {% set ns.prev_reps = step.reps %}
+            {% endfor %}
+        </div>
+
+        <div class="pc-actions">
+            {# Advance button — JS fetch so we don't need a page reload #}
+            <button class="btn-advance {{ 'last-stage' if p.is_last }}"
+                    data-exercise-id="{{ p.exercise_id }}"
+                    data-tier="{{ p.tier }}"
+                    onclick="advanceStage(this)">
+                {% if p.is_last %}
+                    Complete → +2.5 kg
+                {% else %}
+                    +1 Stage
+                    <span style="font-weight:400;opacity:.7;font-size:.8em">
+                        (next: {{ p.ladder[p.stage+1].sets }}×{{ p.ladder[p.stage+1].reps }}r)
+                    </span>
+                {% endif %}
+            </button>
+
+            {# Set / correct weight #}
+            <div class="set-weight-form">
+                <input type="number" id="wt-{{ p.exercise_id }}"
+                       value="{{ p.weight_kg | int if p.weight_kg == p.weight_kg | int else p.weight_kg }}"
+                       min="0" step="0.5" inputmode="decimal"
+                       placeholder="kg">
+                <button class="btn-set-wt"
+                        data-exercise-id="{{ p.exercise_id }}"
+                        data-tier="{{ p.tier }}"
+                        onclick="setWeight(this)">Set wt</button>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    </div>
+</section>
+{% endif %}
+{% endfor %}
+
+{% else %}
+<div class="prog-empty">
+    <p>No progression tracked yet.</p>
+    <p style="margin-top:8px">
+        Log a <a href="/session/new">gym session</a> and progressions
+        will be initialised automatically from your history.
+    </p>
+</div>
+{% endif %}
+
+<script>
+async function advanceStage(btn) {
+    const exId = btn.dataset.exerciseId;
+    const tier = btn.dataset.tier;
+    btn.disabled = true;
+    btn.textContent = '…';
+
+    const res  = await fetch('/progression/advance', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({exercise_id: exId, tier: parseInt(tier)})
+    });
+    const data = await res.json();
+
+    if (data.weight_bumped) {
+        alert(`🎉 Weight increased to ${data.weight_kg} kg! Back to stage 1.`);
+    }
+    // Reload to re-render the card cleanly
+    location.reload();
+}
+
+async function setWeight(btn) {
+    const exId  = btn.dataset.exerciseId;
+    const tier  = btn.dataset.tier;
+    const input = document.getElementById('wt-' + exId);
+    const wt    = parseFloat(input.value);
+    if (!wt || wt <= 0) { input.focus(); return; }
+
+    await fetch('/progression/set-weight', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({exercise_id: exId, tier: parseInt(tier), weight_kg: wt})
+    });
+    location.reload();
+}
+</script>
+{% endblock %}

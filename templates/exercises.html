@@ -1,0 +1,125 @@
+{% extends 'base.html' %}
+{% block title %}Exercise Library{% endblock %}
+
+{% block extra_css %}
+<style>
+.tier-section { margin-bottom: 32px; }
+.scheme-hint  { font-size: 0.78rem; color: var(--muted); margin: 0 0 10px; }
+
+.exercise-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+
+.exercise-item {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface); border-radius: 10px;
+    padding: 12px 14px; gap: 10px;
+}
+.exercise-info { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; flex: 1; min-width: 0; }
+.exercise-name { font-weight: 600; font-size: 0.95rem; color: #fff; }
+.exercise-meta { font-size: 0.78rem; color: var(--muted); }
+
+.day-tag {
+    font-size: 0.67rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .04em; padding: 2px 7px; border-radius: 4px;
+}
+.day-tag.any  { background: var(--t1-bg); color: var(--t1-fg); }
+.day-tag.push { background: var(--push-bg); color: var(--push-fg); }
+.day-tag.pull { background: var(--pull-bg); color: var(--pull-fg); }
+.day-tag.legs { background: var(--legs-bg); color: var(--legs-fg); }
+.day-tag.core { background: var(--core-bg); color: var(--core-fg); }
+
+.exercise-notes { font-size: 0.75rem; color: #555; font-style: italic; width: 100%; }
+
+.btn-delete-sm {
+    background: var(--push-bg); color: var(--push-fg);
+    border: none; border-radius: 7px; cursor: pointer;
+    font-size: 0.78rem; font-weight: 600;
+    min-height: 44px; min-width: 60px;
+    padding: 6px 12px; white-space: nowrap;
+    font-family: inherit;
+}
+
+.add-section {
+    border-top: 1px solid var(--border);
+    padding-top: 24px; margin-top: 8px;
+}
+.add-form { display: flex; flex-direction: column; gap: 14px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Exercise Library</h1>
+
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+{% set tier_info = {
+    1: {'label': 'Tier 1 — Heavy Compounds',      'scheme': '3–6 reps × 2–4 sets'},
+    2: {'label': 'Tier 2 — Supporting Compounds',  'scheme': '6–8 reps × 2–3 sets'},
+    3: {'label': 'Tier 3 — Aesthetics',            'scheme': '8–12 reps × 3–4 sets'}
+} %}
+
+{% for tier_num in [1, 2, 3] %}
+<section class="tier-section">
+    <h2>{{ tier_info[tier_num].label }}</h2>
+    <p class="scheme-hint">{{ tier_info[tier_num].scheme }}</p>
+    {% if by_tier[tier_num] %}
+    <ul class="exercise-list">
+        {% for ex in by_tier[tier_num] %}
+        <li class="exercise-item">
+            <div class="exercise-info">
+                <span class="exercise-name">{{ ex.name }}</span>
+                <span class="exercise-meta">{{ ex.muscle_group }}</span>
+                <span class="day-tag {{ ex.day_type }}">{{ ex.day_type }}</span>
+                {% if ex.notes %}<span class="exercise-notes">{{ ex.notes }}</span>{% endif %}
+            </div>
+            <form method="POST" action="/exercises/{{ ex.id }}/delete"
+                  onsubmit="return confirm('Delete {{ ex.name }}?')">
+                <button type="submit" class="btn-delete-sm">Delete</button>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty">No exercises in this tier.</p>
+    {% endif %}
+</section>
+{% endfor %}
+
+<section class="add-section">
+    <h2>Add Exercise</h2>
+    <form method="POST" action="/exercises" class="add-form">
+        <div class="form-group">
+            <label for="name">Name</label>
+            <input type="text" id="name" name="name" required placeholder="e.g. Cable Row">
+        </div>
+        <div class="form-group">
+            <label for="tier">Tier</label>
+            <select id="tier" name="tier" required>
+                <option value="">— select —</option>
+                <option value="1">1 — Heavy Compound</option>
+                <option value="2">2 — Supporting Compound</option>
+                <option value="3">3 — Aesthetics</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="muscle_group">Muscle Group</label>
+            <input type="text" id="muscle_group" name="muscle_group" required placeholder="e.g. Back">
+        </div>
+        <div class="form-group">
+            <label for="day_type">Day Type</label>
+            <select id="day_type" name="day_type" required>
+                <option value="">— select —</option>
+                <option value="any">Any</option>
+                <option value="push">Push</option>
+                <option value="pull">Pull</option>
+                <option value="legs">Legs</option>
+                <option value="core">Core</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="notes">Notes (optional)</label>
+            <input type="text" id="notes" name="notes" placeholder="e.g. use full ROM">
+        </div>
+        <button type="submit" class="btn btn-primary btn-full">Add Exercise</button>
+    </form>
+</section>
+{% endblock %}

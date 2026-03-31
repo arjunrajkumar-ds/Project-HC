@@ -1,0 +1,217 @@
+{#
+  Activity calendar heatmap — GitHub style.
+  Requires:  heatmap_json  (JSON str: { "YYYY-MM-DD": ["gym", "swim", ...], ... })
+
+  To add new habit types: add an entry to the TYPES object in the script below.
+  Each type needs { color, label }.  The cell rendering is fully data-driven.
+#}
+
+<style>
+.hm-outer  { margin-bottom: 4px; }
+.hm-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+.hm-inner  { display: inline-flex; flex-direction: column; gap: 0; min-width: max-content; }
+
+.hm-months { position: relative; height: 16px; }
+
+.hm-row    { display: flex; gap: 0; align-items: flex-start; }
+.hm-labels { display: flex; flex-direction: column; flex-shrink: 0; }
+.hm-weeks  { display: flex; gap: 0; }
+.hm-week   { display: flex; flex-direction: column; flex-shrink: 0; }
+
+.hm-legend {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    margin-top: 10px; font-size: 0.72rem; color: var(--dim);
+}
+.hm-legend-item { display: flex; align-items: center; gap: 4px; }
+.hm-legend-swatch {
+    width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0;
+}
+
+.hm-tip {
+    position: fixed; z-index: 999;
+    background: #1e1e2e; border: 1px solid var(--border);
+    color: #e0e0e0; font-size: 0.75rem;
+    padding: 5px 9px; border-radius: 6px;
+    white-space: nowrap; pointer-events: none;
+    opacity: 0; transition: opacity .1s;
+    box-shadow: 0 4px 12px rgba(0,0,0,.4);
+}
+</style>
+
+<div class="hm-outer">
+    <div class="hm-scroll" id="hm-scroll">
+        <div class="hm-inner">
+            <div class="hm-months" id="hm-months"></div>
+            <div class="hm-row">
+                <div class="hm-labels" id="hm-labels"></div>
+                <div class="hm-weeks"  id="hm-weeks"></div>
+            </div>
+        </div>
+    </div>
+    <div class="hm-legend" id="hm-legend"></div>
+</div>
+<div class="hm-tip" id="hm-tip"></div>
+
+<script>
+(function () {
+    // ── Activity type registry — add new habit types here ─────────
+    const TYPES = {
+        gym:  { color: '#5b4fcf', label: 'Gym'  },
+        swim: { color: '#0891b2', label: 'Swim' },
+        // run: { color: '#16a34a', label: 'Run' },
+    };
+
+    const RAW = {{ heatmap_json | safe }};
+
+    // ── Date range: Monday of ~53 weeks ago → today ───────────────
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const start = new Date(today);
+    start.setDate(start.getDate() - 364);
+    const dow = start.getDay();                      // 0=Sun … 6=Sat
+    start.setDate(start.getDate() - (dow === 0 ? 6 : dow - 1)); // rewind to Mon
+
+    // Build week columns
+    const weeks = [];
+    const cur = new Date(start);
+    while (cur <= today) {
+        const week = [];
+        for (let i = 0; i < 7; i++) {
+            week.push(cur <= today ? new Date(cur) : null);
+            cur.setDate(cur.getDate() + 1);
+        }
+        weeks.push(week);
+    }
+
+    const CELL = 13, GAP = 2, STEP = CELL + GAP;
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    // ── Cell background (handles N activity types) ────────────────
+    function cellBg(types) {
+        if (!types || !types.length) return null;
+        const colors = types.map(t => TYPES[t]?.color ?? '#555');
+        if (colors.length === 1) return colors[0];
+        const pct = Math.round(100 / colors.length);
+        const stops = colors.map((c, i) => `${c} ${i * pct}% ${(i + 1) * pct}%`);
+        return `linear-gradient(135deg, ${stops.join(', ')})`;
+    }
+
+    // ── Month labels ──────────────────────────────────────────────
+    const monthsEl = document.getElementById('hm-months');
+    // offset = day-label column width + gap
+    const labelColW = CELL + 4;
+    monthsEl.style.paddingLeft = labelColW + 'px';
+    monthsEl.style.position = 'relative';
+    let lastMon = -1;
+    weeks.forEach((week, wi) => {
+        const d = week.find(Boolean);
+        if (!d || d.getMonth() === lastMon) return;
+        lastMon = d.getMonth();
+        const span = document.createElement('span');
+        span.textContent = MONTHS[d.getMonth()];
+        span.style.cssText =
+            `position:absolute;left:${wi * STEP}px;font-size:10px;color:var(--dim);white-space:nowrap`;
+        monthsEl.appendChild(span);
+    });
+
+    // ── Day-of-week labels (Mon / Wed / Fri) ──────────────────────
+    const labelsEl = document.getElementById('hm-labels');
+    labelsEl.style.cssText =
+        `display:flex;flex-direction:column;gap:${GAP}px;margin-right:4px;width:${CELL}px;flex-shrink:0`;
+    ['M','','W','','F','','S'].forEach(lbl => {
+        const el = document.createElement('div');
+        el.textContent = lbl;
+        el.style.cssText =
+            `height:${CELL}px;font-size:9px;color:var(--dim);` +
+            `display:flex;align-items:center;justify-content:center;flex-shrink:0`;
+        labelsEl.appendChild(el);
+    });
+
+    // ── Week columns ──────────────────────────────────────────────
+    const weeksEl = document.getElementById('hm-weeks');
+    weeksEl.style.cssText = `display:flex;gap:${GAP}px`;
+
+    weeks.forEach(week => {
+        const col = document.createElement('div');
+        col.style.cssText = `display:flex;flex-direction:column;gap:${GAP}px;flex-shrink:0`;
+
+        week.forEach(d => {
+            const cell = document.createElement('div');
+            cell.style.cssText =
+                `width:${CELL}px;height:${CELL}px;border-radius:3px;flex-shrink:0;box-sizing:border-box`;
+
+            if (!d) {
+                cell.style.background = 'transparent';
+            } else {
+                const iso   = d.toISOString().slice(0, 10);
+                const types = RAW[iso] ?? [];
+                const bg    = cellBg(types);
+
+                if (bg) {
+                    cell.style.background = bg;
+                } else {
+                    cell.style.cssText +=
+                        `;background:var(--surface);border:1px solid var(--border)`;
+                }
+
+                // Tooltip text
+                const dayName  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+                const typesTxt = types.length
+                    ? types.map(t => TYPES[t]?.label ?? t).join(' + ')
+                    : 'Rest';
+                cell.dataset.tip = `${dayName} ${MONTHS[d.getMonth()]} ${d.getDate()} — ${typesTxt}`;
+                cell.addEventListener('mouseenter', showTip);
+                cell.addEventListener('mouseleave',  hideTip);
+                cell.addEventListener('touchstart',  showTip, { passive: true });
+                cell.addEventListener('touchend',    hideTip, { passive: true });
+            }
+            col.appendChild(cell);
+        });
+        weeksEl.appendChild(col);
+    });
+
+    // ── Tooltip ───────────────────────────────────────────────────
+    const tipEl = document.getElementById('hm-tip');
+
+    function showTip(e) {
+        const text = e.currentTarget.dataset.tip;
+        if (!text) return;
+        tipEl.textContent = text;
+        tipEl.style.opacity = '1';
+        requestAnimationFrame(() => {
+            const r  = e.currentTarget.getBoundingClientRect();
+            const tr = tipEl.getBoundingClientRect();
+            let left = r.left + r.width / 2 - tr.width / 2;
+            let top  = r.top - tr.height - 6;
+            left = Math.max(8, Math.min(left, window.innerWidth - tr.width - 8));
+            if (top < 8) top = r.bottom + 6;
+            tipEl.style.left = left + 'px';
+            tipEl.style.top  = top  + 'px';
+        });
+    }
+    function hideTip() { tipEl.style.opacity = '0'; }
+
+    // ── Legend ────────────────────────────────────────────────────
+    const legendEl = document.getElementById('hm-legend');
+    // Empty swatch
+    const restItem = document.createElement('div');
+    restItem.className = 'hm-legend-item';
+    restItem.innerHTML =
+        `<div class="hm-legend-swatch" style="background:var(--surface);border:1px solid var(--border)"></div>` +
+        `<span>Rest</span>`;
+    legendEl.appendChild(restItem);
+
+    Object.values(TYPES).forEach(cfg => {
+        const item = document.createElement('div');
+        item.className = 'hm-legend-item';
+        item.innerHTML =
+            `<div class="hm-legend-swatch" style="background:${cfg.color}"></div>` +
+            `<span>${cfg.label}</span>`;
+        legendEl.appendChild(item);
+    });
+
+    // ── Auto-scroll to most recent (right) on mobile ──────────────
+    const scroll = document.getElementById('hm-scroll');
+    scroll.scrollLeft = scroll.scrollWidth;
+})();
+</script>

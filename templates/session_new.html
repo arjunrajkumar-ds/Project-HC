@@ -1,0 +1,486 @@
+{% extends 'base.html' %}
+{% block title %}Log Gym Session{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Step 1 ─────────────────────────────────────────────────────── */
+.setup-form  { display: flex; flex-direction: column; gap: 20px; }
+.day-label   { font-size: 0.78rem; font-weight: 600; color: var(--muted);
+               text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+.day-grid    { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.day-btn {
+    border: none; border-radius: 14px; cursor: pointer;
+    font-family: inherit; font-size: 1.15rem; font-weight: 800;
+    min-height: 72px; padding: 16px 10px;
+    -webkit-tap-highlight-color: transparent;
+}
+.day-btn:active { opacity: .7; }
+.day-btn.push { background: var(--push-bg); color: var(--push-fg); }
+.day-btn.pull { background: var(--pull-bg); color: var(--pull-fg); }
+.day-btn.legs { background: var(--legs-bg); color: var(--legs-fg); }
+.day-btn.core { background: var(--core-bg); color: var(--core-fg); }
+
+/* ── Step 2 meta bar ─────────────────────────────────────────────── */
+.session-meta {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 18px; flex-wrap: wrap;
+}
+.session-date-display { font-size: 0.9rem; color: var(--muted); }
+.change-link { font-size: 0.82rem; color: var(--dim); margin-left: auto;
+               text-decoration: none; padding: 6px 0; }
+
+/* ── Exercise blocks ─────────────────────────────────────────────── */
+#session-form { display: flex; flex-direction: column; gap: 12px; }
+
+.exercise-block {
+    background: var(--surface); border-radius: 12px; padding: 14px;
+}
+.tier1-block { border: 1px solid #2a2a3e; }
+
+.block-header {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 12px; flex-wrap: wrap;
+}
+.block-title { font-weight: 600; font-size: 0.95rem; color: #fff; }
+.scheme-tag  { font-size: 0.7rem; color: var(--dim); margin-left: auto; }
+.muscle-tag  { font-size: 0.75rem; color: var(--muted); }
+
+/* ── Set rows ────────────────────────────────────────────────────── */
+/* 4 col: set-num | reps | weight | remove */
+.sets-header {
+    display: grid;
+    grid-template-columns: 32px 1fr 1fr 44px;
+    gap: 6px; align-items: center;
+    font-size: 0.67rem; font-weight: 600; color: #444;
+    text-transform: uppercase; letter-spacing: .05em;
+    margin-bottom: 4px; padding: 0 2px;
+}
+.set-row {
+    display: grid;
+    grid-template-columns: 32px 1fr 1fr 44px;
+    gap: 6px; align-items: center;
+    margin-bottom: 6px;
+}
+.set-num { font-size: 0.82rem; color: var(--dim); text-align: center; }
+
+/* Override base input padding for compact set rows */
+.set-row input[type="number"] {
+    padding: 11px 8px;
+    min-height: 48px;
+    text-align: center;
+    font-weight: 600;
+    background: var(--bg);
+}
+
+.btn-rm-set {
+    background: none; border: 1px solid transparent; border-radius: 8px;
+    color: var(--border); cursor: pointer; font-size: 1rem;
+    min-height: 48px; min-width: 44px;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-rm-set:active { color: var(--push-fg); border-color: var(--push-fg); }
+
+.btn-add-set {
+    background: none; border: 1px dashed var(--border); border-radius: 8px;
+    color: var(--dim); cursor: pointer; font-family: inherit; font-size: 0.9rem;
+    min-height: 48px; padding: 10px; width: 100%; margin-top: 6px;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-add-set:active { border-color: var(--pull-fg); color: var(--pull-fg); }
+
+/* ── Tier 3 section ──────────────────────────────────────────────── */
+.tier3-section {
+    background: var(--surface); border-radius: 12px; padding: 14px;
+    display: flex; flex-direction: column; gap: 10px;
+}
+.tier3-header { display: flex; align-items: center; gap: 8px; }
+.tier3-add-row { display: flex; gap: 8px; }
+.tier3-add-row select { flex: 1; }
+
+.btn-add-t3 {
+    background: var(--t3-bg); border: none; border-radius: 8px;
+    color: var(--t3-fg); cursor: pointer; font-family: inherit;
+    font-size: 0.95rem; font-weight: 700;
+    min-height: 48px; padding: 10px 16px; white-space: nowrap;
+}
+#tier3-blocks { display: flex; flex-direction: column; gap: 12px; }
+#tier3-blocks .exercise-block { background: var(--bg); margin: 0; }
+
+.btn-rm-block {
+    background: none; border: none; color: var(--dim); cursor: pointer;
+    font-size: 0.75rem; font-family: inherit; margin-left: auto;
+    padding: 4px 8px; border-radius: 6px; min-height: 36px;
+}
+.btn-rm-block:active { color: var(--push-fg); }
+
+/* ── Notes + save ────────────────────────────────────────────────── */
+.notes-group { margin-top: 4px; }
+.btn-save-session {
+    background: var(--accent); border: none; border-radius: 12px;
+    color: #fff; cursor: pointer; font-family: inherit;
+    font-size: 1.05rem; font-weight: 800;
+    min-height: 56px; padding: 16px; width: 100%; margin-top: 6px;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-save-session:active { opacity: .85; }
+
+/* ── Progression widget (compact, inside exercise blocks) ─────────── */
+.prog-widget {
+    background: var(--bg);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
+}
+.pw-target {
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+.pw-weight { font-size: 1.1rem; font-weight: 800; color: #fff; }
+.pw-kg     { font-size: 0.78rem; color: var(--dim); }
+.pw-arrow  { color: var(--dim); font-size: 0.85rem; }
+.pw-reps   { font-size: 0.95rem; font-weight: 700; color: var(--pull-fg); }
+.pw-stage  { font-size: 0.68rem; color: var(--dim); margin-left: auto; white-space: nowrap; }
+
+.pw-track  {
+    display: flex; align-items: center; gap: 3px;
+    margin-bottom: 8px; flex-wrap: wrap;
+}
+.pw-dot {
+    width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+}
+.pw-dot.done    { background: #4ade80; }
+.pw-dot.current { background: #fff; box-shadow: 0 0 0 2px var(--pull-fg); width: 11px; height: 11px; }
+.pw-dot.future  { background: var(--border); }
+.pw-sep { width: 6px; height: 2px; background: var(--border); border-radius: 1px; flex-shrink: 0; }
+
+.pw-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+.btn-pw-advance {
+    background: var(--surface-2); color: var(--pull-fg);
+    border: 1px solid var(--pull-fg); border-radius: 6px;
+    cursor: pointer; font-family: inherit; font-size: 0.8rem; font-weight: 700;
+    min-height: 36px; padding: 6px 12px;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-pw-advance.last { border-color: var(--t1-fg); color: var(--t1-fg); }
+.btn-pw-advance:active { opacity: .7; }
+
+.pw-no-prog {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    font-size: 0.8rem; color: var(--dim);
+}
+.pw-no-prog input {
+    width: 80px; min-height: 36px; padding: 6px 10px;
+    font-size: 16px; text-align: center;
+}
+.btn-pw-setwt {
+    background: var(--surface-2); color: var(--muted);
+    border: 1px solid var(--border); border-radius: 6px;
+    cursor: pointer; font-family: inherit; font-size: 0.8rem; font-weight: 600;
+    min-height: 36px; padding: 6px 12px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Log Gym Session</h1>
+
+{# ── Step 1: pick date + day type ────────────────────────────────── #}
+{% if step == 1 %}
+
+<form method="GET" action="/session/new" class="setup-form">
+    <div class="form-group">
+        <label for="date">Date</label>
+        <input type="date" id="date" name="date" value="{{ session_date }}" required>
+    </div>
+    <div>
+        <p class="day-label">Day type</p>
+        <div class="day-grid">
+            <button type="submit" name="day_type" value="push" class="day-btn push">Push</button>
+            <button type="submit" name="day_type" value="pull" class="day-btn pull">Pull</button>
+            <button type="submit" name="day_type" value="legs" class="day-btn legs">Legs</button>
+            <button type="submit" name="day_type" value="core" class="day-btn core">Core</button>
+        </div>
+    </div>
+</form>
+
+{# ── Step 2: log exercises ────────────────────────────────────────── #}
+{% elif step == 2 %}
+
+{% set day_labels = {'push': 'Push', 'pull': 'Pull', 'legs': 'Legs', 'core': 'Core'} %}
+
+<div class="session-meta">
+    <span class="type-badge {{ day_type }}">{{ day_labels[day_type] }}</span>
+    <span class="session-date-display">{{ session_date }}</span>
+    <a href="/session/new" class="change-link">change</a>
+</div>
+
+<form method="POST" action="/session/new" id="session-form">
+    <input type="hidden" name="date"     value="{{ session_date }}">
+    <input type="hidden" name="day_type" value="{{ day_type }}">
+
+    {# ── Tier 1 ─────────────────────────────────────────────────── #}
+    <div class="exercise-block tier1-block" data-idx="0">
+        <div class="block-header">
+            <span class="tier-badge t1">T1</span>
+            <span class="block-title">Heavy Compound</span>
+            <span class="scheme-tag">3–6 reps</span>
+        </div>
+        <div class="form-group" style="margin-bottom:10px">
+            <label>Exercise</label>
+            <select name="exercise_id_0" id="t1-select" onchange="onT1Change(this)">
+                {% for ex in tier1_list %}
+                <option value="{{ ex.id }}" {% if loop.first %}selected{% endif %}>
+                    {{- ex.name -}}
+                    {%- if ex.days_since is none %} · never
+                    {%- else %} · {{ ex.days_since }}d ago{% endif %}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        {# Progression widget — populated by JS on DOMContentLoaded / dropdown change #}
+        <div id="prog-widget-0"></div>
+        <div class="sets-header">
+            <span>Set</span><span>Reps</span><span>kg</span><span></span>
+        </div>
+        <div class="sets-container" id="sets-0"></div>
+        <button type="button" class="btn-add-set" onclick="addSet(0)">+ Add Set</button>
+    </div>
+
+    {# ── Tier 2 ─────────────────────────────────────────────────── #}
+    {% for ex in tier2 %}
+    {% set idx = loop.index %}
+    {% set prog = t2_progs.get(ex.id) %}
+    <div class="exercise-block" data-idx="{{ idx }}">
+        <div class="block-header">
+            <span class="tier-badge t2">T2</span>
+            <span class="block-title">{{ ex.name }}</span>
+            <span class="scheme-tag">6–8 reps</span>
+        </div>
+        <input type="hidden" name="exercise_id_{{ idx }}" value="{{ ex.id }}">
+        <div id="prog-t2-{{ ex.id }}">{% include '_prog_widget.html' with context %}</div>
+        <div class="sets-header">
+            <span>Set</span><span>Reps</span><span>kg</span><span></span>
+        </div>
+        <div class="sets-container" id="sets-{{ idx }}"></div>
+        <button type="button" class="btn-add-set" onclick="addSet({{ idx }})">+ Add Set</button>
+    </div>
+    {% endfor %}
+
+    {# ── Tier 3 free-pick ───────────────────────────────────────── #}
+    <div class="tier3-section">
+        <div class="tier3-header">
+            <span class="tier-badge t3">T3</span>
+            <span class="block-title">Aesthetics</span>
+            <span class="scheme-tag">8–12 reps</span>
+        </div>
+        <div class="tier3-add-row">
+            <select id="tier3-select">
+                <option value="">— add exercise —</option>
+                {% for ex in tier3 %}
+                <option value="{{ ex.id }}"
+                        data-name="{{ ex.name }}"
+                        data-muscle="{{ ex.muscle_group }}">{{ ex.name }}</option>
+                {% endfor %}
+            </select>
+            <button type="button" class="btn-add-t3" onclick="addTier3()">Add</button>
+        </div>
+        <div id="tier3-blocks"></div>
+    </div>
+
+    {# ── Notes + save ────────────────────────────────────────────── #}
+    <div class="form-group notes-group">
+        <label for="notes">Session Notes (optional)</label>
+        <input type="text" id="notes" name="notes" placeholder="e.g. felt strong today">
+    </div>
+
+    <button type="submit" class="btn-save-session">Save Session</button>
+</form>
+
+<script>
+    let nextIdx     = {{ 1 + tier2|length }};
+    const T1_PROGS  = {{ t1_progs_json | safe }};
+    // T2 progressions keyed by exercise id, for pre-fill defaults
+    const T2_PROGS  = {
+        {% for ex in tier2 %}
+        {% set p = t2_progs.get(ex.id) %}
+        {% if p %}"{{ ex.id }}": {"target_reps": {{ p.target_reps }}, "weight_kg": {{ p.weight_kg }}},{% endif %}
+        {% endfor %}
+    };
+
+    function addSet(idx, defaultReps, defaultKg) {
+        const container = document.getElementById('sets-' + idx);
+        const setNum    = container.querySelectorAll('.set-row').length + 1;
+        const row       = document.createElement('div');
+        row.className   = 'set-row';
+        const rVal = defaultReps !== undefined ? defaultReps : '';
+        const wVal = defaultKg   !== undefined ? defaultKg   : '';
+        row.innerHTML =
+            `<span class="set-num">${setNum}</span>` +
+            `<input type="number" name="reps_${idx}" placeholder="reps"
+                    min="1" inputmode="numeric" required value="${rVal}">` +
+            `<input type="number" name="weight_${idx}" placeholder="kg"
+                    min="0" step="0.5" inputmode="decimal" required value="${wVal}">` +
+            `<button type="button" class="btn-rm-set"
+                     onclick="removeSet(this,${idx})">✕</button>`;
+        container.appendChild(row);
+    }
+
+    function removeSet(btn, idx) {
+        const container = btn.closest('.set-row').parentElement;
+        btn.closest('.set-row').remove();
+        container.querySelectorAll('.set-num').forEach((el, i) => el.textContent = i + 1);
+    }
+
+    function addTier3() {
+        const sel    = document.getElementById('tier3-select');
+        if (!sel.value) return;
+        const exId     = sel.value;
+        const exName   = sel.options[sel.selectedIndex].dataset.name;
+        const exMuscle = sel.options[sel.selectedIndex].dataset.muscle;
+        const idx      = nextIdx++;
+
+        const block    = document.createElement('div');
+        block.className  = 'exercise-block';
+        block.dataset.idx = idx;
+        block.innerHTML =
+            `<div class="block-header">` +
+                `<span class="tier-badge t3">T3</span>` +
+                `<span class="block-title">${exName}</span>` +
+                `<span class="muscle-tag">${exMuscle}</span>` +
+                `<button type="button" class="btn-rm-block"
+                         onclick="this.closest('.exercise-block').remove()">Remove</button>` +
+            `</div>` +
+            `<input type="hidden" name="exercise_id_${idx}" value="${exId}">` +
+            `<div class="sets-header"><span>Set</span><span>Reps</span><span>kg</span><span></span></div>` +
+            `<div class="sets-container" id="sets-${idx}"></div>` +
+            `<button type="button" class="btn-add-set" onclick="addSet(${idx})">+ Add Set</button>`;
+
+        document.getElementById('tier3-blocks').appendChild(block);
+        addSet(idx);
+        sel.value = '';
+    }
+
+    // When T1 dropdown changes, re-render progression widget
+    function onT1Change(sel) {
+        const exId = sel.value;
+        const prog = T1_PROGS[exId];
+        renderProgWidget('prog-widget-0', exId, 1, prog);
+        // clear and re-seed first set row with new target
+        const cont = document.getElementById('sets-0');
+        cont.innerHTML = '';
+        if (prog) addSet(0, prog.target_reps, prog.weight_kg);
+        else       addSet(0);
+    }
+
+    function renderProgWidget(containerId, exId, tier, prog) {
+        const el = document.getElementById(containerId);
+        if (!el) return;
+        if (!prog) {
+            el.innerHTML = `
+                <div class="prog-widget">
+                    <div class="pw-no-prog">
+                        <span>No progression yet. Set starting weight:</span>
+                        <input type="number" id="pwwt-${exId}" placeholder="kg"
+                               min="0" step="0.5" inputmode="decimal">
+                        <button class="btn-pw-setwt"
+                                onclick="setProgWeight(${exId},${tier})">Set</button>
+                    </div>
+                </div>`;
+            return;
+        }
+        const total = prog.total_stages;
+        const dots = prog.ladder.map((step, i) => {
+            let cls = i < prog.stage ? 'done' : (i === prog.stage ? 'current' : 'future');
+            // Add separator between rep groups
+            const prevReps = i > 0 ? prog.ladder[i-1].reps : null;
+            const sep = (prevReps !== null && step.reps !== prevReps)
+                ? `<div class="pw-sep"></div>` : '';
+            return `${sep}<div class="pw-dot ${cls}" title="${step.reps}r×${step.sets}s"></div>`;
+        }).join('');
+
+        const nextLabel = prog.is_last
+            ? `Complete → +2.5 kg`
+            : `+1 Stage (${prog.ladder[prog.stage+1]?.sets}×${prog.ladder[prog.stage+1]?.reps}r)`;
+
+        el.innerHTML = `
+            <div class="prog-widget">
+                <div class="pw-target">
+                    <span class="pw-weight">${prog.weight_kg}</span>
+                    <span class="pw-kg">kg</span>
+                    <span class="pw-arrow">→</span>
+                    <span class="pw-reps">${prog.target_sets} × ${prog.target_reps} reps</span>
+                    <span class="pw-stage">Stage ${prog.stage+1}/${total}</span>
+                </div>
+                <div class="pw-track">${dots}</div>
+                <div class="pw-actions">
+                    <button class="btn-pw-advance ${prog.is_last ? 'last' : ''}"
+                            onclick="advanceProg(${exId},${tier},'${containerId}')">
+                        ${nextLabel}
+                    </button>
+                </div>
+            </div>`;
+    }
+
+    async function advanceProg(exId, tier, containerId) {
+        const res  = await fetch('/progression/advance', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({exercise_id: exId, tier: tier})
+        });
+        const prog = await res.json();
+        if (prog.weight_bumped) {
+            alert(`🎉 Weight up to ${prog.weight_kg} kg! Restarting ladder.`);
+        }
+        // Update T1_PROGS in-place so addSet uses new target
+        T1_PROGS[String(exId)] = prog;
+        renderProgWidget(containerId, exId, tier, prog);
+        // Update the first set row's prefill if it's still empty
+        const cont = document.getElementById('sets-' + (tier === 1 ? 0 : null));
+        if (cont && cont.querySelectorAll('.set-row').length === 1) {
+            const rIn = cont.querySelector(`input[name^="reps_"]`);
+            const wIn = cont.querySelector(`input[name^="weight_"]`);
+            if (rIn && !rIn.value) rIn.value = prog.target_reps;
+            if (wIn && !wIn.value) wIn.value = prog.weight_kg;
+        }
+    }
+
+    async function setProgWeight(exId, tier) {
+        const wt = parseFloat(document.getElementById('pwwt-' + exId)?.value);
+        if (!wt || wt <= 0) return;
+        const res  = await fetch('/progression/set-weight', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({exercise_id: exId, tier: tier, weight_kg: wt})
+        });
+        const prog = await res.json();
+        T1_PROGS[String(exId)] = prog;
+        renderProgWidget('prog-widget-0', exId, tier, prog);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Render and seed T1 progression widget + first set
+        const t1Sel = document.getElementById('t1-select');
+        const t1Id  = t1Sel ? t1Sel.value : null;
+        const t1p   = t1Id ? T1_PROGS[t1Id] : null;
+        renderProgWidget('prog-widget-0', parseInt(t1Id), 1, t1p);
+        if (t1p) addSet(0, t1p.target_reps, t1p.weight_kg);
+        else     addSet(0);
+
+        // Seed T2 blocks with their targets
+        {% for ex in tier2 %}
+        {% set idx = loop.index %}
+        {% set p = t2_progs.get(ex.id) %}
+        {% if p %}
+        addSet({{ idx }}, {{ p.target_reps }}, {{ p.weight_kg }});
+        {% else %}
+        addSet({{ idx }});
+        {% endif %}
+        {% endfor %}
+    });
+</script>
+{% endif %}
+{% endblock %}

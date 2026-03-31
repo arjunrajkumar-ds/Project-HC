@@ -1,0 +1,32 @@
+{% if prog %}
+<div class="prog-widget">
+    <div class="pw-target">
+        <span class="pw-weight">{{ prog.weight_kg | int if prog.weight_kg == (prog.weight_kg | int) else prog.weight_kg }}</span>
+        <span class="pw-kg">kg</span>
+        <span class="pw-arrow">→</span>
+        <span class="pw-reps">{{ prog.target_sets }} × {{ prog.target_reps }} reps</span>
+        <span class="pw-stage">Stage {{ prog.stage + 1 }}/{{ prog.total_stages }}</span>
+    </div>
+    <div class="pw-track">
+        {% set ns = namespace(prev_reps=None) %}
+        {% for i, step in prog.ladder | enumerate %}
+        {% if ns.prev_reps is not none and step.reps != ns.prev_reps %}
+        <div class="pw-sep"></div>
+        {% endif %}
+        <div class="pw-dot {{ 'done' if i < prog.stage else ('current' if i == prog.stage else 'future') }}"
+             title="{{ step.reps }}r×{{ step.sets }}s"></div>
+        {% set ns.prev_reps = step.reps %}
+        {% endfor %}
+    </div>
+    <div class="pw-actions">
+        <button type="button" class="btn-pw-advance {{ 'last' if prog.is_last }}"
+                onclick="advanceProg({{ prog.exercise_id }}, 2, 'prog-t2-{{ prog.exercise_id }}')">
+            {% if prog.is_last %}
+                Complete → +2.5 kg
+            {% else %}
+                +1 Stage ({{ prog.ladder[prog.stage + 1].sets }}×{{ prog.ladder[prog.stage + 1].reps }}r)
+            {% endif %}
+        </button>
+    </div>
+</div>
+{% endif %}

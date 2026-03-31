@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <title>{% block title %}Gym Tracker{% endblock %}</title>
+    <style>
+    /* ═══ TOKENS ════════════════════════════════════════════════════ */
+    :root {
+        --bg:         #0f0f0f;
+        --surface:    #1c1c1e;
+        --surface-2:  #252528;
+        --border:     #2a2a2e;
+        --text:       #e8e8e8;
+        --muted:      #888;
+        --dim:        #555;
+        --accent:     #2563eb;
+
+        --push-bg: #3a1a1a; --push-fg: #ff6b6b;
+        --pull-bg: #1a2a3a; --pull-fg: #6bb3ff;
+        --legs-bg: #1a3a1a; --legs-fg: #6bff8a;
+        --core-bg: #2a2a1a; --core-fg: #ffd76b;
+        --swim-bg: #0e293a; --swim-fg: #38bdf8;
+        --t1-bg:   #2a1a3a; --t1-fg:   #c46bff;
+        --t2-bg:   #1a2a3a; --t2-fg:   #6bb3ff;
+        --t3-bg:   #1a3a1a; --t3-fg:   #6bff8a;
+
+        --nav-h: 58px;
+        --sab:   env(safe-area-inset-bottom, 0px);
+    }
+
+    /* ═══ RESET ═════════════════════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { -webkit-text-size-adjust: 100%; }
+
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100dvh;
+        overflow-x: hidden;
+    }
+
+    /* ═══ LAYOUT ════════════════════════════════════════════════════ */
+    .page {
+        max-width: 680px;
+        margin-inline: auto;
+        padding: 20px 16px calc(var(--nav-h) + var(--sab) + 24px);
+    }
+
+    /* ═══ TYPOGRAPHY ════════════════════════════════════════════════ */
+    h1 { font-size: 1.55rem; font-weight: 800; color: #fff;
+         margin-bottom: 20px; line-height: 1.2; }
+    h2 { font-size: 1.05rem; font-weight: 700; color: #fff; margin-bottom: 6px; }
+
+    a { color: inherit; }
+
+    .section       { margin-bottom: 28px; }
+    .section-title {
+        font-size: 0.7rem; font-weight: 700; color: var(--dim);
+        text-transform: uppercase; letter-spacing: .08em;
+        margin-bottom: 10px;
+    }
+    .empty { color: var(--dim); font-size: 0.88rem; }
+    .empty a { color: var(--pull-fg); }
+
+    /* ═══ FORM ELEMENTS ═════════════════════════════════════════════ */
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+
+    label {
+        font-size: 0.78rem; font-weight: 600; color: var(--muted);
+        text-transform: uppercase; letter-spacing: .05em;
+    }
+
+    /* font-size: 16px is REQUIRED on all inputs — iOS Safari zooms in on
+       anything smaller, which breaks the one-handed gym-logging UX.      */
+    input[type="text"],
+    input[type="date"],
+    input[type="number"],
+    select,
+    textarea {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        color: var(--text);
+        font-family: inherit;
+        font-size: 16px;
+        padding: 13px 14px;
+        width: 100%;
+        min-height: 48px;
+        -webkit-appearance: none;
+        appearance: none;
+    }
+    input:focus, select:focus, textarea:focus {
+        outline: none;
+        border-color: var(--pull-fg);
+    }
+    input::placeholder, textarea::placeholder { color: #444; }
+
+    input[type="number"]                          { -moz-appearance: textfield; }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+    /* ═══ BUTTONS ═══════════════════════════════════════════════════ */
+    .btn {
+        border: none; border-radius: 10px; cursor: pointer;
+        font-family: inherit; font-size: 1rem; font-weight: 700;
+        min-height: 48px; padding: 12px 18px;
+        display: inline-flex; align-items: center; justify-content: center;
+        text-decoration: none; -webkit-tap-highlight-color: transparent;
+    }
+    .btn:active { opacity: .75; }
+    .btn-full   { width: 100%; }
+    .btn-primary   { background: var(--accent); color: #fff; }
+    .btn-secondary { background: var(--surface); color: var(--muted);
+                     border: 1px solid var(--border); }
+    .btn-danger    { background: var(--push-bg); color: var(--push-fg);
+                     border: 1px solid #5a2a2a; }
+    .btn-swim      { background: var(--swim-bg); color: var(--swim-fg);
+                     border: 1px solid #0e4a6a; }
+
+    /* ═══ BADGES ════════════════════════════════════════════════════ */
+    .type-badge {
+        display: inline-block;
+        font-size: 0.68rem; font-weight: 800;
+        text-transform: uppercase; letter-spacing: .06em;
+        padding: 3px 9px; border-radius: 5px; white-space: nowrap;
+    }
+    .type-badge.push { background: var(--push-bg); color: var(--push-fg); }
+    .type-badge.pull { background: var(--pull-bg); color: var(--pull-fg); }
+    .type-badge.legs { background: var(--legs-bg); color: var(--legs-fg); }
+    .type-badge.core { background: var(--core-bg); color: var(--core-fg); }
+    .type-badge.swim { background: var(--swim-bg); color: var(--swim-fg); }
+
+    .tier-badge {
+        display: inline-block;
+        font-size: 0.63rem; font-weight: 800;
+        text-transform: uppercase; letter-spacing: .06em;
+        padding: 2px 7px; border-radius: 4px; flex-shrink: 0;
+    }
+    .tier-badge.t1 { background: var(--t1-bg); color: var(--t1-fg); }
+    .tier-badge.t2 { background: var(--t2-bg); color: var(--t2-fg); }
+    .tier-badge.t3 { background: var(--t3-bg); color: var(--t3-fg); }
+
+    /* ═══ CARD ROW (shared list style) ══════════════════════════════ */
+    .card-row {
+        display: flex; align-items: center; gap: 10px;
+        background: var(--surface); border-radius: 12px;
+        padding: 13px 15px; text-decoration: none; color: inherit;
+    }
+    .card-row:active { opacity: .75; }
+    .chevron { color: var(--border); font-size: 1.1rem; margin-left: auto; }
+
+    /* ═══ ERROR BANNER ══════════════════════════════════════════════ */
+    .error {
+        background: var(--push-bg); border: 1px solid #ff6b6b;
+        border-radius: 8px; color: #ff6b6b;
+        padding: 12px 14px; margin-bottom: 16px; font-size: 0.9rem;
+    }
+
+    /* ═══ BOTTOM NAV ════════════════════════════════════════════════ */
+    .bottom-nav {
+        position: fixed; bottom: 0; left: 0; right: 0;
+        height: calc(var(--nav-h) + var(--sab));
+        background: #111; border-top: 1px solid var(--border);
+        display: flex; justify-content: space-around; align-items: flex-start;
+        padding-top: 7px;
+        padding-bottom: var(--sab);
+        z-index: 200;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .nav-item {
+        display: flex; flex-direction: column; align-items: center; gap: 3px;
+        color: var(--dim); text-decoration: none;
+        padding: 5px 8px; border-radius: 8px;
+        min-width: 56px; min-height: 44px;
+    }
+    .nav-item.active { color: var(--pull-fg); }
+    .nav-item:active { background: var(--surface); }
+    .nav-icon  { font-size: 1.2rem; line-height: 1.1; }
+    .nav-label {
+        font-size: 0.6rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: .04em;
+    }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <div class="page">
+        {% block content %}{% endblock %}
+    </div>
+
+    <nav class="bottom-nav">
+        <a href="/"            class="nav-item {% if request.path == '/' %}active{% endif %}">
+            <span class="nav-icon">◉</span>
+            <span class="nav-label">Home</span>
+        </a>
+        <a href="/session/new" class="nav-item {% if request.path == '/session/new' %}active{% endif %}">
+            <span class="nav-icon">＋</span>
+            <span class="nav-label">Gym</span>
+        </a>
+        <a href="/swim/new"    class="nav-item {% if request.path == '/swim/new' %}active{% endif %}">
+            <span class="nav-icon">〜</span>
+            <span class="nav-label">Swim</span>
+        </a>
+        <a href="/exercises"   class="nav-item {% if request.path == '/exercises' %}active{% endif %}">
+            <span class="nav-icon">☰</span>
+            <span class="nav-label">Library</span>
+        </a>
+        <a href="/analytics"   class="nav-item {% if request.path == '/analytics' %}active{% endif %}">
+            <span class="nav-icon">↗</span>
+            <span class="nav-label">Stats</span>
+        </a>
+    </nav>
+</body>
+</html>

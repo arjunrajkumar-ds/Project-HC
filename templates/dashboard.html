@@ -1,0 +1,201 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Next-up card ───────────────────────────────────────────────── */
+.next-up-card {
+    border-radius: 16px; padding: 20px; margin-bottom: 10px;
+}
+.next-up-card.push { background: #2a0e0e; border: 1px solid #5a1a1a; }
+.next-up-card.pull { background: #0e1a2a; border: 1px solid #1a3a5a; }
+.next-up-card.legs { background: #0e2a0e; border: 1px solid #1a5a1a; }
+.next-up-card.core { background: #2a2a0e; border: 1px solid #5a5a1a; }
+
+.next-up-label {
+    font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .1em; color: var(--dim); margin-bottom: 4px;
+}
+.next-up-day {
+    font-size: 1.9rem; font-weight: 800; color: #fff;
+    line-height: 1.1; margin-bottom: 6px;
+}
+.next-up-hint { font-size: 0.82rem; color: var(--muted); margin-bottom: 16px; }
+.next-up-hint strong { color: #ccc; }
+.quick-actions { display: flex; flex-direction: column; gap: 8px; }
+
+/* ── Stats row ──────────────────────────────────────────────────── */
+.stats-row { display: flex; gap: 10px; }
+.stat-card {
+    flex: 1; background: var(--surface); border-radius: 12px; padding: 16px 14px;
+}
+.stat-card.swim-card { background: var(--swim-bg); }
+.stat-val { display: block; font-size: 1.7rem; font-weight: 800; color: #fff; line-height: 1; }
+.stat-card.swim-card .stat-val { color: var(--swim-fg); }
+.stat-lbl {
+    display: block; font-size: 0.68rem; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .05em; margin-top: 4px;
+}
+
+/* ── Tier 1 list ────────────────────────────────────────────────── */
+.t1-list {
+    list-style: none; display: flex; flex-direction: column; gap: 6px;
+}
+.t1-row {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface); border-radius: 10px; padding: 11px 14px;
+}
+.t1-row.next { background: #1e1a2e; border: 1px solid #3a2a5a; }
+.next-badge {
+    font-size: 0.58rem; font-weight: 800; text-transform: uppercase;
+    letter-spacing: .07em; color: var(--t1-fg);
+    background: var(--t1-bg); padding: 2px 7px; border-radius: 4px;
+    white-space: nowrap;
+}
+.rank { font-size: 0.78rem; color: #444; width: 16px; text-align: center; flex-shrink: 0; }
+.t1-name   { font-size: 0.88rem; font-weight: 600; color: #e0e0e0; flex: 1; }
+.t1-muscle { font-size: 0.75rem; color: var(--dim); }
+.t1-days   {
+    font-size: 0.78rem; color: var(--dim); white-space: nowrap;
+    margin-left: auto; min-width: 40px; text-align: right;
+}
+.t1-row.next .t1-days { color: var(--t1-fg); }
+
+/* ── Last session ───────────────────────────────────────────────── */
+.last-session-card {
+    display: block; background: var(--surface); border-radius: 12px;
+    padding: 14px 16px; text-decoration: none; color: inherit;
+}
+.ls-top { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.ls-date    { font-size: 0.88rem; color: var(--muted); }
+.ls-chevron { color: var(--border); font-size: 1.2rem; margin-left: auto; }
+.ls-stats   { display: flex; align-items: center; gap: 6px; }
+.ls-stat    { font-size: 0.82rem; color: var(--dim); }
+.ls-dot     { color: var(--border); }
+
+/* ── PR list ────────────────────────────────────────────────────── */
+.pr-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.pr-row {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface); border-radius: 10px; padding: 11px 14px;
+}
+.pr-rank   { font-size: 0.78rem; color: #444; width: 16px; text-align: center; flex-shrink: 0; }
+.pr-name   { font-size: 0.88rem; color: #ddd; flex: 1; min-width: 0;
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pr-detail { font-size: 0.88rem; font-weight: 700; color: #fff; white-space: nowrap; }
+.pr-date   { font-size: 0.7rem; color: #444; white-space: nowrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set day_labels = {'push': 'Push', 'pull': 'Pull', 'legs': 'Legs', 'core': 'Core'} %}
+
+{# ── Next up ───────────────────────────────────────────────────────── #}
+<div class="next-up-card {{ next_day_type }}">
+    <div class="next-up-label">Next Up</div>
+    <div class="next-up-day">{{ day_labels[next_day_type] }} Day</div>
+    <div class="next-up-hint">
+        {% if tier1 %}
+        Tier 1 suggestion: <strong>{{ tier1[0].name }}</strong>
+        {% if tier1[0].days_since is none %}(never done)
+        {% else %}({{ tier1[0].days_since }}d ago){% endif %}
+        {% endif %}
+    </div>
+    <div class="quick-actions">
+        <a href="/session/new?date={{ today }}&day_type={{ next_day_type }}"
+           class="btn btn-primary btn-full">Start {{ day_labels[next_day_type] }} Session</a>
+        <a href="/session/new" class="btn btn-secondary btn-full">Pick different day</a>
+    </div>
+</div>
+
+<a href="/swim/new" class="btn btn-swim btn-full" style="margin-bottom:28px">+ Log Swim</a>
+
+{# ── This week ─────────────────────────────────────────────────────── #}
+<section class="section">
+    <p class="section-title">This Week</p>
+    <div class="stats-row">
+        <div class="stat-card">
+            <span class="stat-val">{{ '{:,.0f}'.format(weekly_volume) }}</span>
+            <span class="stat-lbl">kg lifted</span>
+        </div>
+        <div class="stat-card swim-card">
+            <span class="stat-val">{{ weekly_swim }}</span>
+            <span class="stat-lbl">m swum</span>
+        </div>
+    </div>
+</section>
+
+{# ── Activity calendar ─────────────────────────────────────────────── #}
+<section class="section">
+    <p class="section-title">Activity — Past Year</p>
+    {% include '_heatmap.html' %}
+</section>
+
+{# ── Tier 1 rotation ───────────────────────────────────────────────── #}
+<section class="section">
+    <p class="section-title">Tier 1 Rotation</p>
+    <ul class="t1-list">
+        {% for ex in tier1 %}
+        <li class="t1-row {% if loop.first %}next{% endif %}">
+            {% if loop.first %}<span class="next-badge">UP NEXT</span>
+            {% else %}<span class="rank">{{ loop.index }}</span>{% endif %}
+            <span class="t1-name">{{ ex.name }}</span>
+            <span class="t1-muscle">{{ ex.muscle_group }}</span>
+            <span class="t1-days">
+                {% if ex.days_since is none %}never{% else %}{{ ex.days_since }}d{% endif %}
+            </span>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+
+{# ── Last session ──────────────────────────────────────────────────── #}
+<section class="section">
+    <p class="section-title">Last Session</p>
+    {% if last_session %}
+    <a href="/session/{{ last_session.id }}" class="last-session-card">
+        <div class="ls-top">
+            {% if last_session.type == 'swim' %}
+            <span class="type-badge swim">Swim</span>
+            {% else %}
+            <span class="type-badge {{ last_session.day_type }}">
+                {{ day_labels.get(last_session.day_type, '') }}
+            </span>
+            {% endif %}
+            <span class="ls-date">{{ last_session.date }}</span>
+            <span class="ls-chevron">›</span>
+        </div>
+        <div class="ls-stats">
+            {% if last_session.type == 'swim' %}
+            <span class="ls-stat">{{ last_session.distance_m }} m</span>
+            {% else %}
+            <span class="ls-stat">{{ last_session.total_sets }} sets</span>
+            <span class="ls-dot">·</span>
+            <span class="ls-stat">{{ '{:,.0f}'.format(last_session.total_volume) }} kg vol</span>
+            {% endif %}
+        </div>
+    </a>
+    {% else %}
+    <p class="empty">No sessions yet. Log your first workout above.</p>
+    {% endif %}
+</section>
+
+{# ── Recent PRs ────────────────────────────────────────────────────── #}
+<section class="section">
+    <p class="section-title">Top Sets (All Time)</p>
+    {% if prs %}
+    <ul class="pr-list">
+        {% for pr in prs %}
+        <li class="pr-row">
+            <span class="pr-rank">{{ loop.index }}</span>
+            <span class="pr-name">{{ pr.name }}</span>
+            <span class="pr-detail">{{ pr.reps }} × {{ pr.weight_kg | int if pr.weight_kg == pr.weight_kg|int else pr.weight_kg }} kg</span>
+            <span class="pr-date">{{ pr.date }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty">No lifts logged yet.</p>
+    {% endif %}
+</section>
+{% endblock %}

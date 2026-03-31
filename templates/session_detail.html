@@ -1,0 +1,171 @@
+{% extends 'base.html' %}
+{% block title %}Session — {{ session.date }}{% endblock %}
+
+{% block extra_css %}
+<style>
+.detail-header { margin-bottom: 20px; }
+.header-top    { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.s-date-lg     { font-size: 1rem; color: var(--muted); font-weight: 500; }
+.s-notes       { font-size: 0.85rem; color: var(--dim); font-style: italic; margin-top: 4px; }
+
+/* swim card */
+.swim-stat-card {
+    background: var(--swim-bg); border-radius: 14px;
+    padding: 28px 24px; text-align: center; margin-bottom: 24px;
+}
+.swim-scheme {
+    display: flex; align-items: baseline; justify-content: center;
+    gap: 10px; margin-bottom: 10px;
+}
+.swim-sets { font-size: 2.8rem; font-weight: 800; color: var(--swim-fg); line-height: 1; }
+.swim-x    { font-size: 1.5rem; color: #2a5a6a; }
+.swim-rep  { font-size: 2.1rem; font-weight: 700; color: #7dd3fc; }
+.swim-total-row {
+    display: flex; align-items: baseline; justify-content: center; gap: 6px;
+}
+.swim-distance { font-size: 1.6rem; font-weight: 700; color: var(--swim-fg); }
+.swim-unit     { font-size: 0.9rem; color: var(--dim); }
+
+/* gym summary */
+.summary-row { display: flex; gap: 10px; margin-bottom: 20px; }
+.summary-stat {
+    flex: 1; background: var(--surface); border-radius: 10px;
+    padding: 14px 10px; text-align: center;
+}
+.stat-value { display: block; font-size: 1.45rem; font-weight: 700; color: #fff; }
+.stat-label {
+    display: block; font-size: 0.68rem; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .05em; margin-top: 3px;
+}
+
+/* lift cards */
+.lift-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
+.lift-card { background: var(--surface); border-radius: 12px; padding: 14px; }
+.lift-header {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 10px; flex-wrap: wrap;
+}
+.lift-name   { font-weight: 600; font-size: 0.95rem; color: #fff; }
+.lift-muscle { font-size: 0.78rem; color: var(--dim); margin-left: auto; }
+
+.sets-thead, .sets-row {
+    display: grid;
+    grid-template-columns: 28px 1fr 1fr 1fr;
+    gap: 6px; align-items: center; padding: 4px 2px;
+}
+.sets-thead {
+    font-size: 0.67rem; font-weight: 600; color: #444;
+    text-transform: uppercase; letter-spacing: .05em;
+    border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 4px;
+}
+.sets-row    { font-size: 0.9rem; }
+.sets-row:not(:last-child) { border-bottom: 1px solid #1a1a1e; }
+.set-n       { color: var(--dim); text-align: center; }
+.vol-cell    { color: var(--dim); font-size: 0.8rem; }
+
+/* actions */
+.actions { margin-top: 32px; display: flex; flex-direction: column; gap: 10px; }
+.back-link {
+    display: block; text-align: center; color: var(--dim);
+    font-size: 0.85rem; text-decoration: none; padding: 10px 0;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+{% set day_labels = {'push': 'Push', 'pull': 'Pull', 'legs': 'Legs', 'core': 'Core'} %}
+
+<div class="detail-header">
+    <div class="header-top">
+        {% if session.type == 'swim' %}
+        <span class="type-badge swim">Swim</span>
+        {% else %}
+        <span class="type-badge {{ session.day_type }}">
+            {{ day_labels.get(session.day_type, session.day_type) }}
+        </span>
+        {% endif %}
+        <span class="s-date-lg">{{ session.date }}</span>
+    </div>
+    {% if session.notes %}
+    <p class="s-notes">{{ session.notes }}</p>
+    {% endif %}
+</div>
+
+{# ── Swim ─────────────────────────────────────────────────────────── #}
+{% if session.type == 'swim' %}
+<div class="swim-stat-card">
+    {% if swim_dist.rep_distance %}
+    <div class="swim-scheme">
+        <span class="swim-sets">{{ swim_dist.sets }}</span>
+        <span class="swim-x">×</span>
+        <span class="swim-rep">{{ swim_dist.rep_distance }}m</span>
+    </div>
+    <div class="swim-total-row">
+        <span class="swim-distance">{{ swim_dist.total }}</span>
+        <span class="swim-unit">m total</span>
+    </div>
+    {% else %}
+    <span class="swim-distance">{{ swim_dist.total }}</span>
+    <span class="swim-unit">metres</span>
+    {% endif %}
+</div>
+
+{# ── Gym ──────────────────────────────────────────────────────────── #}
+{% else %}
+{% if lifts %}
+{% set ns = namespace(total_sets=0, total_vol=0) %}
+{% for ex in lifts %}
+    {% set ns.total_sets = ns.total_sets + ex.sets|length %}
+    {% for s in ex.sets %}{% set ns.total_vol = ns.total_vol + s.reps * s.weight_kg %}{% endfor %}
+{% endfor %}
+
+<div class="summary-row">
+    <div class="summary-stat">
+        <span class="stat-value">{{ lifts | length }}</span>
+        <span class="stat-label">exercises</span>
+    </div>
+    <div class="summary-stat">
+        <span class="stat-value">{{ ns.total_sets }}</span>
+        <span class="stat-label">sets</span>
+    </div>
+    <div class="summary-stat">
+        <span class="stat-value">{{ '{:,.0f}'.format(ns.total_vol) }}</span>
+        <span class="stat-label">kg vol</span>
+    </div>
+</div>
+
+<div class="lift-list">
+    {% for ex in lifts %}
+    <div class="lift-card">
+        <div class="lift-header">
+            <span class="tier-badge t{{ ex.tier }}">T{{ ex.tier }}</span>
+            <span class="lift-name">{{ ex.name }}</span>
+            <span class="lift-muscle">{{ ex.muscle_group }}</span>
+        </div>
+        <div class="sets-thead">
+            <span>Set</span><span>Reps</span><span>kg</span><span>Vol</span>
+        </div>
+        {% for s in ex.sets %}
+        <div class="sets-row">
+            <span class="set-n">{{ s.set_number }}</span>
+            <span>{{ s.reps }}</span>
+            <span>{{ s.weight_kg | int if s.weight_kg == s.weight_kg | int else s.weight_kg }}</span>
+            <span class="vol-cell">{{ '{:,.0f}'.format(s.reps * s.weight_kg) }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p class="empty">No lifts recorded.</p>
+{% endif %}
+{% endif %}
+
+<div class="actions">
+    <form method="POST" action="/session/{{ session.id }}/delete"
+          onsubmit="return confirm('Delete this session? This cannot be undone.')">
+        <button type="submit" class="btn btn-danger btn-full">Delete Session</button>
+    </form>
+    <a href="/sessions" class="back-link">← All Sessions</a>
+</div>
+{% endblock %}
