@@ -1,0 +1,434 @@
+{% extends 'base.html' %}
+{% block title %}{{ routine.name if routine else 'Session' }}{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Header ──────────────────────────────────────────────────────────── */
+.sess-hdr {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 18px;
+}
+.sess-hdr-back {
+    color: var(--accent); text-decoration: none;
+    font-size: 0.85rem; font-weight: 700; flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+.sess-hdr-title {
+    flex: 1; font-size: 1.1rem; font-weight: 800; color: var(--text);
+}
+.sess-hdr-date {
+    font-size: 0.75rem; color: var(--dim); font-weight: 600; flex-shrink: 0;
+}
+
+/* ── Exercise track card ─────────────────────────────────────────────── */
+.ex-track-card {
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: 14px; padding: 14px 16px; margin-bottom: 12px;
+}
+.ex-track-name {
+    font-size: 0.95rem; font-weight: 800; color: var(--text);
+    margin-bottom: 10px;
+}
+
+/* ── Set chips ───────────────────────────────────────────────────────── */
+.set-chips {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;
+    min-height: 0;
+}
+.set-chip {
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 6px; font-size: 0.78rem; font-weight: 700;
+    color: var(--muted); padding: 4px 9px;
+}
+.set-chip.fresh {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border-color: var(--accent); color: var(--accent);
+}
+
+/* ── Log set button ──────────────────────────────────────────────────── */
+.btn-log-set {
+    width: 100%; background: var(--accent); border: none; border-radius: 10px;
+    color: #fff; cursor: pointer; font-family: inherit;
+    font-size: 0.9rem; font-weight: 700; min-height: 44px;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-log-set:active { opacity: .85; }
+.btn-log-set.open {
+    background: var(--surface-2); color: var(--muted);
+    border: 1px solid var(--border);
+}
+
+/* ── Inline log form ─────────────────────────────────────────────────── */
+.log-set-form {
+    margin-top: 12px; padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+.lsf-row {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+}
+.lsf-label {
+    flex: 1; font-size: 0.85rem; font-weight: 600; color: var(--muted);
+}
+.lsf-kg-input {
+    width: 80px; font-size: 1rem; font-weight: 700; text-align: center;
+    padding: 6px 8px; min-height: 38px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text); -webkit-appearance: none;
+    -moz-appearance: textfield;
+}
+.lsf-kg-input::-webkit-inner-spin-button,
+.lsf-kg-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+.lsf-kg-input:focus { outline: none; border-color: var(--accent); }
+.lsf-kg-unit { font-size: 0.8rem; color: var(--dim); font-weight: 600; }
+
+.stepper {
+    display: flex; align-items: center;
+    background: var(--surface-2); border-radius: 8px; overflow: hidden;
+    border: 1px solid var(--border);
+}
+.stepper-btn {
+    background: none; border: none; color: var(--text);
+    font-size: 1.1rem; font-weight: 700; cursor: pointer;
+    min-width: 40px; min-height: 38px; font-family: inherit;
+    -webkit-tap-highlight-color: transparent;
+}
+.stepper-btn:active { background: var(--border); }
+.stepper-val {
+    min-width: 40px; text-align: center;
+    font-size: 0.95rem; font-weight: 700; color: var(--text);
+    border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+    line-height: 38px;
+}
+
+.btn-done-set {
+    width: 100%; background: var(--accent); border: none; border-radius: 8px;
+    color: #fff; cursor: pointer; font-family: inherit;
+    font-size: 0.88rem; font-weight: 700; min-height: 44px; margin-top: 4px;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-done-set:active { opacity: .85; }
+
+/* ── Add exercise ────────────────────────────────────────────────────── */
+.add-ex-wrap { margin-bottom: 14px; }
+.btn-add-ex {
+    width: 100%; background: var(--surface-2);
+    border: 1px dashed var(--border); border-radius: 10px;
+    color: var(--muted); cursor: pointer; font-family: inherit;
+    font-size: 0.9rem; font-weight: 700; min-height: 44px;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-add-ex:active { border-color: var(--accent); color: var(--accent); }
+
+.add-ex-picker {
+    display: none; margin-top: 8px;
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: 12px; overflow: hidden;
+}
+.add-ex-picker.open { display: block; }
+.add-ex-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px; cursor: pointer; border-bottom: 1px solid var(--border);
+    -webkit-tap-highlight-color: transparent;
+}
+.add-ex-item:last-child { border-bottom: none; }
+.add-ex-item:active { background: var(--surface-2); }
+.add-ex-item-name { flex: 1; font-size: 0.88rem; font-weight: 600; color: var(--text); }
+.add-ex-item-mg { font-size: 0.72rem; color: var(--dim); flex-shrink: 0; }
+
+/* ── Finish button ───────────────────────────────────────────────────── */
+.btn-finish-session {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; color: var(--muted); cursor: pointer; font-family: inherit;
+    font-size: 0.95rem; font-weight: 700; min-height: 52px; margin-bottom: 80px;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-finish-session:active { border-color: var(--push-fg); color: var(--push-fg); }
+
+/* ── Rest timer bar ──────────────────────────────────────────────────── */
+#rest-timer-bar {
+    position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: var(--surface); border: 1px solid var(--accent);
+    border-radius: 20px; padding: 8px 16px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 0.88rem; font-weight: 700; color: var(--accent);
+    box-shadow: 0 4px 16px rgba(0,0,0,.15);
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease;
+    z-index: 999; white-space: nowrap;
+}
+#rest-timer-bar.visible {
+    opacity: 1; pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+}
+.rt-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent); flex-shrink: 0;
+    animation: rt-pulse 1s ease-in-out infinite;
+}
+.rt-label { font-size: 0.72rem; color: var(--dim); font-weight: 600; letter-spacing: .06em; }
+.rt-time  { font-size: 1.15rem; font-weight: 800; min-width: 42px; text-align: center; }
+.rt-dismiss {
+    background: none; border: none; color: var(--dim); cursor: pointer;
+    font-size: 1rem; line-height: 1; padding: 2px 4px; margin-left: 2px;
+    -webkit-tap-highlight-color: transparent;
+}
+@keyframes rt-pulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="sess-hdr">
+    <a href="/workout" class="sess-hdr-back">← Workout</a>
+    <span class="sess-hdr-title">{{ routine.name if routine else 'Workout' }}</span>
+    <span class="sess-hdr-date">{{ session.date | fmt_date }}</span>
+</div>
+
+{# ── Warmup note ── #}
+{% if routine and routine.warmup %}
+<div style="background:var(--surface-2); border-radius:8px; padding:10px 14px;
+            font-size:0.82rem; color:var(--muted); margin-bottom:14px;
+            border-left:3px solid var(--dim);">
+    Warmup: {{ routine.warmup }}
+</div>
+{% endif %}
+
+{# ── Exercise cards ── #}
+<div id="exercise-list">
+{% for ex in exercises %}
+<div class="ex-track-card"
+     id="card-{{ ex.exercise_id }}"
+     data-ex-id="{{ ex.exercise_id }}"
+     data-weighted="{{ '1' if ex.weighted else '0' }}"
+     data-timed="{{ '1' if ex.timed else '0' }}"
+     data-reps="{{ ex.reps }}"
+     data-reps-min="{{ ex.reps_range[0] }}"
+     data-reps-max="{{ ex.reps_range[1] }}">
+    <div class="ex-track-name">{{ ex.name }}</div>
+    <div class="set-chips" id="chips-{{ ex.exercise_id }}">
+        {% for s in ex.sets_logged %}
+        <span class="set-chip">
+            {{- s.reps -}}
+            {%- if ex.timed %}s{% endif -%}
+            {%- if ex.weighted and s.weight_kg > 0 %}&thinsp;@&thinsp;{{ s.weight_kg | int if s.weight_kg == (s.weight_kg | int | float) else s.weight_kg }}kg{% endif -%}
+        </span>
+        {% endfor %}
+    </div>
+    <button class="btn-log-set" id="logbtn-{{ ex.exercise_id }}"
+            onclick="toggleLogSet({{ ex.exercise_id }})">Log Set</button>
+    <div class="log-set-form" id="lsf-{{ ex.exercise_id }}" style="display:none">
+        <div class="lsf-row">
+            <span class="lsf-label">{{ 'Duration (s)' if ex.timed else 'Reps' }}</span>
+            <div class="stepper">
+                <button class="stepper-btn" onclick="step('lsfreps{{ ex.exercise_id }}',-1,{{ ex.reps_range[0] }},{{ ex.reps_range[1] }})">−</button>
+                <span class="stepper-val" id="lsfreps{{ ex.exercise_id }}">{{ ex.reps }}</span>
+                <button class="stepper-btn" onclick="step('lsfreps{{ ex.exercise_id }}', 1,{{ ex.reps_range[0] }},{{ ex.reps_range[1] }})">+</button>
+            </div>
+        </div>
+        {% if ex.weighted %}
+        <div class="lsf-row">
+            <span class="lsf-label">Weight</span>
+            <div style="display:flex;align-items:center;gap:6px">
+                <input type="number" id="lsfkg{{ ex.exercise_id }}" class="lsf-kg-input"
+                       placeholder="0" min="0" step="0.5" inputmode="decimal">
+                <span class="lsf-kg-unit">kg</span>
+            </div>
+        </div>
+        {% endif %}
+        <button class="btn-done-set" onclick="logSet({{ ex.exercise_id }})">Done</button>
+    </div>
+</div>
+{% endfor %}
+</div>
+
+{# ── Add exercise ── #}
+<div class="add-ex-wrap">
+    <button class="btn-add-ex" onclick="toggleAddEx()">+ Add Exercise</button>
+    <div class="add-ex-picker" id="add-ex-picker"></div>
+</div>
+
+{# ── Finish session ── #}
+<button class="btn-finish-session" onclick="finishSession()">Finish Session</button>
+
+{# ── Rest timer ── #}
+<div id="rest-timer-bar">
+    <span class="rt-dot"></span>
+    <span class="rt-label">REST</span>
+    <span class="rt-time" id="rt-display">0:00</span>
+    <button class="rt-dismiss" onclick="stopRestTimer()">✕</button>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const _SID     = {{ session.id }};
+const _CSRF    = document.querySelector('meta[name="csrf-token"]')?.content || '';
+const _PICKER  = {{ picker_exs_json | safe }};
+
+// ── Rest timer ───────────────────────────────────────────────────────
+let _rtInterval = null;
+let _rtStart    = null;
+
+function _rtFmt(s) {
+    return Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
+}
+function startRestTimer() {
+    if (_rtInterval) clearInterval(_rtInterval);
+    _rtStart = Date.now();
+    document.getElementById('rt-display').textContent = '0:00';
+    document.getElementById('rest-timer-bar').classList.add('visible');
+    _rtInterval = setInterval(() => {
+        const e = Math.floor((Date.now() - _rtStart) / 1000);
+        document.getElementById('rt-display').textContent = _rtFmt(e);
+    }, 1000);
+}
+function stopRestTimer() {
+    if (_rtInterval) { clearInterval(_rtInterval); _rtInterval = null; }
+    document.getElementById('rest-timer-bar').classList.remove('visible');
+}
+
+// ── Stepper ──────────────────────────────────────────────────────────
+function step(id, delta, min, max) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = Math.max(min, Math.min(max, parseInt(el.textContent) + delta));
+}
+
+// ── Log set form toggle ──────────────────────────────────────────────
+function toggleLogSet(exId) {
+    const form = document.getElementById('lsf-' + exId);
+    const btn  = document.getElementById('logbtn-' + exId);
+    if (!form) return;
+    const open = form.style.display === 'none';
+    form.style.display = open ? '' : 'none';
+    btn.classList.toggle('open', open);
+    btn.textContent = open ? 'Cancel' : 'Log Set';
+}
+
+// ── Log a set (POST to add_set API) ──────────────────────────────────
+async function logSet(exId) {
+    const repsEl = document.getElementById('lsfreps' + exId);
+    const kgEl   = document.getElementById('lsfkg'   + exId);
+    if (!repsEl) return;
+
+    const reps = parseInt(repsEl.textContent);
+    const kg   = kgEl ? (parseFloat(kgEl.value) || 0) : 0;
+    if (isNaN(reps)) return;
+
+    const res = await fetch(`/session/${_SID}/add_set`, {
+        method:  'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _CSRF},
+        body:    JSON.stringify({exercise_id: exId, reps, weight_kg: kg}),
+    });
+    if (!res.ok) { alert('Failed to save set'); return; }
+
+    // Add chip to the UI
+    const chips = document.getElementById('chips-' + exId);
+    if (chips) {
+        const card  = document.getElementById('card-' + exId);
+        const timed    = card?.dataset.timed === '1';
+        const weighted = card?.dataset.weighted === '1';
+        const chip = document.createElement('span');
+        chip.className = 'set-chip fresh';
+        let txt = '' + reps + (timed ? 's' : '');
+        if (weighted && kg > 0) txt += ' @ ' + (Number.isInteger(kg) ? kg : kg) + 'kg';
+        chip.textContent = txt;
+        chips.appendChild(chip);
+        setTimeout(() => chip.classList.remove('fresh'), 1800);
+    }
+
+    // Close form, reset kg input
+    toggleLogSet(exId);
+    if (kgEl) kgEl.value = '';
+
+    startRestTimer();
+}
+
+// ── Add exercise picker ──────────────────────────────────────────────
+const _inSession = new Set([{% for ex in exercises %}{{ ex.exercise_id }},{% endfor %}]);
+
+function toggleAddEx() {
+    const picker = document.getElementById('add-ex-picker');
+    const open   = !picker.classList.contains('open');
+    picker.classList.toggle('open', open);
+    if (open) renderPicker();
+    document.querySelector('.btn-add-ex').textContent = open ? '− Close' : '+ Add Exercise';
+}
+
+function renderPicker() {
+    const picker = document.getElementById('add-ex-picker');
+    const items  = _PICKER.filter(e => !_inSession.has(e.id));
+    if (!items.length) {
+        picker.innerHTML = '<div style="padding:14px;font-size:.85rem;color:var(--dim)">All exercises added.</div>';
+        return;
+    }
+    picker.innerHTML = items.map(e =>
+        `<div class="add-ex-item" onclick="addExercise(${e.id},'${e.name.replace(/'/g,"\\'")}',${e.weighted?1:0},${e.timed?1:0},${e.reps},${e.sets},${e.reps_range[0]},${e.reps_range[1]},${e.sets_range[0]},${e.sets_range[1]})">
+            <span class="add-ex-item-name">${e.name}</span>
+            <span class="add-ex-item-mg">${e.mg}</span>
+        </div>`
+    ).join('');
+}
+
+function addExercise(id, name, weighted, timed, reps, sets, repsMin, repsMax, setsMin, setsMax) {
+    _inSession.add(id);
+
+    const list = document.getElementById('exercise-list');
+    const card = document.createElement('div');
+    card.className   = 'ex-track-card';
+    card.id          = 'card-' + id;
+    card.dataset.exId     = id;
+    card.dataset.weighted = weighted;
+    card.dataset.timed    = timed;
+    card.dataset.reps     = reps;
+    card.dataset.repsMin  = repsMin;
+    card.dataset.repsMax  = repsMax;
+
+    const weightRow = weighted ? `
+        <div class="lsf-row">
+            <span class="lsf-label">Weight</span>
+            <div style="display:flex;align-items:center;gap:6px">
+                <input type="number" id="lsfkg${id}" class="lsf-kg-input"
+                       placeholder="0" min="0" step="0.5" inputmode="decimal">
+                <span class="lsf-kg-unit">kg</span>
+            </div>
+        </div>` : '';
+
+    card.innerHTML = `
+        <div class="ex-track-name">${name}</div>
+        <div class="set-chips" id="chips-${id}"></div>
+        <button class="btn-log-set" id="logbtn-${id}" onclick="toggleLogSet(${id})">Log Set</button>
+        <div class="log-set-form" id="lsf-${id}" style="display:none">
+            <div class="lsf-row">
+                <span class="lsf-label">${timed ? 'Duration (s)' : 'Reps'}</span>
+                <div class="stepper">
+                    <button class="stepper-btn" onclick="step('lsfreps${id}',-1,${repsMin},${repsMax})">−</button>
+                    <span class="stepper-val" id="lsfreps${id}">${reps}</span>
+                    <button class="stepper-btn" onclick="step('lsfreps${id}',1,${repsMin},${repsMax})">+</button>
+                </div>
+            </div>
+            ${weightRow}
+            <button class="btn-done-set" onclick="logSet(${id})">Done</button>
+        </div>`;
+    list.appendChild(card);
+
+    // Update picker
+    renderPicker();
+    document.querySelector('.btn-add-ex').textContent = '+ Add Exercise';
+    document.getElementById('add-ex-picker').classList.remove('open');
+    document.querySelector('.btn-add-ex').textContent = '+ Add Exercise';
+}
+
+// ── Finish session ───────────────────────────────────────────────────
+async function finishSession() {
+    try {
+        await fetch(`/session/${_SID}/finish`, {
+            method:  'POST',
+            headers: {'X-CSRF-Token': _CSRF},
+        });
+    } catch (_) {}
+    window.location.href = `/session/${_SID}`;
+}
+</script>
+{% endblock %}

@@ -1,0 +1,301 @@
+{% extends 'base.html' %}
+{% block title %}Swim{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/swim.css') }}">
+{% endblock %}
+
+{% block content %}
+<h1>Swim</h1>
+
+{# ── Tab bar ──────────────────────────────────────────────────────────────── #}
+<div class="sw-tabs">
+    <a href="/swim"          class="sw-tab {% if tab == 'log' %}active{% endif %}">≋ Log</a>
+    <a href="/swim/progress" class="sw-tab {% if tab == 'progress' %}active{% endif %}">◎ Progress</a>
+</div>
+
+{# ═══════════════════════════════════════════════════════════════════════════ #}
+{# LOG TAB                                                                    #}
+{# ═══════════════════════════════════════════════════════════════════════════ #}
+{% if tab == 'log' %}
+
+{# ── Post-session flash banner ─────────────────────────────────────────────── #}
+{% if flash_data %}
+<div class="sw-flash" id="sw-flash">
+    <div class="sw-flash-head">
+        <span class="sw-flash-dist">{{ flash_data.total_m | int }}m</span>
+        <span class="sw-flash-result {{ flash_data.result }}">{{ flash_data.result }}</span>
+    </div>
+    <div class="sw-flash-name">{{ flash_data.workout_name }}</div>
+    {% if flash_data.achievements or flash_data.pbs %}
+    <div class="sw-flash-items">
+        {% for a in flash_data.achievements %}
+        <div class="sw-flash-item ach">🏅 {{ a }}</div>
+        {% endfor %}
+        {% for p in flash_data.pbs %}
+        <div class="sw-flash-item pb">🏆 New PB: {{ p }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    <button class="sw-flash-dismiss" onclick="swDismissFlash()">Dismiss</button>
+</div>
+{% endif %}
+
+<form method="POST" action="/swim/new" id="sw-form">
+
+    <div class="form-group" style="margin-bottom:16px">
+        <label for="sw-date">Date</label>
+        <input type="date" id="sw-date" name="date" value="{{ session_date }}" required>
+    </div>
+
+    <input type="hidden" id="sw-workout-id" name="workout_id" value="">
+
+    {# ── Workout picker ─────────────────────────────────────────────────────── #}
+    <div id="sw-picker">
+
+        {# Stroke filter pills #}
+        <div class="sw-stroke-pills">
+            <button type="button" class="sw-pill active" data-stroke="all"
+                    onclick="swFilterStroke('all')">All</button>
+            {% for group in grouped_workouts %}
+            <button type="button" class="sw-pill" data-stroke="{{ group.stroke }}"
+                    onclick="swFilterStroke('{{ group.stroke }}')">
+                {{ group.stroke_name }}
+            </button>
+            {% endfor %}
+        </div>
+
+        {# Workout list grouped by stroke > category > difficulty #}
+        {% for group in grouped_workouts %}
+        <div class="sw-stroke-section" data-stroke="{{ group.stroke }}">
+            <div class="sw-stroke-label">
+                <span class="sw-stroke-dot"
+                      style="background:{{ stroke_colours[group.stroke] }}"></span>
+                {{ group.stroke_name }}
+            </div>
+            {% for cat in group.cat_groups %}
+            <div class="sw-cat-section">
+                <div class="sw-cat-label">{{ cat.category_name }}</div>
+                {% for diff in cat.diff_groups %}
+                <div class="sw-diff-section">
+                    <span class="sw-diff-label {{ diff.difficulty }}">
+                        {{ diff.difficulty | capitalize }}
+                    </span>
+                    {% for w in diff.workouts %}
+                    {%- set card_cls = 'sw-card locked' if not w.is_unlocked else 'sw-card' -%}
+                    <div class="{{ card_cls }}"
+                         data-wid="{{ w.id }}"
+                         {% if w.is_unlocked %}onclick="swSelectWorkout(this)"{% endif %}>
+                        <div class="sw-card-row">
+                            <div class="sw-card-info">
+                                <div class="sw-card-name">{{ w.name }}</div>
+                                <div class="sw-card-sets">
+                                    {% for s in w.sets %}
+                                        {{ s.reps }}×{{ s.distance_m }}m{% if s.stroke_override %} {{ s.stroke_override }}{% endif %}{% if not loop.last %} + {% endif %}
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            <div class="sw-card-right">
+                                <div class="sw-card-dist" style="color:{{ stroke_colours[w.stroke] }}">
+                                    {{ w.target_m }}m
+                                </div>
+                                {% if w.is_completed %}
+                                <span class="sw-card-done">✓ done</span>
+                                {% endif %}
+                            </div>
+                            {% if not w.is_unlocked %}
+                            <span class="sw-card-lock">🔒</span>
+                            {% endif %}
+                        </div>
+                        {% if not w.is_unlocked %}
+                        <div class="sw-card-lock-tip">
+                            Requires:
+                            {% for req in w.unlock_requires_json | fromjson %}{{ req }}{% if not loop.last %}, {% endif %}{% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+
+        {# Confirm bar — sticky above nav #}
+        <div class="sw-confirm-bar" id="sw-confirm-bar" style="display:none">
+            <span class="sw-confirm-label" id="sw-confirm-name"></span>
+            <button type="button" class="sw-confirm-cancel" onclick="swCancelSelect()">✕</button>
+            <button type="button" class="sw-confirm-go" onclick="swConfirm()">Go →</button>
+        </div>
+
+    </div>{# /sw-picker #}
+
+    {# ── Tracking form ──────────────────────────────────────────────────────── #}
+    <div id="sw-tracker" style="display:none">
+
+        <div class="sw-track-header">
+            <span class="sw-track-name"   id="sw-track-name"></span>
+            <span class="sw-track-target" id="sw-track-target"></span>
+        </div>
+
+        <button type="button" onclick="swBack()"
+                style="background:none;border:none;color:var(--muted);font-family:inherit;
+                       font-size:0.82rem;cursor:pointer;padding:0 0 10px;
+                       -webkit-tap-highlight-color:transparent">
+            ← back to workouts
+        </button>
+
+        <div class="sw-sets-hdr">
+            <span>#</span><span>Reps</span><span>Dist</span><span>Stroke</span><span></span>
+        </div>
+        <div id="sw-rows"></div>
+        <button type="button" class="sw-add-row-btn" onclick="swAddRow()">+ Add group</button>
+
+        <div class="sw-total" id="sw-total" style="display:none">
+            <span class="sw-total-val"  id="sw-total-val">0</span>
+            <span class="sw-total-unit">m</span>
+            <span class="sw-total-vs"   id="sw-total-vs"></span>
+        </div>
+
+    </div>{# /sw-tracker #}
+
+    <div class="form-group" style="margin:14px 0 8px">
+        <label for="sw-notes">Notes (optional)</label>
+        <input type="text" id="sw-notes" name="notes" placeholder="e.g. felt strong today">
+    </div>
+
+    <button type="submit" class="sw-save-btn" id="sw-save-btn" disabled>Save Swim</button>
+
+</form>
+
+{# ── Pass workout data to JS ─────────────────────────────────────────────── #}
+<script>
+window.SW_WORKOUTS = {};
+{% for group in grouped_workouts %}
+{% for cat in group.cat_groups %}
+{% for diff in cat.diff_groups %}
+{% for w in diff.workouts %}
+window.SW_WORKOUTS[{{ w.id }}] = {
+    id: {{ w.id }},
+    name: {{ w.name | tojson }},
+    stroke: {{ w.stroke | tojson }},
+    category: {{ w.category | tojson }},
+    difficulty: {{ w.difficulty | tojson }},
+    sets_json: {{ w.sets_json | tojson }},
+    target_m: {{ w.target_m }},
+    is_unlocked: {{ w.is_unlocked | int }}
+};
+{% endfor %}
+{% endfor %}
+{% endfor %}
+{% endfor %}
+</script>
+<script src="{{ url_for('static', filename='js/swim_log.js') }}"></script>
+
+{% endif %}{# /log tab #}
+
+
+{# ═══════════════════════════════════════════════════════════════════════════ #}
+{# PROGRESS TAB                                                               #}
+{# ═══════════════════════════════════════════════════════════════════════════ #}
+{% if tab == 'progress' %}
+
+{# ── Weekly progress bar ────────────────────────────────────────────────────── #}
+<div class="sw-weekly-card">
+    <div class="sw-weekly-head">
+        <span class="sw-weekly-range section-title" id="sw-week-range">Loading…</span>
+        <button type="button" class="sw-weekly-edit-btn" onclick="swToggleGoal()">Edit target</button>
+    </div>
+    <div class="sw-weekly-bar-track">
+        <div class="sw-weekly-bar-fill" id="sw-bar-fill" style="width:0%"></div>
+    </div>
+    <div class="sw-weekly-meta">
+        <span class="sw-weekly-actual" id="sw-week-actual">0m</span>
+        <span class="sw-weekly-of">of</span>
+        <span class="sw-weekly-target" id="sw-week-target">0m</span>
+    </div>
+
+    <div class="sw-goal-edit" id="sw-goal-edit">
+        <div class="sw-goal-edit-row">
+            <input type="number" class="sw-goal-input" id="sw-goal-input"
+                   inputmode="numeric" placeholder="target in metres" min="500" step="500">
+            <button type="button" class="sw-goal-save" onclick="swSaveGoal()">Save</button>
+        </div>
+    </div>
+</div>
+
+{# ── Skill tree ──────────────────────────────────────────────────────────────── #}
+<section class="sw-tree-section">
+    <p class="section-title">Skill Tree</p>
+
+    <div class="sw-tree-filter-pills">
+        <button type="button" class="sw-pill sw-tree-pill active" data-stroke="all"
+                onclick="swFilterTree('all')">All</button>
+        <button type="button" class="sw-pill sw-tree-pill" data-stroke="Fr"
+                onclick="swFilterTree('Fr')" style="color:#378ADD">Freestyle</button>
+        <button type="button" class="sw-pill sw-tree-pill" data-stroke="Ba"
+                onclick="swFilterTree('Ba')" style="color:#1D9E75">Backstroke</button>
+        <button type="button" class="sw-pill sw-tree-pill" data-stroke="Br"
+                onclick="swFilterTree('Br')" style="color:#639922">Breaststroke</button>
+        <button type="button" class="sw-pill sw-tree-pill" data-stroke="Bt"
+                onclick="swFilterTree('Bt')" style="color:#D85A30">Butterfly</button>
+    </div>
+
+    <div class="sw-tree-wrap">
+        <svg id="skill-tree-svg" viewBox="0 0 900 1100" aria-label="Swim skill tree">
+            <defs>
+                {% for stroke, col in stroke_colours.items() %}
+                <marker id="arr-{{ stroke }}" markerWidth="8" markerHeight="8"
+                        refX="6" refY="3" orient="auto">
+                    <path d="M0,0 L0,6 L8,3 z" fill="{{ col }}88"/>
+                </marker>
+                <marker id="arr-{{ stroke }}-locked" markerWidth="8" markerHeight="8"
+                        refX="6" refY="3" orient="auto">
+                    <path d="M0,0 L0,6 L8,3 z" fill="#E8E5DF"/>
+                </marker>
+                {% endfor %}
+            </defs>
+            <g id="tree-transform">
+                <g id="tree-edges"></g>
+                <g id="tree-nodes"></g>
+            </g>
+        </svg>
+    </div>
+</section>
+
+{# ── Node detail panel ───────────────────────────────────────────────────────── #}
+<div class="sw-node-backdrop" id="sw-node-backdrop" onclick="swClosePanel()"></div>
+<div class="sw-node-panel"    id="sw-node-panel">
+    <div class="sw-node-panel-handle"></div>
+    <button class="sw-panel-close" onclick="swClosePanel()">✕</button>
+    <div class="sw-panel-name" id="sw-panel-name"></div>
+    <div class="sw-panel-meta" id="sw-panel-meta"></div>
+    <div class="sw-panel-desc" id="sw-panel-desc"></div>
+    <div class="sw-panel-sets" id="sw-panel-sets"></div>
+    <div class="sw-panel-hist" id="sw-panel-hist" style="display:none">
+        <div class="sw-panel-hist-title">Session history</div>
+        <div id="sw-panel-hist-rows"></div>
+    </div>
+</div>
+
+{# ── Achievements & PBs ─────────────────────────────────────────────────────── #}
+<section class="sw-ach-section">
+    <p class="section-title" style="margin-bottom:12px">Personal Bests</p>
+    <div class="sw-pbs-grid" id="sw-pbs-grid">
+        <div class="sw-pb-card"><div class="sw-pb-label">Longest Session</div><div class="sw-pb-val">—</div></div>
+        <div class="sw-pb-card"><div class="sw-pb-label">Most Sets</div><div class="sw-pb-val">—</div></div>
+        <div class="sw-pb-card"><div class="sw-pb-label">Best Week</div><div class="sw-pb-val">—</div></div>
+    </div>
+
+    <p class="section-title" style="margin-bottom:12px">Achievements</p>
+    <div class="sw-ach-grid" id="sw-ach-grid">
+        <div style="color:var(--dim);font-size:0.85rem">Loading…</div>
+    </div>
+</section>
+
+<script src="{{ url_for('static', filename='js/swim_progress.js') }}"></script>
+
+{% endif %}{# /progress tab #}
+
+{% endblock %}

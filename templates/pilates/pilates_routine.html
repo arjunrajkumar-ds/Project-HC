@@ -1,0 +1,175 @@
+{% extends 'base.html' %}
+{% block title %}{{ routine.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+.pl-back {
+    display: inline-block; background: none; border: none; color: var(--muted);
+    font-family: inherit; font-size: 0.82rem; cursor: pointer;
+    padding: 0; margin-bottom: 10px; text-decoration: none;
+}
+.pl-routine-desc { color: var(--muted); font-size: 0.85rem; margin: -6px 0 16px; }
+
+.pl-date-row { margin-bottom: 16px; }
+.pl-date-row label {
+    display: block; font-size: 0.72rem; font-weight: 700; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px;
+}
+.pl-date-row input[type=date], .pl-notes input {
+    width: 100%; padding: 9px 11px; border: 0.5px solid var(--border);
+    border-radius: 9px; font-family: inherit; font-size: 0.9rem;
+    background: var(--surface); color: var(--text);
+}
+
+.pl-ex {
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: 12px; padding: 14px 15px; margin-bottom: 12px;
+}
+.pl-ex.skipped { opacity: .5; }
+.pl-ex-head { display: flex; align-items: center; gap: 10px; }
+.pl-ex-num {
+    width: 22px; height: 22px; flex-shrink: 0; border-radius: 50%;
+    background: var(--pilates-bg); color: var(--pilates-fg);
+    font-size: 0.7rem; font-weight: 800; display: flex; align-items: center; justify-content: center;
+}
+.pl-ex-name { font-weight: 700; font-size: 0.98rem; color: var(--text); flex: 1; }
+.pl-ex-reps {
+    font-size: 0.78rem; font-weight: 700; color: var(--pilates-fg);
+    background: var(--pilates-bg); border-radius: 999px; padding: 2px 9px;
+}
+
+/* done toggle */
+.pl-done {
+    margin-left: 4px; width: 26px; height: 26px; flex-shrink: 0; cursor: pointer;
+    border: 1.5px solid var(--border); border-radius: 7px; background: var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.9rem; color: transparent; -webkit-tap-highlight-color: transparent;
+}
+.pl-ex.checked .pl-done { background: var(--pilates-fg); border-color: var(--pilates-fg); color: #fff; }
+
+.pl-guide { margin-top: 11px; display: grid; grid-template-columns: auto 1fr; gap: 5px 12px; }
+.pl-guide-label {
+    font-size: 0.68rem; font-weight: 700; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; padding-top: 1px;
+}
+.pl-guide-val { font-size: 0.85rem; color: var(--text); }
+
+.pl-notes-line {
+    margin-top: 11px; font-size: 0.82rem; color: var(--muted);
+    border-top: 0.5px solid var(--border); padding-top: 9px; font-style: italic;
+}
+
+/* hard-version toggle */
+.pl-ver { display: flex; gap: 0; margin-top: 12px; border: 1px solid var(--pilates-fg); border-radius: 8px; overflow: hidden; }
+.pl-ver label {
+    flex: 1; text-align: center; padding: 6px 0; font-size: 0.78rem; font-weight: 700;
+    color: var(--pilates-fg); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.pl-ver input { display: none; }
+.pl-ver input:checked + label { background: var(--pilates-fg); color: #fff; }
+.pl-hard-box {
+    margin-top: 10px; background: var(--pilates-bg); border-radius: 9px; padding: 11px 12px;
+    display: none;
+}
+.pl-ex.hard-on .pl-hard-box { display: block; }
+.pl-hard-title { font-size: 0.68rem; font-weight: 800; color: var(--pilates-fg);
+    text-transform: uppercase; letter-spacing: .06em; margin-bottom: 7px; }
+
+.pl-notes { margin: 16px 0 10px; }
+.pl-notes label {
+    display: block; font-size: 0.72rem; font-weight: 700; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px;
+}
+.pl-save {
+    width: 100%; padding: 14px; border: none; border-radius: 12px;
+    background: var(--pilates-fg); color: #fff; font-family: inherit;
+    font-size: 1rem; font-weight: 700; cursor: pointer; margin-top: 6px;
+}
+.pl-save:active { opacity: .85; }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="/pilates" class="pl-back">← all routines</a>
+<h1 style="margin-bottom:6px">{{ routine.name }}</h1>
+{% if routine.description %}<p class="pl-routine-desc">{{ routine.description }}</p>{% endif %}
+
+<form method="POST" action="/pilates/log">
+    <input type="hidden" name="routine_id" value="{{ routine.id }}">
+
+    <div class="pl-date-row">
+        <label for="pl-date">Date</label>
+        <input type="date" id="pl-date" name="date" value="{{ session_date }}" required>
+    </div>
+
+    {% for ex in routine.exercises %}
+    <div class="pl-ex checked" id="ex-{{ ex.id }}" data-eid="{{ ex.id }}">
+        <div class="pl-ex-head">
+            <span class="pl-ex-num">{{ loop.index }}</span>
+            <span class="pl-ex-name">{{ ex.name }}</span>
+            {% if ex.reps %}<span class="pl-ex-reps">{{ ex.reps }} reps</span>{% endif %}
+            <input type="checkbox" name="done_{{ ex.id }}" id="done-{{ ex.id }}"
+                   value="1" checked hidden onchange="plToggleDone({{ ex.id }})">
+            <div class="pl-done" onclick="plClickDone({{ ex.id }})">✓</div>
+        </div>
+
+        {% if ex.guidance %}
+        <div class="pl-guide">
+            {% for g in ex.guidance %}
+            <div class="pl-guide-label">{{ g.label }}</div>
+            <div class="pl-guide-val">{{ g.value }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if ex.notes %}<div class="pl-notes-line">{{ ex.notes }}</div>{% endif %}
+
+        {% if ex.has_hard %}
+        <div class="pl-ver">
+            <input type="radio" name="version_{{ ex.id }}" id="std-{{ ex.id }}" value="standard"
+                   checked onchange="plToggleHard({{ ex.id }}, false)">
+            <label for="std-{{ ex.id }}">Standard</label>
+            <input type="radio" name="version_{{ ex.id }}" id="hard-{{ ex.id }}" value="hard"
+                   onchange="plToggleHard({{ ex.id }}, true)">
+            <label for="hard-{{ ex.id }}">Hard</label>
+        </div>
+        <div class="pl-hard-box">
+            <div class="pl-hard-title">Hard version{% if ex.hard.reps %} · {{ ex.hard.reps }} reps{% endif %}</div>
+            {% if ex.hard.guidance %}
+            <div class="pl-guide">
+                {% for g in ex.hard.guidance %}
+                <div class="pl-guide-label">{{ g.label }}</div>
+                <div class="pl-guide-val">{{ g.value }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if ex.hard.notes %}<div class="pl-notes-line">{{ ex.hard.notes }}</div>{% endif %}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    <div class="pl-notes">
+        <label for="pl-notes">Session notes (optional)</label>
+        <input type="text" id="pl-notes" name="notes" placeholder="e.g. felt strong, upped springs">
+    </div>
+
+    <button type="submit" class="pl-save">Save Session</button>
+</form>
+
+<script>
+function plClickDone(eid) {
+    const cb = document.getElementById('done-' + eid);
+    cb.checked = !cb.checked;
+    plToggleDone(eid);
+}
+function plToggleDone(eid) {
+    const cb = document.getElementById('done-' + eid);
+    document.getElementById('ex-' + eid).classList.toggle('checked', cb.checked);
+    document.getElementById('ex-' + eid).classList.toggle('skipped', !cb.checked);
+}
+function plToggleHard(eid, on) {
+    document.getElementById('ex-' + eid).classList.toggle('hard-on', on);
+}
+</script>
+{% endblock %}

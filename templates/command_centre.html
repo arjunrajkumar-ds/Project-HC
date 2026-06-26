@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block title %}Command Centre{% endblock %}
+
+{% block extra_css %}
+<style>
+.cc-section { margin-bottom: 28px; }
+.cc-empty {
+    background: var(--surface); border-radius: 12px;
+    padding: 20px 16px; text-align: center;
+    font-size: 0.85rem; color: var(--dim);
+}
+.recon-list { display: flex; flex-direction: column; gap: 8px; }
+.recon-card {
+    background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px;
+    padding: 13px 14px; display: flex; flex-direction: column; gap: 6px;
+}
+.recon-names {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.recon-original {
+    font-size: 0.82rem; color: var(--dim);
+    text-decoration: line-through;
+}
+.recon-arrow { font-size: 0.75rem; color: var(--muted); }
+.recon-normalized {
+    font-size: 0.88rem; font-weight: 700; color: var(--text);
+}
+.recon-meta {
+    font-size: 0.7rem; color: var(--dim);
+    display: flex; gap: 10px;
+}
+.recon-badge {
+    display: inline-block; font-size: 0.65rem; font-weight: 700;
+    background: var(--core-bg); color: var(--core-fg);
+    border: 1px solid var(--core-fg); border-radius: 5px;
+    padding: 2px 6px; letter-spacing: .04em; text-transform: uppercase;
+    flex-shrink: 0; align-self: flex-start;
+}
+.btn-dismiss {
+    background: none; border: 1px solid var(--border);
+    border-radius: 8px; color: var(--muted); cursor: pointer;
+    font-family: inherit; font-size: 0.75rem; font-weight: 700;
+    padding: 5px 10px; margin-top: 2px; align-self: flex-start;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-dismiss:active { opacity: .7; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Command Centre</h1>
+
+<section class="cc-section">
+    <p class="section-title">Food Reconciliations</p>
+    {% if reconciliations %}
+    <div class="recon-list">
+        {% for r in reconciliations %}
+        <div class="recon-card">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+                <span class="recon-badge">auto-fixed</span>
+                <div class="recon-meta">
+                    <span>{{ r.profile_name }}</span>
+                    <span>{{ r.logged_at[:10] }}</span>
+                </div>
+            </div>
+            <div class="recon-names">
+                <span class="recon-original">{{ r.original }}</span>
+                <span class="recon-arrow">→</span>
+                <span class="recon-normalized">{{ r.normalized }}</span>
+            </div>
+            <form method="POST" action="/command-centre/reconciliation/{{ r.id }}/dismiss" style="margin:0">
+                <button type="submit" class="btn-dismiss">Dismiss</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="cc-empty">No reconciliations flagged.</div>
+    {% endif %}
+</section>
+{% endblock %}

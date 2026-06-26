@@ -3,68 +3,392 @@
 
 {% block extra_css %}
 <style>
-.swim-form    { display: flex; flex-direction: column; gap: 18px; }
-.set-row-group { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-
-/* Large number input for sets */
-.sets-input { font-size: 1.4rem !important; font-weight: 700 !important; text-align: center; }
-
-.total-display {
-    background: var(--swim-bg); border-radius: 10px;
-    color: var(--swim-fg); font-size: 1.1rem; font-weight: 700;
-    padding: 14px; text-align: center;
+/* ── Category buttons ────────────────────────────────────────────── */
+.swim-cat-btns {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    margin-bottom: 12px;
 }
-#total-val { font-size: 1.45rem; }
+.btn-swim-cat {
+    background: var(--surface); border: 2px solid var(--border);
+    border-radius: 12px; cursor: pointer; font-family: inherit;
+    min-height: 56px; padding: 10px 6px; color: var(--muted);
+    font-weight: 700; font-size: 0.85rem;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 4px; -webkit-tap-highlight-color: transparent;
+}
+.btn-swim-cat .cat-sub { font-size: 0.68rem; font-weight: 500; color: var(--dim); }
+.btn-swim-cat.active   { border-color: var(--swim-fg); background: var(--swim-bg); color: var(--swim-fg); }
+.btn-swim-cat.active .cat-sub { color: var(--swim-fg); opacity: .7; }
+.btn-swim-cat:active   { opacity: .75; }
+
+/* ── Achievement list ────────────────────────────────────────────── */
+.swim-chains { display: flex; flex-direction: column; gap: 10px; }
+.chain-card  { background: var(--surface); border-radius: 14px; overflow: hidden; }
+.ach-row {
+    display: flex; align-items: center; gap: 12px; padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    -webkit-tap-highlight-color: transparent;
+}
+.ach-row:last-child       { border-bottom: none; }
+.ach-row.available        { cursor: pointer; }
+.ach-row.available:active { opacity: .75; }
+.ach-row.locked           { opacity: .38; }
+.ach-row.selected {
+    background: var(--swim-bg);
+    outline: 2px solid var(--swim-fg); outline-offset: -2px;
+}
+.ach-info   { flex: 1; min-width: 0; }
+.ach-name   { font-weight: 700; font-size: 0.95rem; color: var(--text); }
+.ach-detail { font-size: 0.75rem; color: var(--dim); margin-top: 2px; }
+.ach-right  { text-align: right; flex-shrink: 0; }
+.ach-dist   { font-size: 0.88rem; font-weight: 700; color: var(--swim-fg); }
+.ach-badge  {
+    display: inline-block; margin-top: 3px;
+    background: var(--accent-light); color: var(--accent-text);
+    font-size: 0.68rem; font-weight: 700;
+    border-radius: 99px; padding: 2px 7px;
+}
+.ach-lock   { font-size: 1rem; color: var(--border); margin-left: 4px; flex-shrink: 0; }
+.chain-connector {
+    border-bottom: 1px solid var(--border); height: 18px; background: var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.72rem; color: var(--dim);
+}
+
+/* ── Confirmation bar ────────────────────────────────────────────── */
+.swim-confirm-bar {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface); border-radius: 12px;
+    padding: 12px 16px; margin-top: 10px;
+}
+.swim-confirm-label { flex: 1; font-size: 0.9rem; font-weight: 600; color: #fff; }
+.btn-swim-confirm {
+    border: none; border-radius: 8px; cursor: pointer; font-family: inherit;
+    font-size: 1.1rem; font-weight: 800; min-height: 44px; min-width: 44px;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-swim-confirm.tick  { background: var(--accent); color: #fff; }
+.btn-swim-confirm.cross { background: var(--surface-2); color: var(--dim);
+                           border: 1px solid var(--border); }
+.btn-swim-confirm:active { opacity: .75; }
+
+/* ── Session entry form (tracking phase) ─────────────────────────── */
+.sw-ach-bar {
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    background: var(--surface); border-radius: 12px; padding: 12px 16px;
+    margin-bottom: 10px;
+}
+.sw-ach-bar-name   { font-weight: 700; font-size: 0.95rem; color: #fff; }
+.sw-ach-bar-target { font-size: 0.8rem; color: var(--dim); }
+
+.sw-sets-header {
+    display: grid; grid-template-columns: 26px 1fr 1fr 40px;
+    gap: 6px; align-items: center;
+    font-size: 0.67rem; font-weight: 600; color: #444;
+    text-transform: uppercase; letter-spacing: .05em;
+    padding: 0 2px; margin-bottom: 4px;
+}
+.sw-row {
+    display: grid; grid-template-columns: 26px 1fr 1fr 40px;
+    gap: 6px; align-items: center; margin-bottom: 6px;
+}
+.sw-row-num { font-size: 0.82rem; color: var(--dim); text-align: center; }
+.sw-row input[type="number"],
+.sw-row select {
+    padding: 11px 8px; min-height: 48px;
+    text-align: center; font-weight: 600;
+    background: var(--bg);
+}
+.sw-row select { text-align-last: center; }
+.btn-rm-sw {
+    background: none; border: 1px solid transparent; border-radius: 8px;
+    color: var(--border); cursor: pointer; font-size: 1rem;
+    min-height: 48px; min-width: 40px;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-rm-sw:active { color: var(--push-fg); border-color: var(--push-fg); }
+.btn-add-sw {
+    background: none; border: 1px dashed var(--border); border-radius: 8px;
+    color: var(--dim); cursor: pointer; font-family: inherit; font-size: 0.9rem;
+    min-height: 48px; padding: 10px; width: 100%; margin-top: 2px;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-add-sw:active { border-color: var(--swim-fg); color: var(--swim-fg); }
+
+.sw-total {
+    background: var(--swim-bg); border-radius: 10px; margin-top: 10px;
+    padding: 12px 16px; display: flex; align-items: baseline; gap: 8px;
+}
+.sw-total-val { font-size: 1.3rem; font-weight: 800; color: var(--swim-fg); }
+.sw-total-unit { font-size: 0.8rem; color: var(--dim); }
+.sw-total-vs   { margin-left: auto; font-size: 0.8rem; font-weight: 600; }
+.sw-vs-ok      { color: #4ade80; }
+.sw-vs-short   { color: var(--dim); }
+
+/* ── Save button ─────────────────────────────────────────────────── */
+.btn-save-swim {
+    background: var(--swim-fg); border: none; border-radius: 12px;
+    color: #042f3e; cursor: pointer; font-family: inherit;
+    font-size: 1.05rem; font-weight: 800;
+    min-height: 56px; padding: 16px; width: 100%; margin-top: 4px;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-save-swim:active   { opacity: .85; }
+.btn-save-swim:disabled { opacity: .35; cursor: default; }
 </style>
 {% endblock %}
 
 {% block content %}
 <h1>Log Swim</h1>
 
-<form method="POST" action="/swim/new" class="swim-form">
-    <div class="form-group">
+<form method="POST" action="/swim/new" id="swim-form">
+    <div class="form-group" style="margin-bottom:16px">
         <label for="date">Date</label>
         <input type="date" id="date" name="date" value="{{ session_date }}" required>
     </div>
 
-    <div class="set-row-group">
-        <div class="form-group">
-            <label for="sets">Sets</label>
-            <input type="number" id="sets" name="sets" class="sets-input"
-                   min="1" max="50" step="1" placeholder="10"
-                   inputmode="numeric" required oninput="updateTotal()">
+    {# ── Category buttons ─────────────────────────────────────────── #}
+    <div class="swim-cat-btns">
+        <button type="button" class="btn-swim-cat" id="btn-cat-straight"
+                onclick="toggleCat('straight')">
+            Straight Sets
+            <span class="cat-sub">Distance repeats</span>
+        </button>
+        <button type="button" class="btn-swim-cat" id="btn-cat-pyramid"
+                onclick="toggleCat('pyramid')">
+            Pyramid
+            <span class="cat-sub">Mixed distances</span>
+        </button>
+    </div>
+
+    {# ── Selecting phase ───────────────────────────────────────────── #}
+    <div id="swim-select-phase">
+
+        <div id="cat-straight" style="display:none">
+            <div class="swim-chains">
+            {% for chain in straight_chains %}
+            <div class="chain-card">
+                {% for ach in chain %}
+                {% if not loop.first %}<div class="chain-connector">↓</div>{% endif %}
+                <div class="ach-row {{ 'locked' if not ach.is_unlocked else 'available' }}"
+                     id="ach-{{ ach.id }}"
+                     {% if ach.is_unlocked %}onclick="selectAch({{ ach.id }})"{% endif %}>
+                    <div class="ach-info">
+                        <div class="ach-name">{{ ach.name }}</div>
+                        <div class="ach-detail">
+                            {% for g in ach.sets %}{{ g.sets }}×{{ g.rep_m }}m{% if not loop.last %} + {% endif %}{% endfor %}
+                        </div>
+                    </div>
+                    <div class="ach-right">
+                        <div class="ach-dist">{{ ach.total_m }}m</div>
+                        {% if ach.is_completed %}<span class="ach-badge">✓ ×{{ ach.count }}</span>{% endif %}
+                    </div>
+                    {% if not ach.is_unlocked %}<span class="ach-lock">○</span>{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endfor %}
+            </div>
         </div>
-        <div class="form-group">
-            <label for="rep_distance_m">Per Set</label>
-            <select id="rep_distance_m" name="rep_distance_m" required onchange="updateTotal()">
-                <option value="50">50 m</option>
-                <option value="100">100 m</option>
-            </select>
+
+        <div id="cat-pyramid" style="display:none">
+            <div class="swim-chains">
+            {% for chain in pyramid_chains %}
+            <div class="chain-card">
+                {% for ach in chain %}
+                {% if not loop.first %}<div class="chain-connector">↓</div>{% endif %}
+                <div class="ach-row {{ 'locked' if not ach.is_unlocked else 'available' }}"
+                     id="ach-{{ ach.id }}"
+                     {% if ach.is_unlocked %}onclick="selectAch({{ ach.id }})"{% endif %}>
+                    <div class="ach-info">
+                        <div class="ach-name">{{ ach.name }}</div>
+                        <div class="ach-detail">
+                            {% for g in ach.sets %}{{ g.sets }}×{{ g.rep_m }}m{% if not loop.last %} + {% endif %}{% endfor %}
+                        </div>
+                    </div>
+                    <div class="ach-right">
+                        <div class="ach-dist">{{ ach.total_m }}m</div>
+                        {% if ach.is_completed %}<span class="ach-badge">✓ ×{{ ach.count }}</span>{% endif %}
+                    </div>
+                    {% if not ach.is_unlocked %}<span class="ach-lock">○</span>{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endfor %}
+            </div>
+        </div>
+
+        <div id="swim-confirm" style="display:none">
+            <div class="swim-confirm-bar">
+                <span class="swim-confirm-label" id="swim-confirm-label"></span>
+                <button type="button" class="btn-swim-confirm tick"  onclick="confirmSwim()">✓</button>
+                <button type="button" class="btn-swim-confirm cross" onclick="cancelSwim()">✗</button>
+            </div>
+        </div>
+
+    </div>
+
+    {# ── Session entry phase (post-confirm) ───────────────────────── #}
+    <div id="swim-track-phase" style="display:none">
+        <div class="sw-ach-bar">
+            <span class="sw-ach-bar-name"   id="sw-ach-name"></span>
+            <span class="sw-ach-bar-target" id="sw-ach-target"></span>
+        </div>
+
+        <div class="sw-sets-header">
+            <span>#</span><span>Sets</span><span>Distance</span><span></span>
+        </div>
+        <div id="sw-rows"></div>
+        <button type="button" class="btn-add-sw" onclick="addSwimRow()">+ Add group</button>
+
+        <div class="sw-total" id="sw-total" style="display:none">
+            <span class="sw-total-val"  id="sw-total-val">0</span>
+            <span class="sw-total-unit">m</span>
+            <span class="sw-total-vs"   id="sw-total-vs"></span>
         </div>
     </div>
 
-    <div class="total-display" id="total-display" style="display:none">
-        = <span id="total-val">—</span> m total
-    </div>
+    <input type="hidden" name="achievement_id" id="achievement-id" value="">
 
-    <div class="form-group">
+    <div class="form-group" style="margin:14px 0 8px">
         <label for="notes">Notes (optional)</label>
-        <input type="text" id="notes" name="notes" placeholder="e.g. long steady effort">
+        <input type="text" id="notes" name="notes" placeholder="e.g. felt strong today">
     </div>
 
-    <button type="submit" class="btn btn-swim btn-full">Save Swim</button>
+    <button type="submit" class="btn-save-swim" id="btn-save" disabled>Save Swim</button>
 </form>
 
+{% if swim_history %}
+<section class="section" style="margin-top:24px">
+    <p class="section-title">History</p>
+    <div style="display:flex;flex-direction:column;gap:6px">
+        {% for s in swim_history %}
+        <a href="/session/{{ s.id }}" style="
+            display:flex;align-items:center;gap:10px;
+            background:var(--swim-bg);border-radius:10px;
+            padding:11px 14px;text-decoration:none;color:inherit;
+            -webkit-tap-highlight-color:transparent">
+            <span style="font-size:0.82rem;color:var(--muted);flex:1">{{ s.date }}</span>
+            <span style="font-size:0.88rem;font-weight:700;color:var(--swim-fg)">{{ s.distance_m }} m</span>
+            {% if s.notes %}<span style="font-size:0.75rem;color:var(--dim);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.notes }}</span>{% endif %}
+            <span style="color:var(--border);font-size:1.1rem">›</span>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
 <script>
-function updateTotal() {
-    const sets = parseInt(document.getElementById('sets').value) || 0;
-    const rep  = parseInt(document.getElementById('rep_distance_m').value) || 0;
-    const el   = document.getElementById('total-display');
-    if (sets > 0) {
-        document.getElementById('total-val').textContent = (sets * rep).toLocaleString();
-        el.style.display = 'block';
+const ACHIEVEMENTS = {{ achievements_json | safe }};
+const DISTANCES    = [25, 50, 100, 200, 400];
+let   SWIM_ACH     = null;
+
+function toggleCat(cat) {
+    const target  = document.getElementById('cat-' + cat);
+    const opening = target.style.display === 'none';
+    ['straight', 'pyramid'].forEach(c => {
+        document.getElementById('cat-' + c).style.display = 'none';
+        document.getElementById('btn-cat-' + c).classList.remove('active');
+    });
+    if (opening) {
+        target.style.display = '';
+        document.getElementById('btn-cat-' + cat).classList.add('active');
+    }
+    cancelSwim();
+}
+
+function selectAch(id) {
+    SWIM_ACH = ACHIEVEMENTS[String(id)];
+    document.querySelectorAll('.ach-row').forEach(el => el.classList.remove('selected'));
+    document.getElementById('ach-' + id).classList.add('selected');
+    document.getElementById('swim-confirm-label').textContent = SWIM_ACH.name;
+    document.getElementById('swim-confirm').style.display = '';
+}
+
+function cancelSwim() {
+    SWIM_ACH = null;
+    document.querySelectorAll('.ach-row').forEach(el => el.classList.remove('selected'));
+    document.getElementById('swim-confirm').style.display = 'none';
+}
+
+function confirmSwim() {
+    if (!SWIM_ACH) return;
+    document.getElementById('achievement-id').value = SWIM_ACH.id;
+    document.getElementById('swim-select-phase').style.display = 'none';
+
+    // Header bar
+    document.getElementById('sw-ach-name').textContent   = SWIM_ACH.name;
+    document.getElementById('sw-ach-target').textContent = 'Target: ' + SWIM_ACH.total_m + 'm';
+
+    // Pre-populate rows from achievement definition
+    document.getElementById('sw-rows').innerHTML = '';
+    SWIM_ACH.sets.forEach(g => addSwimRow(g.sets, g.rep_m));
+
+    document.getElementById('swim-track-phase').style.display = '';
+    document.getElementById('btn-save').disabled = false;
+}
+
+function addSwimRow(defaultSets, defaultDist) {
+    const container = document.getElementById('sw-rows');
+    const rowNum    = container.querySelectorAll('.sw-row').length + 1;
+    const row       = document.createElement('div');
+    row.className   = 'sw-row';
+
+    const distOpts = DISTANCES.map(d =>
+        `<option value="${d}" ${d === (defaultDist || 50) ? 'selected' : ''}>${d}m</option>`
+    ).join('');
+
+    row.innerHTML =
+        `<span class="sw-row-num">${rowNum}</span>` +
+        `<input type="number" name="swim_sets" min="1" max="999" inputmode="numeric"
+                value="${defaultSets || ''}" placeholder="sets" oninput="updateSwimTotal()" required>` +
+        `<select name="swim_dist" onchange="updateSwimTotal()">${distOpts}</select>` +
+        `<button type="button" class="btn-rm-sw" onclick="removeSwimRow(this)">✕</button>`;
+
+    container.appendChild(row);
+    updateSwimTotal();
+}
+
+function removeSwimRow(btn) {
+    const container = btn.closest('.sw-row').parentElement;
+    btn.closest('.sw-row').remove();
+    container.querySelectorAll('.sw-row-num').forEach((el, i) => el.textContent = i + 1);
+    updateSwimTotal();
+}
+
+document.getElementById('swim-form').addEventListener('submit', () => {
+    const btn = document.getElementById('btn-save');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+});
+
+function updateSwimTotal() {
+    const rows  = document.getElementById('sw-rows').querySelectorAll('.sw-row');
+    let total   = 0;
+    rows.forEach(row => {
+        const s = parseInt(row.querySelector('input[name="swim_sets"]').value)  || 0;
+        const d = parseInt(row.querySelector('select[name="swim_dist"]').value) || 0;
+        total  += s * d;
+    });
+
+    const totalEl = document.getElementById('sw-total');
+    if (total > 0) {
+        document.getElementById('sw-total-val').textContent = total.toLocaleString();
+        const target = SWIM_ACH?.total_m || 0;
+        const vsEl   = document.getElementById('sw-total-vs');
+        if (target) {
+            if (total >= target) {
+                vsEl.textContent = '✓ Achievement met';
+                vsEl.className   = 'sw-total-vs sw-vs-ok';
+            } else {
+                vsEl.textContent = `${(target - total).toLocaleString()}m to go`;
+                vsEl.className   = 'sw-total-vs sw-vs-short';
+            }
+        }
+        totalEl.style.display = '';
     } else {
-        el.style.display = 'none';
+        totalEl.style.display = 'none';
     }
 }
 </script>

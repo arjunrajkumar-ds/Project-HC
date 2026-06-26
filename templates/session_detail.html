@@ -1,171 +1,412 @@
 {% extends 'base.html' %}
-{% block title %}Session — {{ session.date }}{% endblock %}
+{% block title %}{{ session.date | fmt_date }}{% endblock %}
 
 {% block extra_css %}
 <style>
-.detail-header { margin-bottom: 20px; }
-.header-top    { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-.s-date-lg     { font-size: 1rem; color: var(--muted); font-weight: 500; }
-.s-notes       { font-size: 0.85rem; color: var(--dim); font-style: italic; margin-top: 4px; }
+.back-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    color: var(--accent); font-size: 0.82rem; font-weight: 700;
+    text-decoration: none; margin-bottom: 12px;
+    -webkit-tap-highlight-color: transparent;
+}
+.back-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none;
+                stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
 
-/* swim card */
+.detail-title { font-size: 1.35rem; font-weight: 800; color: var(--text); margin-bottom: 5px; }
+.detail-meta {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 0.72rem; color: var(--dim); margin-bottom: 16px; flex-wrap: wrap;
+}
+.detail-meta-pip { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── 2-col grid ── */
+.ex-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 20px; }
+
+/* ── exercise card ── */
+.ex-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: 10px; overflow: hidden; }
+
+.ex-card-top {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    padding: 9px 10px 6px;
+}
+.ex-card-name { font-size: 0.78rem; font-weight: 700; color: var(--text); line-height: 1.2; }
+.ex-card-muscle { font-size: 0.63rem; color: var(--dim); margin-top: 2px; }
+
+.pr-badge {
+    font-size: 0.58rem; font-weight: 800;
+    background: var(--t1-bg); color: var(--t1-fg);
+    padding: 1px 5px; border-radius: 3px; text-transform: uppercase;
+    margin-left: 4px; vertical-align: 1px;
+}
+
+/* ── segmented pip bar ── */
+.pip-bar-row { display: flex; align-items: center; gap: 5px; padding: 0 10px 3px; }
+.pip-track   { display: flex; gap: 2px; flex: 1; align-items: center; }
+
+.pip { flex: 1; height: 5px; border-radius: 2px; background: var(--surface-2); }
+.pip.done    { opacity: .45; }
+.pip.current { opacity: 1; }
+
+/* tier colour per pip state */
+.t1 .pip.done    { background: #5B21B6; }
+.t1 .pip.current { background: #5B21B6; outline: 1px solid #5B21B6; }
+.t2 .pip.done    { background: #1D4ED8; }
+.t2 .pip.current { background: #1D4ED8; outline: 1px solid #1D4ED8; }
+.t3 .pip.done    { background: #065F46; }
+.t3 .pip.current { background: #065F46; outline: 1px solid #065F46; }
+
+.pip-weight { font-size: 0.72rem; font-weight: 700; color: var(--text); white-space: nowrap; flex-shrink: 0; }
+.pip-weight .unit { font-size: 0.6rem; font-weight: 400; color: var(--dim); }
+
+.pip-meta { display: flex; justify-content: space-between; padding: 0 10px 7px; font-size: 0.62rem; }
+.pip-scheme { color: var(--muted); font-weight: 700; }
+.pip-stage  { color: var(--dim); }
+
+/* ── sets ── */
+.sets-divider { border-top: 1px solid var(--border); }
+.set-row {
+    display: flex; align-items: center; gap: 7px;
+    padding: 5px 10px; border-bottom: 1px solid var(--surface-2);
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.set-row:last-child { border-bottom: none; }
+.set-row:active     { background: var(--surface-2); }
+.set-row.editing    { background: var(--surface-2); padding: 6px 10px; cursor: default; }
+
+.set-num { font-size: 0.63rem; color: var(--dim); font-weight: 700; min-width: 12px; }
+.set-val { font-size: 0.72rem; color: var(--muted); flex: 1; }
+.set-val .w { color: var(--text); font-weight: 600; }
+
+/* ── inline editor ── */
+.edit-row { display: flex; align-items: center; gap: 4px; flex: 1; }
+.edit-inp {
+    background: #FFFFFF; border: 1px solid var(--accent);
+    border-radius: 6px; color: var(--text); font-family: inherit;
+    font-size: 16px; padding: 3px 5px; width: 40px; text-align: center;
+    min-height: 30px; -webkit-appearance: none; appearance: none;
+}
+.edit-inp:focus { outline: none; }
+.edit-sep    { font-size: 0.63rem; color: var(--dim); }
+.edit-save   {
+    background: var(--accent); border: none; border-radius: 6px;
+    color: #fff; font-family: inherit; font-size: 0.68rem; font-weight: 700;
+    padding: 3px 8px; min-height: 28px; cursor: pointer; margin-left: 2px;
+}
+.edit-cancel {
+    background: none; border: 1px solid var(--border); border-radius: 6px;
+    color: var(--dim); font-family: inherit; font-size: 0.68rem; font-weight: 700;
+    padding: 3px 6px; min-height: 28px; cursor: pointer;
+}
+
+/* ── add set ── */
+.add-set-btn {
+    width: 100%; background: none; border: none;
+    border-top: 1px solid var(--border);
+    color: var(--dim); font-family: inherit; font-size: 0.65rem; font-weight: 700;
+    padding: 7px; text-align: center; cursor: pointer; letter-spacing: .05em;
+    -webkit-tap-highlight-color: transparent;
+}
+.add-set-btn:active { background: var(--surface-2); }
+.add-set-form { border-top: 1px solid var(--border); padding: 7px 10px; display: none; }
+.add-set-form.open { display: block; }
+.add-set-inner { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.add-set-inner .edit-inp { width: 44px; }
+
+/* ── swim card ── */
 .swim-stat-card {
     background: var(--swim-bg); border-radius: 14px;
-    padding: 28px 24px; text-align: center; margin-bottom: 24px;
+    padding: 24px; text-align: center; margin-bottom: 20px;
 }
-.swim-scheme {
-    display: flex; align-items: baseline; justify-content: center;
-    gap: 10px; margin-bottom: 10px;
-}
-.swim-sets { font-size: 2.8rem; font-weight: 800; color: var(--swim-fg); line-height: 1; }
-.swim-x    { font-size: 1.5rem; color: #2a5a6a; }
-.swim-rep  { font-size: 2.1rem; font-weight: 700; color: #7dd3fc; }
-.swim-total-row {
-    display: flex; align-items: baseline; justify-content: center; gap: 6px;
-}
-.swim-distance { font-size: 1.6rem; font-weight: 700; color: var(--swim-fg); }
-.swim-unit     { font-size: 0.9rem; color: var(--dim); }
+.swim-scheme { display: flex; align-items: baseline; justify-content: center; gap: 10px; margin-bottom: 8px; }
+.swim-sets { font-size: 2.4rem; font-weight: 800; color: var(--swim-fg); line-height: 1; }
+.swim-x    { font-size: 1.3rem; color: #0E7490; }
+.swim-rep  { font-size: 1.8rem; font-weight: 700; color: #0891B2; }
+.swim-total { font-size: 1.4rem; font-weight: 700; color: var(--swim-fg); }
 
-/* gym summary */
-.summary-row { display: flex; gap: 10px; margin-bottom: 20px; }
-.summary-stat {
-    flex: 1; background: var(--surface); border-radius: 10px;
-    padding: 14px 10px; text-align: center;
+/* ── warmup / cardio cards ── */
+.tier-badge.t4 { background: var(--swim-bg); color: var(--swim-fg); }
+.cardio-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 20px; }
+.cardio-card {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: 10px; padding: 11px 13px;
 }
-.stat-value { display: block; font-size: 1.45rem; font-weight: 700; color: #fff; }
-.stat-label {
-    display: block; font-size: 0.68rem; color: var(--dim);
-    text-transform: uppercase; letter-spacing: .05em; margin-top: 3px;
-}
-
-/* lift cards */
-.lift-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
-.lift-card { background: var(--surface); border-radius: 12px; padding: 14px; }
-.lift-header {
-    display: flex; align-items: center; gap: 8px;
-    margin-bottom: 10px; flex-wrap: wrap;
-}
-.lift-name   { font-weight: 600; font-size: 0.95rem; color: #fff; }
-.lift-muscle { font-size: 0.78rem; color: var(--dim); margin-left: auto; }
-
-.sets-thead, .sets-row {
-    display: grid;
-    grid-template-columns: 28px 1fr 1fr 1fr;
-    gap: 6px; align-items: center; padding: 4px 2px;
-}
-.sets-thead {
-    font-size: 0.67rem; font-weight: 600; color: #444;
-    text-transform: uppercase; letter-spacing: .05em;
-    border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 4px;
-}
-.sets-row    { font-size: 0.9rem; }
-.sets-row:not(:last-child) { border-bottom: 1px solid #1a1a1e; }
-.set-n       { color: var(--dim); text-align: center; }
-.vol-cell    { color: var(--dim); font-size: 0.8rem; }
-
-/* actions */
-.actions { margin-top: 32px; display: flex; flex-direction: column; gap: 10px; }
-.back-link {
-    display: block; text-align: center; color: var(--dim);
-    font-size: 0.85rem; text-decoration: none; padding: 10px 0;
-}
+.cardio-name { display: flex; align-items: center; gap: 7px; font-size: 0.82rem; font-weight: 700; color: var(--text); }
+.cardio-stat { font-size: 0.82rem; font-weight: 700; color: var(--swim-fg); white-space: nowrap; }
 </style>
 {% endblock %}
 
 {% block content %}
-{% set day_labels = {'push': 'Push', 'pull': 'Pull', 'legs': 'Legs', 'core': 'Core'} %}
 
-<div class="detail-header">
-    <div class="header-top">
-        {% if session.type == 'swim' %}
-        <span class="type-badge swim">Swim</span>
-        {% else %}
-        <span class="type-badge {{ session.day_type }}">
-            {{ day_labels.get(session.day_type, session.day_type) }}
-        </span>
-        {% endif %}
-        <span class="s-date-lg">{{ session.date }}</span>
-    </div>
-    {% if session.notes %}
-    <p class="s-notes">{{ session.notes }}</p>
-    {% endif %}
-</div>
+<a href="/sessions" class="back-btn">
+    <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    History
+</a>
 
-{# ── Swim ─────────────────────────────────────────────────────────── #}
-{% if session.type == 'swim' %}
-<div class="swim-stat-card">
-    {% if swim_dist.rep_distance %}
-    <div class="swim-scheme">
-        <span class="swim-sets">{{ swim_dist.sets }}</span>
-        <span class="swim-x">×</span>
-        <span class="swim-rep">{{ swim_dist.rep_distance }}m</span>
-    </div>
-    <div class="swim-total-row">
-        <span class="swim-distance">{{ swim_dist.total }}</span>
-        <span class="swim-unit">m total</span>
-    </div>
+<div class="detail-title">{{ session.date | fmt_date }}</div>
+<div class="detail-meta">
+    {% if session.type == 'swim' %}
+        <div class="detail-meta-pip" style="background:var(--swim-fg)"></div>Swim
+        {% if swim_dist %}&nbsp;·&nbsp;{{ swim_dist.total }} m{% endif %}
     {% else %}
-    <span class="swim-distance">{{ swim_dist.total }}</span>
-    <span class="swim-unit">metres</span>
+        {% if session.day_type == 'push' %}
+            <div class="detail-meta-pip" style="background:var(--push-fg)"></div>Push
+        {% elif session.day_type == 'pull' %}
+            <div class="detail-meta-pip" style="background:var(--pull-fg)"></div>Pull
+        {% elif session.day_type == 'legs' %}
+            <div class="detail-meta-pip" style="background:var(--legs-fg)"></div>Legs
+        {% elif session.day_type == 'core' %}
+            <div class="detail-meta-pip" style="background:var(--core-fg)"></div>Core
+        {% else %}
+            <div class="detail-meta-pip" style="background:#6B7280"></div>Gym
+        {% endif %}
+        {% set ns = namespace(vol=0) %}
+        {% for ex in lifts %}{% for s in ex.sets %}{% set ns.vol = ns.vol + s.reps * s.weight_kg %}{% endfor %}{% endfor %}
+        {% if ns.vol > 0 %}&nbsp;·&nbsp;{{ '{:,.0f}'.format(ns.vol) }} kg{% endif %}
+        {% if duration_min %}&nbsp;·&nbsp;{{ duration_min }} min{% endif %}
     {% endif %}
 </div>
 
-{# ── Gym ──────────────────────────────────────────────────────────── #}
-{% else %}
+{# ── Gym exercises ── #}
+{% if session.type == 'gym' %}
 {% if lifts %}
-{% set ns = namespace(total_sets=0, total_vol=0) %}
+<div class="ex-grid">
 {% for ex in lifts %}
-    {% set ns.total_sets = ns.total_sets + ex.sets|length %}
-    {% for s in ex.sets %}{% set ns.total_vol = ns.total_vol + s.reps * s.weight_kg %}{% endfor %}
+    {% set max_w = namespace(v=0) %}
+    {% for s in ex.sets %}{% if s.weight_kg > max_w.v %}{% set max_w.v = s.weight_kg %}{% endif %}{% endfor %}
+    {% set wfmt = (max_w.v | int) if (max_w.v == max_w.v | round | float) else max_w.v %}
+
+    <div class="ex-card {% if ex.tier %}t{{ ex.tier }}{% endif %}" id="card-{{ ex.exercise_id }}">
+
+        <div class="ex-card-top">
+            <div>
+                <div class="ex-card-name">
+                    {{ ex.name }}{% if ex.is_pr %}<span class="pr-badge">PR</span>{% endif %}
+                </div>
+                <div class="ex-card-muscle">{{ ex.muscle_group }}</div>
+            </div>
+            {% if ex.tier %}<span class="tier-badge t{{ ex.tier }}">T{{ ex.tier }}</span>{% endif %}
+        </div>
+
+        {# segmented pip bar — only for exercises with progression stages #}
+        {% if ex.total_stages %}
+        <div class="pip-bar-row">
+            <div class="pip-track">
+                {% for i in range(1, ex.total_stages + 1) %}
+                    {% if i < ex.stage %}
+                        <div class="pip done"></div>
+                    {% elif i == ex.stage %}
+                        <div class="pip current"></div>
+                    {% else %}
+                        <div class="pip"></div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+            <span class="pip-weight">{{ wfmt }}<span class="unit">&thinsp;kg</span></span>
+        </div>
+        <div class="pip-meta">
+            <span class="pip-scheme">{{ ex.scheme_label }}</span>
+            <span class="pip-stage">{{ ex.stage }}&thinsp;/&thinsp;{{ ex.total_stages }}</span>
+        </div>
+        {% else %}
+        <div class="pip-bar-row">
+            <div class="pip-track"></div>
+            <span class="pip-weight">{{ wfmt }}<span class="unit">&thinsp;kg</span></span>
+        </div>
+        {% endif %}
+
+        {# sets list — each row tappable to edit #}
+        <div class="sets-divider" id="sets-{{ ex.exercise_id }}">
+            {% for s in ex.sets %}
+            {% set sfmt = (s.weight_kg | int) if (s.weight_kg == s.weight_kg | round | float) else s.weight_kg %}
+            <div class="set-row" id="set-row-{{ s.lift_id }}"
+                 onclick="startEdit({{ s.lift_id }}, {{ s.reps }}, {{ s.weight_kg }})">
+                <span class="set-num">{{ loop.index }}</span>
+                <span class="set-val">
+                    {{ s.reps }}&thinsp;@&thinsp;<span class="w">{{ sfmt }}&thinsp;kg</span>
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+
+        <button class="add-set-btn" id="addbtn-{{ ex.exercise_id }}"
+                onclick="toggleAddSet({{ ex.exercise_id }})">+ add set</button>
+        <div class="add-set-form" id="addf-{{ ex.exercise_id }}">
+            <div class="add-set-inner">
+                <input class="edit-inp" type="number" id="add-reps-{{ ex.exercise_id }}"
+                       placeholder="reps" min="1" max="99" />
+                <span class="edit-sep">@</span>
+                <input class="edit-inp" type="number" id="add-kg-{{ ex.exercise_id }}"
+                       placeholder="kg" min="0" step="0.5" style="width:50px;" />
+                <span class="edit-sep" style="color:var(--dim);font-size:.6rem;">kg</span>
+                <button class="edit-save"
+                        onclick="submitAddSet({{ ex.exercise_id }}, {{ session.id }})">Add</button>
+                <button class="edit-cancel"
+                        onclick="closeAddSet({{ ex.exercise_id }})">✕</button>
+            </div>
+        </div>
+
+    </div>
 {% endfor %}
-
-<div class="summary-row">
-    <div class="summary-stat">
-        <span class="stat-value">{{ lifts | length }}</span>
-        <span class="stat-label">exercises</span>
-    </div>
-    <div class="summary-stat">
-        <span class="stat-value">{{ ns.total_sets }}</span>
-        <span class="stat-label">sets</span>
-    </div>
-    <div class="summary-stat">
-        <span class="stat-value">{{ '{:,.0f}'.format(ns.total_vol) }}</span>
-        <span class="stat-label">kg vol</span>
-    </div>
 </div>
+{% endif %}
 
-<div class="lift-list">
-    {% for ex in lifts %}
-    <div class="lift-card">
-        <div class="lift-header">
-            <span class="tier-badge t{{ ex.tier }}">T{{ ex.tier }}</span>
-            <span class="lift-name">{{ ex.name }}</span>
-            <span class="lift-muscle">{{ ex.muscle_group }}</span>
-        </div>
-        <div class="sets-thead">
-            <span>Set</span><span>Reps</span><span>kg</span><span>Vol</span>
-        </div>
-        {% for s in ex.sets %}
-        <div class="sets-row">
-            <span class="set-n">{{ s.set_number }}</span>
-            <span>{{ s.reps }}</span>
-            <span>{{ s.weight_kg | int if s.weight_kg == s.weight_kg | int else s.weight_kg }}</span>
-            <span class="vol-cell">{{ '{:,.0f}'.format(s.reps * s.weight_kg) }}</span>
-        </div>
-        {% endfor %}
+{# ── Warmup & cardio (Tier 4) ── #}
+{% if cardio %}
+<div class="section-title" style="margin-top:4px;">Warmup &amp; Cardio</div>
+<div class="cardio-list">
+{% for c in cardio %}
+  <div class="cardio-card">
+    <div class="cardio-name"><span class="tier-badge t4">T4</span>{{ c.name }}</div>
+    <div class="cardio-stat">
+      {% if c.distance_m %}{% if c.distance_m >= 1000 %}{{ '%g'|format(c.distance_m/1000) }}&thinsp;km{% else %}{{ c.distance_m|int }}&thinsp;m{% endif %}{% endif %}
+      {% if c.duration_s %}{% if c.distance_m %}&nbsp;·&nbsp;{% endif %}{{ (c.duration_s//60) }}:{{ '%02d'|format(c.duration_s%60) }}{% endif %}
+      {% if c.resistance %}{% if c.distance_m or c.duration_s %}&nbsp;·&nbsp;{% endif %}L{{ '%g'|format(c.resistance) }}{% endif %}
+      {% if not c.distance_m and not c.duration_s and not c.resistance and c.done %}✓ Done{% endif %}
     </div>
-    {% endfor %}
+  </div>
+{% endfor %}
 </div>
-{% else %}
+{% endif %}
+
+{% if not lifts and not cardio %}
 <p class="empty">No lifts recorded.</p>
 {% endif %}
+
+{# ── Swim ── #}
+{% elif session.type == 'swim' and swim_dist %}
+<div class="swim-stat-card">
+    {% for g in swim_dist.groups %}
+    <div class="swim-scheme">
+        <span class="swim-sets">{{ g.sets }}</span>
+        <span class="swim-x">×</span>
+        <span class="swim-rep">{{ g.rep_distance }} m</span>
+    </div>
+    {% endfor %}
+    <div style="margin-top:8px">
+        <span class="swim-total">{{ swim_dist.total }} m</span>
+        <span style="font-size:.85rem;color:var(--dim);margin-left:4px;">total</span>
+    </div>
+</div>
 {% endif %}
 
-<div class="actions">
+<div class="section" style="margin-top:8px;">
     <form method="POST" action="/session/{{ session.id }}/delete"
-          onsubmit="return confirm('Delete this session? This cannot be undone.')">
-        <button type="submit" class="btn btn-danger btn-full">Delete Session</button>
+          onsubmit="return confirm('Delete this session?')">
+        <button type="submit" class="btn btn-danger btn-full">Delete session</button>
     </form>
-    <a href="/sessions" class="back-link">← All Sessions</a>
 </div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const _SID = {{ session.id }};
+let _editing = null;
+
+function _fmtKg(v) { return Number.isInteger(v) ? v : v; }
+
+function startEdit(liftId, reps, kg) {
+    if (_editing !== null && _editing !== liftId) cancelEdit(..._editing_args);
+    _editing = liftId;
+    _editing_args = [liftId, reps, kg];
+
+    const row = document.getElementById('set-row-' + liftId);
+    const numEl = row.querySelector('.set-num');
+    const numTxt = numEl ? numEl.textContent : '';
+    row.classList.add('editing');
+    row.onclick = null;
+    row.innerHTML = `
+        <span class="set-num">${numTxt}</span>
+        <div class="edit-row">
+            <input class="edit-inp" id="er-${liftId}" type="number" value="${reps}" min="1" max="99"/>
+            <span class="edit-sep">@</span>
+            <input class="edit-inp" id="ew-${liftId}" type="number" value="${kg}" min="0" step="0.5" style="width:50px;"/>
+            <span class="edit-sep" style="color:var(--dim);font-size:.6rem;">kg</span>
+            <button class="edit-save" onclick="saveEdit(${liftId})">Save</button>
+            <button class="edit-cancel" onclick="cancelEdit(${liftId},${reps},${kg})">✕</button>
+        </div>`;
+    setTimeout(() => document.getElementById('er-' + liftId)?.focus(), 40);
+}
+
+async function saveEdit(liftId) {
+    const reps = parseInt(document.getElementById('er-' + liftId)?.value);
+    const kg   = parseFloat(document.getElementById('ew-' + liftId)?.value);
+    if (isNaN(reps) || isNaN(kg)) return;
+    const res = await fetch(`/session/${_SID}/lift/${liftId}/edit`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': window._csrf},
+        body: JSON.stringify({reps, weight_kg: kg}),
+    });
+    if (!res.ok) { alert('Save failed'); return; }
+    const row   = document.getElementById('set-row-' + liftId);
+    const numTxt = row.querySelector('.set-num')?.textContent || '';
+    row.classList.remove('editing');
+    row.onclick = () => startEdit(liftId, reps, kg);
+    row.innerHTML = `
+        <span class="set-num">${numTxt}</span>
+        <span class="set-val">${reps}&thinsp;@&thinsp;<span class="w">${_fmtKg(kg)}&thinsp;kg</span></span>`;
+    _editing = null;
+}
+
+function cancelEdit(liftId, reps, kg) {
+    const row = document.getElementById('set-row-' + liftId);
+    if (!row) return;
+    const numTxt = row.querySelector('.set-num')?.textContent || '';
+    row.classList.remove('editing');
+    row.onclick = () => startEdit(liftId, reps, kg);
+    row.innerHTML = `
+        <span class="set-num">${numTxt}</span>
+        <span class="set-val">${reps}&thinsp;@&thinsp;<span class="w">${_fmtKg(kg)}&thinsp;kg</span></span>`;
+    _editing = null;
+}
+
+function toggleAddSet(exId) {
+    const form = document.getElementById('addf-' + exId);
+    const btn  = document.getElementById('addbtn-' + exId);
+    if (!form) return;
+    if (form.classList.contains('open')) {
+        closeAddSet(exId);
+    } else {
+        form.classList.add('open');
+        if (btn) btn.textContent = '− cancel';
+        setTimeout(() => document.getElementById('add-reps-' + exId)?.focus(), 40);
+    }
+}
+
+function closeAddSet(exId) {
+    const form = document.getElementById('addf-' + exId);
+    const btn  = document.getElementById('addbtn-' + exId);
+    if (form) form.classList.remove('open');
+    if (btn)  btn.textContent = '+ add set';
+}
+
+async function submitAddSet(exId, sessionId) {
+    const reps = parseInt(document.getElementById('add-reps-' + exId)?.value);
+    const kg   = parseFloat(document.getElementById('add-kg-'   + exId)?.value);
+    if (isNaN(reps) || isNaN(kg)) return;
+    const res = await fetch(`/session/${sessionId}/add_set`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': window._csrf},
+        body: JSON.stringify({exercise_id: exId, reps, weight_kg: kg}),
+    });
+    if (!res.ok) { alert('Failed'); return; }
+    const data = await res.json();
+
+    const list = document.getElementById('sets-' + exId);
+    const idx  = list.querySelectorAll('.set-row').length + 1;
+    const div  = document.createElement('div');
+    div.className = 'set-row';
+    div.id = 'set-row-' + data.lift_id;
+    div.innerHTML = `
+        <span class="set-num">${idx}</span>
+        <span class="set-val">${reps}&thinsp;@&thinsp;<span class="w">${_fmtKg(kg)}&thinsp;kg</span></span>`;
+    div.onclick = () => startEdit(data.lift_id, reps, kg);
+    list.appendChild(div);
+
+    document.getElementById('add-reps-' + exId).value = '';
+    document.getElementById('add-kg-'   + exId).value = '';
+    closeAddSet(exId);
+}
+</script>
 {% endblock %}

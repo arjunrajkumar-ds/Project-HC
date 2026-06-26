@@ -1,0 +1,375 @@
+{% extends 'base.html' %}
+{% block title %}Shared Food View{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Header ──────────────────────────────────────────────────────── */
+.shared-header {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
+}
+.btn-back {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--muted); font-size: 0.75rem; font-weight: 700;
+    padding: 7px 12px; text-decoration: none; white-space: nowrap; flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Date nav ────────────────────────────────────────────────────── */
+.date-nav {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px;
+}
+.date-nav-btn {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--muted); cursor: pointer;
+    font-size: 1rem; min-height: 40px; min-width: 40px;
+    display: flex; align-items: center; justify-content: center;
+    text-decoration: none; -webkit-tap-highlight-color: transparent;
+}
+.date-nav-btn:active { opacity: .7; }
+.date-nav-label { font-size: 1rem; font-weight: 700; color: var(--text); }
+
+/* ── Profile grid ────────────────────────────────────────────────── */
+.profiles-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+@media (max-width: 520px) {
+    .profiles-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Profile section ─────────────────────────────────────────────── */
+.profile-section { display: flex; flex-direction: column; gap: 10px; }
+.profile-name {
+    font-size: 0.82rem; font-weight: 800; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .08em;
+    padding: 0 2px;
+}
+
+/* ── Rings card ──────────────────────────────────────────────────── */
+.rings-section {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--surface); border-radius: 16px;
+    padding: 14px;
+}
+.rings-wrap { flex-shrink: 0; }
+.stat-panel { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.stat-cards-row { display: flex; gap: 6px; }
+.stat-card {
+    flex: 1; background: var(--surface-2); border-radius: 10px;
+    padding: 8px 8px 6px; display: flex; flex-direction: column; gap: 2px;
+    min-width: 0;
+}
+.stat-value { font-size: 1.1rem; font-weight: 900; line-height: 1.1; }
+.stat-goal  { font-size: 0.58rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat-pct   { font-size: 0.68rem; font-weight: 700; color: var(--dim); }
+.stat-overage { font-size: 0.62rem; font-weight: 700; color: #ef4444; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.avail-pill {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    background: var(--surface-2); border-radius: 20px;
+    padding: 6px 10px;
+}
+.avail-pill-over { background: rgba(239,68,68,.12); }
+.avail-label { font-size: 0.65rem; color: var(--muted); font-weight: 600; flex-shrink: 0; }
+.avail-val   { font-size: 0.7rem; font-weight: 800; }
+
+/* ── Meal bars ───────────────────────────────────────────────────── */
+.meal-bars {
+    background: var(--surface); border-radius: 12px;
+    padding: 12px; display: flex; flex-direction: column; gap: 8px;
+}
+.meal-bar-row { display: flex; align-items: center; gap: 8px; }
+.meal-bar-label {
+    font-size: 0.6rem; font-weight: 700; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .06em;
+    width: 38px; flex-shrink: 0;
+}
+.meal-bar-track {
+    flex: 1; height: 22px; background: var(--surface-2);
+    border-radius: 5px; overflow: hidden; display: flex;
+}
+.meal-seg {
+    height: 100%; display: flex; align-items: center; justify-content: center;
+    font-size: 0.55rem; font-weight: 700; color: rgba(255,255,255,.85);
+    overflow: hidden; white-space: nowrap; min-width: 0;
+}
+.meal-seg-rem { background: var(--border) !important; color: var(--dim) !important; }
+
+/* ── Log list ────────────────────────────────────────────────────── */
+.log-section { display: flex; flex-direction: column; gap: 4px; }
+.log-section-title {
+    font-size: 0.65rem; font-weight: 700; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .08em;
+    margin-bottom: 2px;
+}
+.log-entry {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface); border-radius: 8px;
+    padding: 8px 10px;
+}
+.log-meal-pill {
+    font-size: 0.55rem; font-weight: 800; letter-spacing: .04em;
+    text-transform: uppercase; border-radius: 20px;
+    padding: 2px 6px; flex-shrink: 0; white-space: nowrap;
+}
+.log-name {
+    flex: 1; font-size: 0.78rem; color: var(--text);
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.log-time { font-size: 0.65rem; color: var(--dim); flex-shrink: 0; }
+.log-cal  { font-size: 0.72rem; font-weight: 700; color: #3b82f6; flex-shrink: 0; white-space: nowrap; }
+.log-pro  { font-size: 0.72rem; font-weight: 700; color: #22c55e; flex-shrink: 0; white-space: nowrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="shared-header">
+    <a href="/food?date={{ date_str }}" class="btn-back">‹ Back</a>
+    <h1 style="margin-bottom:0;flex:1">Shared View</h1>
+</div>
+
+{# ── Date navigation ─────────────────────────────────────────────────── #}
+<div class="date-nav">
+    <a href="/food/shared?date={{ prev_date }}" class="date-nav-btn">‹</a>
+    <span class="date-nav-label">{{ date_label }}</span>
+    {% if not is_today %}
+    <a href="/food/shared?date={{ next_date }}" class="date-nav-btn">›</a>
+    {% else %}
+    <span class="date-nav-btn" style="opacity:.2;cursor:default">›</span>
+    {% endif %}
+</div>
+{% if not is_today %}
+<a href="/food/shared" style="display:block;text-align:center;font-size:0.8rem;color:var(--dim);text-decoration:none;margin:-12px 0 16px">today</a>
+{% endif %}
+
+{# ── Profile pair ────────────────────────────────────────────────────── #}
+<div class="profiles-grid">
+    {% for p in profiles %}
+    {% set pfx = 'a' if p.id == 1 else 'g' %}
+    <div class="profile-section">
+        <div class="profile-name">{{ p.name }}</div>
+
+        {# Rings + stat cards #}
+        <div class="rings-section">
+            <div class="rings-wrap">
+                <svg viewBox="0 0 140 140" width="110" height="110">
+                    <circle cx="70" cy="70" r="56" fill="none" stroke="#1e3a5f" stroke-width="12"/>
+                    <circle id="{{ pfx }}-ring-cal" cx="70" cy="70" r="56" fill="none"
+                        stroke="#3b82f6" stroke-width="12" stroke-linecap="butt"
+                        stroke-dasharray="0 351.86"
+                        transform="rotate(-90 70 70)"
+                        style="transition:stroke-dasharray .5s ease"/>
+                    <circle id="{{ pfx }}-ring-cal-over" cx="70" cy="70" r="56" fill="none"
+                        stroke="#ef4444" stroke-width="12" stroke-linecap="butt"
+                        stroke-dasharray="0 351.86"
+                        transform="rotate(-90 70 70)"
+                        style="transition:stroke-dasharray .5s ease;display:none"/>
+                    <circle cx="70" cy="70" r="38" fill="none" stroke="#14532d" stroke-width="12"/>
+                    <circle id="{{ pfx }}-ring-pro" cx="70" cy="70" r="38" fill="none"
+                        stroke="#22c55e" stroke-width="12" stroke-linecap="butt"
+                        stroke-dasharray="0 238.76"
+                        transform="rotate(-90 70 70)"
+                        style="transition:stroke-dasharray .5s ease"/>
+                    <circle id="{{ pfx }}-ring-pro-over" cx="70" cy="70" r="38" fill="none"
+                        stroke="#ef4444" stroke-width="12" stroke-linecap="butt"
+                        stroke-dasharray="0 238.76"
+                        transform="rotate(-90 70 70)"
+                        style="transition:stroke-dasharray .5s ease;display:none"/>
+                    <circle id="{{ pfx }}-center-dot" cx="70" cy="70" r="4" fill="#333"/>
+                </svg>
+            </div>
+            <div class="stat-panel">
+                <div class="stat-cards-row">
+                    <div class="stat-card">
+                        <div class="stat-value" id="{{ pfx }}-sc-cal-val" style="color:#3b82f6">0</div>
+                        <div class="stat-goal">of {{ p.goals.calories | int }} kcal</div>
+                        <div class="stat-pct"  id="{{ pfx }}-sc-cal-pct">0%</div>
+                        <div class="stat-overage" id="{{ pfx }}-sc-cal-over"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="{{ pfx }}-sc-pro-val" style="color:#22c55e">0g</div>
+                        <div class="stat-goal">of {{ p.goals.protein_g | int }}g protein</div>
+                        <div class="stat-pct"  id="{{ pfx }}-sc-pro-pct">0%</div>
+                        <div class="stat-overage" id="{{ pfx }}-sc-pro-over"></div>
+                    </div>
+                </div>
+                <div class="avail-pill" id="{{ pfx }}-avail-pill">
+                    <span class="avail-label" id="{{ pfx }}-avail-label">Still available</span>
+                    <span class="avail-val"   id="{{ pfx }}-avail-cal"   style="color:#3b82f6"></span>
+                    <span class="avail-val"   id="{{ pfx }}-avail-pro"   style="color:#22c55e"></span>
+                </div>
+            </div>
+        </div>
+
+        {# Segmented bars #}
+        <div class="meal-bars">
+            <div class="meal-bar-row">
+                <div class="meal-bar-label">Cal</div>
+                <div class="meal-bar-track" id="{{ pfx }}-bar-cal"></div>
+            </div>
+            <div class="meal-bar-row">
+                <div class="meal-bar-label">Protein</div>
+                <div class="meal-bar-track" id="{{ pfx }}-bar-pro"></div>
+            </div>
+        </div>
+
+        {# Food log #}
+        <div class="log-section">
+            <div class="log-section-title">{{ date_label }}'s log</div>
+            <div id="{{ pfx }}-log-list"></div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+const CAL_CIRC = 2 * Math.PI * 56;
+const PRO_CIRC = 2 * Math.PI * 38;
+
+const MEAL_COLORS = {
+    breakfast: { cal: '#3b82f6', pro: '#22c55e' },
+    lunch:     { cal: '#2563eb', pro: '#16a34a' },
+    dinner:    { cal: '#1d4ed8', pro: '#15803d' },
+    snack:     { cal: '#60a5fa', pro: '#4ade80' },
+};
+const MEAL_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' };
+const MEAL_ORDER  = ['breakfast', 'lunch', 'dinner', 'snack'];
+
+const PROFILES = {{ profiles | tojson }};
+
+function h(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderProfile(pfx, entries, goals) {
+    const totals = {
+        calories:  entries.reduce((s, e) => s + (e.calories  || 0), 0),
+        protein_g: entries.reduce((s, e) => s + (e.protein_g || 0), 0),
+    };
+
+    // Rings
+    const calRatio = goals.calories  > 0 ? totals.calories  / goals.calories  : 0;
+    const proRatio = goals.protein_g > 0 ? totals.protein_g / goals.protein_g : 0;
+    updateRing(pfx + '-ring-cal', pfx + '-ring-cal-over', calRatio, CAL_CIRC);
+    updateRing(pfx + '-ring-pro', pfx + '-ring-pro-over', proRatio, PRO_CIRC);
+    const dot = document.getElementById(pfx + '-center-dot');
+    if (calRatio > 1 || proRatio > 1) dot.setAttribute('fill', '#fca5a5');
+    else if (calRatio >= 0.99 && proRatio >= 0.99) dot.setAttribute('fill', '#93c5fd');
+    else dot.setAttribute('fill', '#333');
+
+    // Stat cards
+    const calOver = totals.calories  > goals.calories;
+    const proOver = totals.protein_g > goals.protein_g;
+    const calPct  = goals.calories  > 0 ? Math.round(totals.calories  / goals.calories  * 100) : 0;
+    const proPct  = goals.protein_g > 0 ? Math.round(totals.protein_g / goals.protein_g * 100) : 0;
+
+    document.getElementById(pfx + '-sc-cal-val').textContent = Math.round(totals.calories);
+    document.getElementById(pfx + '-sc-cal-pct').textContent = calPct + '%';
+    const calOverEl = document.getElementById(pfx + '-sc-cal-over');
+    calOverEl.style.display = calOver ? '' : 'none';
+    if (calOver) calOverEl.textContent = '+' + Math.round(totals.calories - goals.calories) + ' kcal over';
+
+    document.getElementById(pfx + '-sc-pro-val').textContent = totals.protein_g.toFixed(1) + 'g';
+    document.getElementById(pfx + '-sc-pro-pct').textContent = proPct + '%';
+    const proOverEl = document.getElementById(pfx + '-sc-pro-over');
+    proOverEl.style.display = proOver ? '' : 'none';
+    if (proOver) proOverEl.textContent = '+' + (totals.protein_g - goals.protein_g).toFixed(1) + 'g over';
+
+    const anyOver = calOver || proOver;
+    const pill = document.getElementById(pfx + '-avail-pill');
+    pill.className = 'avail-pill' + (anyOver ? ' avail-pill-over' : '');
+    document.getElementById(pfx + '-avail-label').textContent = anyOver ? "Over today's goal" : 'Still available';
+    const remCal = goals.calories  - totals.calories;
+    const remPro = goals.protein_g - totals.protein_g;
+    const calEl  = document.getElementById(pfx + '-avail-cal');
+    const proEl  = document.getElementById(pfx + '-avail-pro');
+    calEl.style.color = calOver ? '#ef4444' : '#3b82f6';
+    calEl.textContent = calOver ? '+' + Math.round(-remCal) + ' kcal' : Math.round(remCal) + ' kcal';
+    proEl.style.color = proOver ? '#ef4444' : '#22c55e';
+    proEl.textContent = proOver ? '+' + (-remPro).toFixed(1) + 'g' : remPro.toFixed(1) + 'g';
+
+    // Bars
+    const byMeal = {};
+    MEAL_ORDER.forEach(mt => { byMeal[mt] = { cal: 0, pro: 0 }; });
+    entries.forEach(e => {
+        const mt = e.meal_type || 'snack';
+        if (byMeal[mt]) { byMeal[mt].cal += e.calories || 0; byMeal[mt].pro += e.protein_g || 0; }
+    });
+    const calScale = totals.calories  > goals.calories  ? totals.calories  : goals.calories;
+    const proScale = totals.protein_g > goals.protein_g ? totals.protein_g : goals.protein_g;
+    fillBar(pfx + '-bar-cal', byMeal, 'cal', calScale, totals.calories,  goals.calories,  'kcal');
+    fillBar(pfx + '-bar-pro', byMeal, 'pro', proScale, totals.protein_g, goals.protein_g, 'g');
+
+    // Log list
+    const logEl = document.getElementById(pfx + '-log-list');
+    if (entries.length === 0) {
+        logEl.innerHTML = '<p style="font-size:0.8rem;color:var(--dim)">Nothing logged yet.</p>';
+        return;
+    }
+    logEl.innerHTML = [...entries].reverse().map(e => {
+        const mt    = e.meal_type || 'snack';
+        const col   = MEAL_COLORS[mt];
+        const label = MEAL_LABELS[mt] || mt;
+        const time  = e.logged_at ? `<span class="log-time">${h(e.logged_at)}</span>` : '';
+        return `<div class="log-entry">
+            <span class="log-meal-pill" style="background:${col.cal}22;color:${col.cal}">${h(label)}</span>
+            <span class="log-name">${h(e.name)}</span>
+            ${time}
+            <span class="log-cal">${Math.round(e.calories || 0)} kcal</span>
+            <span class="log-pro">${(e.protein_g || 0).toFixed(1)}g</span>
+        </div>`;
+    }).join('');
+}
+
+function updateRing(fillId, overId, ratio, circ) {
+    const fill   = document.getElementById(fillId);
+    const over   = document.getElementById(overId);
+    const capped = Math.min(ratio, 1);
+    const filled = capped * circ;
+    fill.style.strokeDasharray = `${filled.toFixed(2)} ${(circ - filled).toFixed(2)}`;
+    if (ratio > 1) {
+        over.style.display = '';
+        const overLen = Math.min(ratio - 1, 1) * circ;
+        over.style.strokeDasharray = `${overLen.toFixed(2)} ${(circ - overLen).toFixed(2)}`;
+    } else {
+        over.style.display = 'none';
+    }
+}
+
+function fillBar(id, byMeal, key, scale, total, goal, unit) {
+    const bar = document.getElementById(id);
+    bar.innerHTML = '';
+    if (scale <= 0) return;
+    MEAL_ORDER.forEach(mt => {
+        const val = byMeal[mt][key];
+        if (val <= 0) return;
+        const pct = (val / scale) * 100;
+        const seg = document.createElement('div');
+        seg.className = 'meal-seg';
+        seg.style.width = pct.toFixed(2) + '%';
+        seg.style.background = MEAL_COLORS[mt][key === 'cal' ? 'cal' : 'pro'];
+        if (pct > 18) seg.textContent = (unit === 'kcal' ? Math.round(val) : val.toFixed(0)) + unit;
+        bar.appendChild(seg);
+    });
+    if (total < goal) {
+        const remPct = ((goal - total) / scale) * 100;
+        if (remPct > 0) {
+            const seg = document.createElement('div');
+            seg.className = 'meal-seg meal-seg-rem';
+            seg.style.width = remPct.toFixed(2) + '%';
+            bar.appendChild(seg);
+        }
+    }
+}
+
+requestAnimationFrame(() => requestAnimationFrame(() => {
+    PROFILES.forEach(p => {
+        const pfx = p.id === 1 ? 'a' : 'g';
+        renderProfile(pfx, p.entries, p.goals);
+    });
+}));
+</script>
+{% endblock %}

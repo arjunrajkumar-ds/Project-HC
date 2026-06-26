@@ -10,11 +10,11 @@
 
 .exercise-item {
     display: flex; align-items: center; justify-content: space-between;
-    background: var(--surface); border-radius: 10px;
+    background: var(--surface); border: 0.5px solid var(--border); border-radius: 10px;
     padding: 12px 14px; gap: 10px;
 }
 .exercise-info { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; flex: 1; min-width: 0; }
-.exercise-name { font-weight: 600; font-size: 0.95rem; color: #fff; }
+.exercise-name { font-weight: 600; font-size: 0.95rem; color: var(--text); }
 .exercise-meta { font-size: 0.78rem; color: var(--muted); }
 
 .day-tag {
@@ -27,16 +27,19 @@
 .day-tag.legs { background: var(--legs-bg); color: var(--legs-fg); }
 .day-tag.core { background: var(--core-bg); color: var(--core-fg); }
 
-.exercise-notes { font-size: 0.75rem; color: #555; font-style: italic; width: 100%; }
+.exercise-notes { font-size: 0.75rem; color: var(--dim); font-style: italic; width: 100%; }
 
 .btn-delete-sm {
-    background: var(--push-bg); color: var(--push-fg);
-    border: none; border-radius: 7px; cursor: pointer;
-    font-size: 0.78rem; font-weight: 600;
-    min-height: 44px; min-width: 60px;
-    padding: 6px 12px; white-space: nowrap;
-    font-family: inherit;
+    background: none; color: var(--dim);
+    border: 1px solid transparent; border-radius: 7px; cursor: pointer;
+    font-size: 1rem; font-weight: 600;
+    min-height: 44px; min-width: 44px;
+    padding: 6px 10px; white-space: nowrap;
+    font-family: inherit; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
 }
+.btn-delete-sm:active { color: var(--push-fg); border-color: var(--push-fg); }
 
 .add-section {
     border-top: 1px solid var(--border);
@@ -66,14 +69,19 @@
         {% for ex in by_tier[tier_num] %}
         <li class="exercise-item">
             <div class="exercise-info">
+                {% set mg_class = {
+                    'Chest': 'push', 'Triceps': 'push', 'Shoulders': 'push',
+                    'Upper Back': 'pull', 'Biceps': 'pull',
+                    'Legs': 'legs', 'Posterior Chain': 'legs', 'Glutes': 'legs',
+                    'Core': 'core', 'Abs': 'core'
+                }.get(ex.muscle_group, 'any') %}
                 <span class="exercise-name">{{ ex.name }}</span>
-                <span class="exercise-meta">{{ ex.muscle_group }}</span>
-                <span class="day-tag {{ ex.day_type }}">{{ ex.day_type }}</span>
+                <span class="day-tag {{ mg_class }}">{{ ex.muscle_group }}</span>
                 {% if ex.notes %}<span class="exercise-notes">{{ ex.notes }}</span>{% endif %}
             </div>
             <form method="POST" action="/exercises/{{ ex.id }}/delete"
                   onsubmit="return confirm('Delete {{ ex.name }}?')">
-                <button type="submit" class="btn-delete-sm">Delete</button>
+                <button type="submit" class="btn-delete-sm" title="Delete {{ ex.name }}">✕</button>
             </form>
         </li>
         {% endfor %}
@@ -103,17 +111,6 @@
         <div class="form-group">
             <label for="muscle_group">Muscle Group</label>
             <input type="text" id="muscle_group" name="muscle_group" required placeholder="e.g. Back">
-        </div>
-        <div class="form-group">
-            <label for="day_type">Day Type</label>
-            <select id="day_type" name="day_type" required>
-                <option value="">— select —</option>
-                <option value="any">Any</option>
-                <option value="push">Push</option>
-                <option value="pull">Pull</option>
-                <option value="legs">Legs</option>
-                <option value="core">Core</option>
-            </select>
         </div>
         <div class="form-group">
             <label for="notes">Notes (optional)</label>

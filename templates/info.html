@@ -1,0 +1,275 @@
+{% extends 'base.html' %}
+{% block title %}How It Works{% endblock %}
+
+{% block extra_css %}
+<style>
+.info-back {
+    display: block; color: var(--dim); font-size: 0.85rem;
+    text-decoration: none; margin-bottom: 20px;
+}
+
+.info-hero {
+    margin-bottom: 32px;
+}
+.info-hero h1 { margin-bottom: 6px; }
+.info-hero p {
+    font-size: 0.9rem; color: var(--muted); line-height: 1.6;
+}
+
+.info-section { margin-bottom: 32px; }
+.info-section h2 {
+    font-size: 0.7rem; font-weight: 700; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .1em;
+    margin-bottom: 12px;
+}
+
+.info-card {
+    background: var(--surface); border-radius: 14px;
+    padding: 18px 16px; margin-bottom: 10px;
+}
+.info-card-head {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+}
+.info-card-title { font-size: 1rem; font-weight: 700; color: var(--text); }
+.info-card p {
+    font-size: 0.88rem; color: var(--muted); line-height: 1.65;
+}
+
+/* tier card colours */
+.info-card.t1 { border-left: 3px solid var(--t1-fg); }
+.info-card.t2 { border-left: 3px solid var(--t2-fg); }
+.info-card.t3 { border-left: 3px solid var(--t3-fg); }
+
+/* session structure */
+.session-schema {
+    background: var(--surface); border-radius: 14px;
+    padding: 18px 16px; display: flex; flex-direction: column; gap: 10px;
+}
+.schema-row {
+    display: flex; align-items: center; gap: 12px;
+}
+.schema-count {
+    font-size: 1.2rem; font-weight: 800; color: var(--text);
+    min-width: 36px; text-align: right;
+}
+.schema-detail {}
+.schema-name { font-size: 0.92rem; font-weight: 700; color: var(--text); }
+.schema-desc { font-size: 0.8rem; color: var(--muted); margin-top: 1px; }
+.schema-divider {
+    height: 1px; background: var(--border); margin: 2px 0;
+}
+
+/* stage grid */
+.stage-list { display: flex; flex-direction: column; gap: 8px; }
+.stage-row {
+    background: var(--surface); border-radius: 10px;
+    padding: 13px 14px; display: flex; align-items: center; gap: 12px;
+}
+.stage-num {
+    font-size: 0.65rem; font-weight: 800; text-transform: uppercase;
+    letter-spacing: .07em; color: var(--t1-fg); background: var(--t1-bg);
+    padding: 2px 7px; border-radius: 4px; flex-shrink: 0;
+}
+.stage-scheme { font-size: 0.95rem; font-weight: 700; color: var(--text); }
+.stage-arrow { color: var(--dim); font-size: 1rem; }
+.stage-note { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+
+.info-callout {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px; font-size: 0.88rem; color: var(--muted); line-height: 1.6;
+    margin-top: 6px;
+}
+.info-callout strong { color: var(--text); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<a href="/" class="info-back">‹ Back</a>
+
+<div class="info-hero">
+    <h1>How It Works</h1>
+    <p>A simple, repeatable system for getting stronger over time — built around three exercise tiers and a progression model that advances automatically as you improve.</p>
+</div>
+
+{# ── Tier system ─────────────────────────────────────────────────────── #}
+<div class="info-section">
+    <h2>The Tier System</h2>
+
+    <div class="info-card t1">
+        <div class="info-card-head">
+            <span class="tier-badge t1">T1</span>
+            <span class="info-card-title">Foundation Lifts</span>
+        </div>
+        <p>Heavy compound movements — squat, deadlift, bench press, overhead press, weighted pull-up. These are the engine of the programme. Each session opens with one or two T1 lifts performed at near-maximum intensity. Strength built here carries everywhere else.</p>
+        <p style="margin-top:8px">T1 exercises rotate so each one gets hit regularly. The app tracks when you last did each lift and surfaces the one due next.</p>
+    </div>
+
+    <div class="info-card t2">
+        <div class="info-card-head">
+            <span class="tier-badge t2">T2</span>
+            <span class="info-card-title">Supporting Work</span>
+        </div>
+        <p>Assistance exercises that reinforce the T1 movements — dumbbell variations, unilateral work, barbell accessories. Two to three T2 exercises per session, selected to match the day type (Push, Pull, Legs, Core) so they complement what you just trained.</p>
+        <p style="margin-top:8px">When logging, the app shows recommended T2 choices for your day type up top, with the full library below if you want something else.</p>
+    </div>
+
+    <div class="info-card t3">
+        <div class="info-card-head">
+            <span class="tier-badge t3">T3</span>
+            <span class="info-card-title">Detail Work</span>
+        </div>
+        <p>Isolation and aesthetic work — curls, lateral raises, cable movements, calf raises. Entirely optional, added at the end when you have energy left. No progression tracking; just pick weights that feel right and get a pump.</p>
+    </div>
+</div>
+
+{# ── Session structure ───────────────────────────────────────────────── #}
+<div class="info-section">
+    <h2>Session Structure</h2>
+
+    <div class="session-schema">
+        <div class="schema-row">
+            <span class="schema-count" style="color:var(--t1-fg)">1–2</span>
+            <div class="schema-detail">
+                <div class="schema-name">T1 Foundation Lifts</div>
+                <div class="schema-desc">Heavy sets — follow the progression scheme exactly</div>
+            </div>
+        </div>
+        <div class="schema-divider"></div>
+        <div class="schema-row">
+            <span class="schema-count" style="color:var(--t2-fg)">2–3</span>
+            <div class="schema-detail">
+                <div class="schema-name">T2 Supporting Exercises</div>
+                <div class="schema-desc">Matched to push / pull / legs / core day type</div>
+            </div>
+        </div>
+        <div class="schema-divider"></div>
+        <div class="schema-row">
+            <span class="schema-count" style="color:var(--t3-fg)">0+</span>
+            <div class="schema-detail">
+                <div class="schema-name">T3 Detail Work</div>
+                <div class="schema-desc">Optional — add as many as you like</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Linear progression ──────────────────────────────────────────────── #}
+<div class="info-section">
+    <h2>Linear Progression</h2>
+
+    <p style="font-size:0.88rem;color:var(--muted);line-height:1.65;margin-bottom:14px">
+        Every T1 exercise follows a progression ladder. The goal is simple: do the prescribed sets and reps, then advance. When you've worked through all the stages, add weight and start again.
+    </p>
+
+    <div class="stage-list">
+        <div class="stage-row">
+            <span class="stage-num">Stage 1</span>
+            <div>
+                <div class="stage-scheme">3 × 3</div>
+                <div class="stage-note">Entry point — manageable volume at the new weight</div>
+            </div>
+        </div>
+        <div class="stage-row">
+            <span class="stage-num">Stage 2</span>
+            <div>
+                <div class="stage-scheme">3 × 4</div>
+            </div>
+        </div>
+        <div class="stage-row">
+            <span class="stage-num">Stage 3</span>
+            <div>
+                <div class="stage-scheme">3 × 5</div>
+            </div>
+        </div>
+        <div class="stage-row">
+            <span class="stage-num">Stage 4</span>
+            <div>
+                <div class="stage-scheme">4 × 3</div>
+                <div class="stage-note">Sets increase — same reps, more total volume</div>
+            </div>
+        </div>
+        <div class="stage-row">
+            <span class="stage-num">Stage 5</span>
+            <div>
+                <div class="stage-scheme">4 × 4</div>
+            </div>
+        </div>
+        <div class="stage-row">
+            <span class="stage-num">Stage 6</span>
+            <div>
+                <div class="stage-scheme">4 × 5</div>
+            </div>
+        </div>
+        <div class="stage-row">
+            <span class="stage-num">Stage 7</span>
+            <div>
+                <div class="stage-scheme">5 × 3</div>
+            </div>
+        </div>
+        <div class="stage-row">
+            <span class="stage-num">Stage 8</span>
+            <div>
+                <div class="stage-scheme">5 × 4</div>
+            </div>
+        </div>
+        <div class="stage-row">
+            <span class="stage-num">Stage 9</span>
+            <div>
+                <div class="stage-scheme">5 × 5</div>
+                <div class="stage-note">Final stage — add weight, reset to Stage 1</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-callout" style="margin-top:14px">
+        <strong>Adding weight:</strong> completing 5×5 means you've earned the next load. Increase the weight — typically 2.5 kg for upper body, 5 kg for squat and deadlift — and the cycle resets to 3×3. Each full cycle represents real, measurable progress.
+    </div>
+</div>
+
+{# ── Swimming ────────────────────────────────────────────────────────── #}
+<div class="info-section">
+    <h2>Swimming</h2>
+    <div class="info-card">
+        <p>Swim sessions are logged separately and tracked by total distance. Log your sets and rep distance and the app calculates total metres swum. Swim volume is shown on the dashboard alongside your weekly lifting numbers, and each session appears in the activity heatmap.</p>
+    </div>
+</div>
+
+{# ── Swim achievements ───────────────────────────────────────────────── #}
+<div class="info-section">
+    <h2>Swim Challenges</h2>
+
+    <p style="font-size:0.88rem;color:var(--muted);line-height:1.65;margin-bottom:14px">
+        Swim sessions can be attempted against a set of challenges. Each challenge has a fixed scheme — a number of sets at a given rep distance — and you log how you got on when you finish. Challenges unlock progressively: you have to complete the first before the next opens up.
+    </p>
+
+    <div class="stage-list">
+        <div class="stage-row">
+            <span class="stage-num" style="background:var(--swim-bg);color:var(--swim-fg)">Chain 1</span>
+            <div>
+                <div class="stage-scheme">10 × 50 m → 20 × 50 m → 30 × 50 m</div>
+                <div class="stage-note">1,500 m total at the top — complete each to unlock the next</div>
+            </div>
+        </div>
+        <div class="stage-row">
+            <span class="stage-num" style="background:var(--swim-bg);color:var(--swim-fg)">Chain 2</span>
+            <div>
+                <div class="stage-scheme">10 × 100 m</div>
+                <div class="stage-note">1,000 m of longer reps</div>
+            </div>
+        </div>
+        <div class="stage-row">
+            <span class="stage-num" style="background:var(--swim-bg);color:var(--swim-fg)">Pyramid</span>
+            <div>
+                <div class="stage-scheme">5 × 50 m → 5 × 100 m → 5 × 50 m</div>
+                <div class="stage-note">Mixed-distance pyramid, 1,000 m total</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-callout" style="margin-top:14px">
+        Challenges can be completed multiple times — the app tracks your total count. A session that doesn't quite hit the target is logged as a partial attempt rather than a failure, so you can see how close you got.
+    </div>
+</div>
+
+{% endblock %}

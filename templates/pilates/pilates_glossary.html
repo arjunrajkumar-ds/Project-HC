@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block title %}Pilates Glossary{% endblock %}
+
+{% block extra_css %}
+<style>
+.pl-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.pl-tab {
+    flex: 1; text-align: center; text-decoration: none;
+    padding: 8px 0; border-radius: 9px; font-size: 0.82rem; font-weight: 700;
+    background: var(--surface); border: 0.5px solid var(--border); color: var(--muted);
+}
+.pl-tab.active { background: var(--pilates-bg); color: var(--pilates-fg); border-color: var(--pilates-fg); }
+
+.pl-glos-cat {
+    font-size: 0.68rem; font-weight: 800; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .09em; margin: 20px 0 8px;
+}
+.pl-glos-cat:first-of-type { margin-top: 4px; }
+.pl-glos-item {
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-left: 3px solid var(--pilates-fg); border-radius: 10px;
+    padding: 11px 13px; margin-bottom: 8px;
+}
+.pl-glos-term { font-weight: 700; font-size: 0.92rem; color: var(--text); }
+.pl-glos-def  { color: var(--muted); font-size: 0.84rem; margin-top: 3px; }
+.pl-empty { color: var(--dim); font-size: 0.88rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Reformer Pilates</h1>
+
+<div class="pl-tabs">
+    <a href="/pilates" class="pl-tab">Routines</a>
+    <a href="/pilates/glossary" class="pl-tab active">Glossary</a>
+</div>
+
+{% if glossary %}
+    {% for group in glossary %}
+    <div class="pl-glos-cat">{{ group.category }}</div>
+    {% for t in group.terms %}
+    <div class="pl-glos-item">
+        <div class="pl-glos-term">{{ t.term }}</div>
+        <div class="pl-glos-def">{{ t.definition }}</div>
+    </div>
+    {% endfor %}
+    {% endfor %}
+{% else %}
+    <p class="pl-empty">No glossary terms yet.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block title %}Pilates session{% endblock %}
+
+{% block extra_css %}
+<style>
+.pl-back { display: inline-block; background: none; border: none; color: var(--muted);
+    font-family: inherit; font-size: 0.82rem; cursor: pointer; padding: 0;
+    margin-bottom: 10px; text-decoration: none; }
+.pl-sess-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+.pl-badge { background: var(--pilates-bg); color: var(--pilates-fg);
+    font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em;
+    border-radius: 999px; padding: 2px 9px; }
+.pl-sess-date { color: var(--muted); font-size: 0.85rem; margin-bottom: 16px; }
+.pl-sess-count { color: var(--dim); font-size: 0.8rem; margin-bottom: 14px; }
+
+.pl-item { display: flex; align-items: center; gap: 10px;
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-left: 3px solid var(--pilates-fg); border-radius: 10px;
+    padding: 11px 13px; margin-bottom: 8px; }
+.pl-item-name { font-weight: 700; font-size: 0.92rem; color: var(--text); flex: 1; }
+.pl-item-reps { font-size: 0.78rem; color: var(--muted); }
+.pl-item-ver { font-size: 0.66rem; font-weight: 800; text-transform: uppercase;
+    letter-spacing: .05em; background: var(--pilates-fg); color: #fff;
+    border-radius: 999px; padding: 2px 8px; }
+.pl-sess-notes { margin-top: 14px; color: var(--muted); font-size: 0.85rem;
+    border-top: 0.5px solid var(--border); padding-top: 12px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="/sessions" class="pl-back">← history</a>
+
+<div class="pl-sess-head">
+    <h1 style="margin:0">{{ detail.routine_name }}</h1>
+    <span class="pl-badge">Pilates</span>
+</div>
+<div class="pl-sess-date">{{ session.date | fmt_date }}</div>
+
+<div class="pl-sess-count">{{ detail.done_count }} of {{ detail.total_count }} exercises completed</div>
+
+{% for it in detail.exercises %}
+<div class="pl-item">
+    <span class="pl-item-name">{{ it.name }}</span>
+    {% if it.reps_done %}<span class="pl-item-reps">{{ it.reps_done }} reps</span>{% endif %}
+    {% if it.version == 'hard' %}<span class="pl-item-ver">Hard</span>{% endif %}
+</div>
+{% endfor %}
+
+{% if detail.notes %}
+<div class="pl-sess-notes">{{ detail.notes }}</div>
+{% endif %}
+
+{% if detail.routine_key %}
+<a href="/pilates/routine/{{ detail.routine_key }}" class="pl-back" style="margin-top:18px">↻ do this routine again</a>
+{% endif %}
+{% endblock %}

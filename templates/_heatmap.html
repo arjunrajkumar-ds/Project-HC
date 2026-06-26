@@ -29,12 +29,12 @@
 
 .hm-tip {
     position: fixed; z-index: 999;
-    background: #1e1e2e; border: 1px solid var(--border);
-    color: #e0e0e0; font-size: 0.75rem;
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); font-size: 0.75rem;
     padding: 5px 9px; border-radius: 6px;
     white-space: nowrap; pointer-events: none;
     opacity: 0; transition: opacity .1s;
-    box-shadow: 0 4px 12px rgba(0,0,0,.4);
+    box-shadow: 0 4px 12px rgba(0,0,0,.1);
 }
 </style>
 
@@ -56,8 +56,9 @@
 (function () {
     // ── Activity type registry — add new habit types here ─────────
     const TYPES = {
-        gym:  { color: '#5b4fcf', label: 'Gym'  },
-        swim: { color: '#0891b2', label: 'Swim' },
+        gym:  { color: '#1B5E3B', label: 'Gym'  },
+        swim: { color: '#0E7490', label: 'Swim' },
+        pilates: { color: '#BE185D', label: 'Pilates' },
         // run: { color: '#16a34a', label: 'Run' },
     };
 
@@ -143,7 +144,9 @@
             if (!d) {
                 cell.style.background = 'transparent';
             } else {
-                const iso   = d.toISOString().slice(0, 10);
+                const iso   = d.getFullYear() + '-' +
+                              String(d.getMonth() + 1).padStart(2, '0') + '-' +
+                              String(d.getDate()).padStart(2, '0');
                 const types = RAW[iso] ?? [];
                 const bg    = cellBg(types);
 

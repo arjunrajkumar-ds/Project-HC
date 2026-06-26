@@ -1,0 +1,292 @@
+{% extends 'base.html' %}
+{% block title %}{% if mode == 'new' %}New Food{% elif mode == 'pending' %}Define {{ name }}{% else %}Edit {{ name }}{% endif %}{% endblock %}
+
+{% block extra_css %}
+<style>
+.edit-card {
+    background: var(--surface); border-radius: 16px;
+    padding: 20px; display: flex; flex-direction: column; gap: 16px;
+    margin-bottom: 16px;
+}
+.edit-card-title {
+    font-size: 0.65rem; font-weight: 700; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .08em;
+}
+.macro-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.unit-toggle-row {
+    display: flex; gap: 6px;
+}
+.unit-btn {
+    flex: 1; background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--muted); cursor: pointer;
+    font-family: inherit; font-size: 0.82rem; font-weight: 700;
+    padding: 10px 8px; text-align: center;
+    -webkit-tap-highlight-color: transparent;
+    transition: background .1s, color .1s, border-color .1s;
+}
+.unit-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-save {
+    background: var(--accent); border: none; border-radius: 10px;
+    color: #fff; cursor: pointer; font-family: inherit;
+    font-size: 1rem; font-weight: 800;
+    min-height: 50px; padding: 12px; width: 100%;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-save:active { opacity: .8; }
+
+/* ── Recipe section ───────────────────────────────────────────────── */
+.recipe-row {
+    display: grid; grid-template-columns: 1fr 80px 32px;
+    gap: 6px; align-items: center;
+}
+.recipe-row input[type=text],
+.recipe-row input[type=number] {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text);
+    font-family: inherit; font-size: 0.85rem;
+    padding: 9px 10px; width: 100%;
+}
+.recipe-row input[type=number] { text-align: right; }
+.btn-rm-row {
+    background: none; border: none; color: var(--dim); cursor: pointer;
+    font-size: 1rem; min-height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 6px; -webkit-tap-highlight-color: transparent;
+}
+.btn-rm-row:active { color: #ef4444; }
+.btn-add-ing {
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--muted); cursor: pointer;
+    font-family: inherit; font-size: 0.85rem; font-weight: 700;
+    min-height: 42px; padding: 9px; width: 100%;
+    -webkit-tap-highlight-color: transparent;
+}
+.recipe-preview {
+    background: var(--surface-2); border-radius: 10px;
+    padding: 12px 14px; display: flex; flex-direction: column; gap: 4px;
+}
+.preview-row { display: flex; justify-content: space-between; align-items: baseline; }
+.preview-label { font-size: 0.75rem; color: var(--dim); }
+.preview-val   { font-size: 0.88rem; font-weight: 700; color: var(--text); }
+.preview-macros { font-size: 0.72rem; color: var(--muted); }
+.btn-save-recipe {
+    background: var(--accent); border: none; border-radius: 10px;
+    color: #fff; cursor: pointer; font-family: inherit;
+    font-size: 1rem; font-weight: 800;
+    min-height: 50px; padding: 12px; width: 100%;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-save-recipe:active { opacity: .8; }
+
+/* ── Delete section ───────────────────────────────────────────────── */
+.btn-delete {
+    background: none; border: 1px solid #ef444455; border-radius: 10px;
+    color: #ef4444; cursor: pointer; font-family: inherit;
+    font-size: 0.9rem; font-weight: 700;
+    min-height: 44px; padding: 10px; width: 100%;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-delete:active { background: #ef444411; }
+
+/* ── Pending badge ────────────────────────────────────────────────── */
+.pending-notice {
+    background: rgba(var(--accent-rgb, 99,102,241),.1);
+    border: 1px solid var(--accent); border-radius: 10px;
+    padding: 10px 14px; font-size: 0.8rem; color: var(--accent);
+    font-weight: 600;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Header ─────────────────────────────────────────────────────────── #}
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:24px">
+    <a href="/food/database" style="
+        background:var(--surface);border:1px solid var(--border);
+        border-radius:8px;color:var(--muted);font-size:1.1rem;
+        padding:7px 12px;text-decoration:none;flex-shrink:0;
+        -webkit-tap-highlight-color:transparent;
+    ">‹</a>
+    <h1 style="margin:0;flex:1">
+        {% if mode == 'new' %}New Food
+        {% elif mode == 'pending' %}Define Food
+        {% else %}Edit Food{% endif %}
+    </h1>
+</div>
+
+{% if mode == 'pending' and existing %}
+<div class="pending-notice" style="margin-bottom:16px">
+    Logged but not yet defined — add macros below.
+</div>
+{% endif %}
+
+{# ── Macro form ─────────────────────────────────────────────────────── #}
+<div class="edit-card">
+    <div class="edit-card-title">Macros</div>
+
+    <form method="POST"
+          action="{% if mode == 'new' %}/food/edit/new{% else %}/food/edit/{{ name | urlencode }}{% endif %}"
+          style="display:flex;flex-direction:column;gap:12px">
+
+        {% if mode == 'new' %}
+        <div class="form-group">
+            <label for="fe-name">Food name</label>
+            <input type="text" id="fe-name" name="name"
+                   value="{{ name | e }}" placeholder="e.g. Chicken Breast"
+                   autocomplete="off" autocapitalize="words">
+        </div>
+        {% else %}
+        <div style="font-size:1rem;font-weight:800;color:var(--text)">{{ name }}</div>
+        {% endif %}
+
+        <div class="macro-grid">
+            <div class="form-group">
+                <label for="fe-cal">Calories (kcal)</label>
+                <input type="number" id="fe-cal" name="calories"
+                       value="{{ existing.calories | int if existing and existing.calories else '' }}"
+                       placeholder="0" min="0" step="1" inputmode="decimal">
+            </div>
+            <div class="form-group">
+                <label for="fe-pro">Protein (g)</label>
+                <input type="number" id="fe-pro" name="protein_g"
+                       value="{{ existing.protein_g if existing and existing.protein_g else '' }}"
+                       placeholder="0" min="0" step="0.1" inputmode="decimal">
+            </div>
+            <div class="form-group">
+                <label for="fe-carb">Carbs (g)</label>
+                <input type="number" id="fe-carb" name="carbs_g"
+                       value="{{ existing.carbs_g if existing and existing.carbs_g else '' }}"
+                       placeholder="0" min="0" step="0.1" inputmode="decimal">
+            </div>
+            <div class="form-group">
+                <label for="fe-fat">Fat (g)</label>
+                <input type="number" id="fe-fat" name="fat_g"
+                       value="{{ existing.fat_g if existing and existing.fat_g else '' }}"
+                       placeholder="0" min="0" step="0.1" inputmode="decimal">
+            </div>
+        </div>
+
+        <div>
+            <div class="edit-card-title" style="margin-bottom:8px">Serving unit</div>
+            <div class="unit-toggle-row">
+                {% set is_unit = existing and existing.unit_type == 'unit' %}
+                <button type="button" class="unit-btn {% if not is_unit %}active{% endif %}"
+                        id="btn-per-g" onclick="setUnit('g')">per 100g</button>
+                <button type="button" class="unit-btn {% if is_unit %}active{% endif %}"
+                        id="btn-per-unit" onclick="setUnit('unit')">per unit</button>
+            </div>
+            <input type="hidden" name="unit_type" id="h-unit-type"
+                   value="{{ 'unit' if is_unit else 'g' }}">
+        </div>
+
+        <button type="submit" class="btn-save">Save</button>
+    </form>
+</div>
+
+{# ── Recipe / components — only when food exists in DB ──────────────── #}
+{% if existing %}
+<div class="edit-card">
+    <div class="edit-card-title">Recipe (optional — auto-calculates macros)</div>
+
+    <datalist id="fe-food-list">
+        {% for item in food_library %}
+        <option value="{{ item.name | e }}">
+        {% endfor %}
+    </datalist>
+
+    <form method="POST" action="/food/components/{{ name | urlencode }}"
+          id="recipe-form" style="display:flex;flex-direction:column;gap:10px">
+
+        <div id="recipe-rows">
+            {% for c in components %}
+            <div class="recipe-row">
+                <input type="text" name="ing" value="{{ c.ingredient_name | e }}"
+                       list="fe-food-list" placeholder="Ingredient"
+                       oninput="recipeCalc()">
+                <input type="number" name="qty" value="{{ c.quantity }}"
+                       min="0" step="0.1" inputmode="decimal" placeholder="g"
+                       oninput="recipeCalc()">
+                <button type="button" class="btn-rm-row"
+                        onclick="this.closest('.recipe-row').remove();recipeCalc()">✕</button>
+            </div>
+            {% endfor %}
+        </div>
+
+        <button type="button" class="btn-add-ing" onclick="addIngRow()">+ Add ingredient</button>
+
+        <div class="recipe-preview" id="recipe-preview" style="display:none">
+            <div class="preview-row">
+                <span class="preview-label">Total</span>
+                <span class="preview-val" id="prev-kcal">—</span>
+            </div>
+            <div class="preview-macros" id="prev-macros"></div>
+        </div>
+
+        <button type="submit" class="btn-save-recipe">Save Recipe</button>
+    </form>
+</div>
+{% endif %}
+
+{# ── Delete — only when food exists in DB ───────────────────────────── #}
+{% if existing %}
+<div class="edit-card">
+    <div class="edit-card-title">Danger zone</div>
+    <form method="POST" action="/food/delete/{{ name | urlencode }}">
+        <button type="submit" class="btn-delete"
+                onclick="return confirm('Delete {{ name | e }} from the database? Logged history is kept.')">
+            Delete food
+        </button>
+    </form>
+</div>
+{% endif %}
+
+<script>
+// ── Unit toggle ────────────────────────────────────────────────────────
+function setUnit(val) {
+    document.getElementById('h-unit-type').value = val;
+    document.getElementById('btn-per-g').classList.toggle('active', val === 'g');
+    document.getElementById('btn-per-unit').classList.toggle('active', val === 'unit');
+}
+
+// ── Recipe ─────────────────────────────────────────────────────────────
+const FOOD_MACROS = {{ macros_json | safe }};
+
+function addIngRow() {
+    const row = document.createElement('div');
+    row.className = 'recipe-row';
+    row.innerHTML =
+        `<input type="text" name="ing" list="fe-food-list" placeholder="Ingredient" oninput="recipeCalc()">` +
+        `<input type="number" name="qty" min="0" step="0.1" inputmode="decimal" placeholder="g" oninput="recipeCalc()">` +
+        `<button type="button" class="btn-rm-row" onclick="this.closest('.recipe-row').remove();recipeCalc()">✕</button>`;
+    document.getElementById('recipe-rows').appendChild(row);
+    row.querySelector('input[type=text]').focus();
+}
+
+function recipeCalc() {
+    let kcal = 0, pro = 0, carb = 0, fat = 0, anyValid = false;
+    document.querySelectorAll('#recipe-rows .recipe-row').forEach(row => {
+        const name = row.querySelector('input[type=text]').value.trim().toLowerCase();
+        const qty  = parseFloat(row.querySelector('input[type=number]').value) || 0;
+        if (!name || qty <= 0) return;
+        const m = FOOD_MACROS[name];
+        if (!m) return;
+        const f = m.unit_type === 'unit' ? qty : qty / 100;
+        kcal += m.calories  * f;
+        pro  += m.protein_g * f;
+        carb += m.carbs_g   * f;
+        fat  += m.fat_g     * f;
+        anyValid = true;
+    });
+    const prev = document.getElementById('recipe-preview');
+    if (!anyValid) { prev.style.display = 'none'; return; }
+    prev.style.display = '';
+    document.getElementById('prev-kcal').textContent   = Math.round(kcal) + ' kcal';
+    document.getElementById('prev-macros').textContent =
+        `P ${pro.toFixed(1)}g · C ${carb.toFixed(1)}g · F ${fat.toFixed(1)}g`;
+}
+
+// Run on load if there are existing rows
+recipeCalc();
+</script>
+{% endblock %}

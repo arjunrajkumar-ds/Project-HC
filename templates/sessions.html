@@ -1,19 +1,52 @@
 {% extends 'base.html' %}
-{% block title %}Session History{% endblock %}
+{% block title %}History{% endblock %}
 
 {% block extra_css %}
 <style>
-.session-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
-
-.session-row {
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 10px;
+.week-label {
+    font-size: 0.62rem; font-weight: 700; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .09em;
+    margin: 18px 0 6px;
 }
-.row-left  { display: flex; align-items: center; gap: 10px; }
-.row-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-.s-date { font-size: 0.9rem; color: var(--muted); }
-.s-stat { font-size: 0.82rem; color: var(--dim); white-space: nowrap; }
-.s-sep  { color: var(--border); }
+.week-label:first-of-type { margin-top: 0; }
+
+.sess-row {
+    display: flex; align-items: center; gap: 9px;
+    background: var(--surface); border: 0.5px solid var(--border); border-radius: 10px;
+    padding: 9px 11px; margin-bottom: 5px;
+    text-decoration: none; color: inherit;
+    -webkit-tap-highlight-color: transparent;
+}
+.sess-row:active { opacity: .75; }
+
+.sess-pip {
+    width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; align-self: flex-start; margin-top: 4px;
+}
+.pip-push { background: #991B1B; }
+.pip-pull { background: #5B21B6; }
+.pip-legs { background: #065F46; }
+.pip-core { background: #92400E; }
+.pip-swim { background: #0E7490; }
+.pip-pilates { background: #BE185D; }
+.pip-gym  { background: #6B7280; }
+
+.sess-body { flex: 1; min-width: 0; }
+.sess-date { font-size: 0.83rem; font-weight: 700; color: var(--text); }
+.sess-lifts {
+    font-size: 0.72rem; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    margin-top: 2px;
+}
+.sess-lifts .hl { color: var(--accent); font-weight: 600; }
+.pr-pip {
+    font-size: 0.6rem; font-weight: 800;
+    background: var(--t1-bg); color: var(--t1-fg);
+    padding: 1px 4px; border-radius: 3px;
+    text-transform: uppercase; margin-left: 2px; vertical-align: 1px;
+}
+.sess-right { text-align: right; flex-shrink: 0; }
+.sess-vol   { font-size: 0.68rem; color: var(--dim); }
+.sess-dur   { font-size: 0.63rem; color: var(--dim); margin-top: 2px; }
 </style>
 {% endblock %}
 
@@ -21,33 +54,67 @@
 <h1>History</h1>
 
 {% if sessions %}
-<ul class="session-list">
+    {% set ns = namespace(current_week='') %}
     {% for s in sessions %}
-    <li>
-        <a href="/session/{{ s.id }}" class="card-row session-row">
-            <div class="row-left">
-                {% if s.type == 'swim' %}
-                <span class="type-badge swim">Swim</span>
-                {% else %}
-                <span class="type-badge {{ s.day_type }}">{{ s.day_type | capitalize }}</span>
-                {% endif %}
-                <span class="s-date">{{ s.date }}</span>
+
+        {% if s.week_group != ns.current_week %}
+            {% set ns.current_week = s.week_group %}
+            <div class="week-label">{{ s.week_display }}</div>
+        {% endif %}
+
+        <a href="/session/{{ s.id }}" class="sess-row">
+            {% if s.type == 'swim' %}
+                <div class="sess-pip pip-swim"></div>
+            {% elif s.type == 'pilates' %}
+                <div class="sess-pip pip-pilates"></div>
+            {% elif s.day_type == 'push' %}
+                <div class="sess-pip pip-push"></div>
+            {% elif s.day_type == 'pull' %}
+                <div class="sess-pip pip-pull"></div>
+            {% elif s.day_type == 'legs' %}
+                <div class="sess-pip pip-legs"></div>
+            {% elif s.day_type == 'core' %}
+                <div class="sess-pip pip-core"></div>
+            {% else %}
+                <div class="sess-pip pip-gym"></div>
+            {% endif %}
+
+            <div class="sess-body">
+                <div class="sess-date">{{ s.date_fmt }}</div>
+                <div class="sess-lifts">
+                    {% if s.type == 'swim' %}
+                        <span class="hl">{{ s.distance_m }} m</span>
+                    {% elif s.type == 'pilates' %}
+                        <span class="hl">Reformer Pilates</span>
+                    {% elif s.headline_lifts %}
+                        {% for lift in s.headline_lifts %}
+                            {%- if not loop.first %}&nbsp;·&nbsp;{% endif -%}
+                            {{ lift.name }}&nbsp;<span class="hl">
+                                {%- if lift.weight_kg == lift.weight_kg | round | float -%}
+                                    {{ lift.weight_kg | int }}
+                                {%- else -%}
+                                    {{ lift.weight_kg }}
+                                {%- endif -%}
+                            &thinsp;kg</span>{% if lift.is_pr %}<span class="pr-pip">PR</span>{% endif %}
+                        {% endfor %}
+                    {% else %}
+                        <span style="color:var(--dim)">{{ s.total_sets }} sets</span>
+                    {% endif %}
+                </div>
             </div>
-            <div class="row-right">
-                {% if s.type == 'swim' %}
-                <span class="s-stat">{{ s.distance_m }} m</span>
-                {% else %}
-                <span class="s-stat">{{ s.total_sets }} sets</span>
-                <span class="s-sep">·</span>
-                <span class="s-stat">{{ '{:,.0f}'.format(s.total_volume) }} kg</span>
+
+            <div class="sess-right">
+                {% if s.type == 'gym' and s.total_volume %}
+                <div class="sess-vol">{{ '{:,.0f}'.format(s.total_volume) }} kg</div>
                 {% endif %}
-                <span class="chevron">›</span>
+                {% if s.duration_min %}
+                <div class="sess-dur">{{ s.duration_min }} min</div>
+                {% endif %}
             </div>
         </a>
-    </li>
+
     {% endfor %}
-</ul>
 {% else %}
-<p class="empty">No sessions yet. <a href="/session/new">Log your first workout</a>.</p>
+    <p class="empty">No sessions yet. <a href="/session/new">Log your first workout</a>.</p>
 {% endif %}
 {% endblock %}

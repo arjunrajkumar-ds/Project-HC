@@ -1,0 +1,342 @@
+{% extends 'base.html' %}
+{% block title %}Workouts{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Tab bar ──────────────────────────────────────────────────────────── */
+.wk-tabs {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+    margin-bottom: 20px;
+}
+.wk-tab {
+    background: var(--surface); border: 2px solid var(--border);
+    border-radius: 12px; color: var(--muted); cursor: pointer;
+    font-family: inherit; font-size: 0.88rem; font-weight: 700;
+    min-height: 44px; padding: 10px 8px; text-align: center;
+    text-decoration: none; display: flex; align-items: center;
+    justify-content: center; gap: 6px;
+    -webkit-tap-highlight-color: transparent;
+}
+.wk-tab.active { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.wk-tab:active { opacity: .75; }
+
+/* ── Routine cards ────────────────────────────────────────────────────── */
+.workout-card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 14px;
+}
+.workout-card-header {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 14px;
+}
+.workout-card-name {
+    font-size: 1.1rem; font-weight: 800; color: var(--text); flex: 1;
+}
+.location-badge {
+    font-size: 0.65rem; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .06em;
+    padding: 3px 9px; border-radius: 5px;
+}
+.location-badge.home { background: var(--legs-bg); color: var(--legs-fg); }
+.location-badge.gym  { background: var(--t1-bg); color: var(--t1-fg); }
+
+.exercise-list { list-style: none; margin-bottom: 16px; }
+.exercise-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--border);
+}
+.exercise-item:last-child { border-bottom: none; }
+.exercise-item-name { flex: 1; font-size: 0.9rem; font-weight: 600; color: var(--text); }
+.exercise-item-spec { font-size: 0.8rem; color: var(--muted); font-weight: 700; flex-shrink: 0; }
+.timed-tag {
+    font-size: 0.6rem; font-weight: 800;
+    background: var(--core-bg); color: var(--core-fg);
+    padding: 2px 6px; border-radius: 4px; flex-shrink: 0;
+}
+
+.warmup-note {
+    font-size: 0.82rem; color: var(--muted);
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    background: var(--surface-2);
+    border-radius: 8px;
+    border-left: 3px solid var(--dim);
+}
+
+.btn-log-workout {
+    background: var(--accent); border: none; border-radius: 10px;
+    color: #fff; cursor: pointer; font-family: inherit;
+    font-size: 0.95rem; font-weight: 700;
+    min-height: 48px; width: 100%; padding: 12px;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-log-workout:active { opacity: .85; }
+
+.success-banner {
+    background: #1a3a1a; border: 1px solid #6bff8a;
+    border-radius: 10px; color: #6bff8a;
+    padding: 12px 16px; margin-bottom: 16px;
+    font-size: 0.9rem; font-weight: 700; text-align: center;
+}
+
+/* ── Exercises by muscle group ────────────────────────────────────────── */
+.mg-exercise-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.mg-exercise-item {
+    display: flex; align-items: center;
+    background: var(--surface); border: 0.5px solid var(--border); border-radius: 10px;
+    padding: 12px 14px; gap: 10px;
+}
+.mg-exercise-name { flex: 1; font-size: 0.9rem; font-weight: 600; color: var(--text); }
+.mg-exercise-spec { font-size: 0.8rem; color: var(--muted); font-weight: 700; flex-shrink: 0; }
+
+.mg-tag {
+    font-size: 0.67rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .04em; padding: 2px 7px; border-radius: 4px; flex-shrink: 0;
+}
+.mg-tag.chest    { background: var(--push-bg); color: var(--push-fg); }
+.mg-tag.back     { background: var(--pull-bg); color: var(--pull-fg); }
+.mg-tag.legs     { background: var(--legs-bg); color: var(--legs-fg); }
+.mg-tag.core     { background: var(--core-bg); color: var(--core-fg); }
+.mg-tag.mobility { background: var(--surface-2); color: var(--dim); border: 1px solid var(--border); }
+.mg-tag.cardio   { background: var(--t1-bg); color: var(--t1-fg); }
+
+
+/* ── Exercise picker ──────────────────────────────────────────────────── */
+.mg-exercise-item { flex-direction: column; align-items: stretch; cursor: pointer; }
+.ex-row {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; background: none; border: none; padding: 0;
+    font-family: inherit; text-align: left; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.ex-chevron { color: var(--dim); font-size: 1rem; flex-shrink: 0; transition: transform 0.15s; }
+.ex-chevron.open { transform: rotate(90deg); }
+
+.ex-picker {
+    display: none; margin-top: 14px; padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+.ex-picker.open { display: block; }
+
+.picker-row {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+}
+.picker-row:last-child { margin-bottom: 0; }
+.picker-label { flex: 1; font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+.stepper {
+    display: flex; align-items: center;
+    background: var(--surface-2); border-radius: 8px; overflow: hidden;
+    border: 1px solid var(--border);
+}
+.stepper-btn {
+    background: none; border: none; color: var(--text);
+    font-size: 1.1rem; font-weight: 700; cursor: pointer;
+    min-width: 40px; min-height: 38px; font-family: inherit;
+    -webkit-tap-highlight-color: transparent;
+}
+.stepper-btn:active { background: var(--border); }
+.stepper-val {
+    min-width: 40px; text-align: center;
+    font-size: 0.95rem; font-weight: 700; color: var(--text);
+    border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+    line-height: 38px;
+}
+.picker-range-hint {
+    font-size: 0.72rem; color: var(--dim); margin-top: 10px; text-align: right;
+}
+
+/* ── Muscle group accordion ───────────────────────────────────────────── */
+.mg-group { margin-bottom: 10px; }
+.mg-group-btn {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+    font-family: inherit; font-size: 1rem; font-weight: 700; color: var(--text);
+    cursor: pointer; text-align: left;
+    -webkit-tap-highlight-color: transparent;
+}
+.mg-group-btn:active { opacity: .75; }
+.mg-group .mg-exercise-list {
+    display: none;
+    padding: 8px 0 4px;
+    gap: 8px;
+}
+.mg-group.open .mg-group-btn { border-radius: 10px 10px 0 0; border-bottom-color: transparent; }
+.mg-group.open .mg-exercise-list {
+    display: flex;
+    border: 0.5px solid var(--border); border-top: none;
+    border-radius: 0 0 10px 10px;
+    padding: 8px 10px 10px;
+    flex-direction: column;
+}
+.mg-group.open .mg-group-btn .ex-chevron { transform: rotate(90deg); }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Workouts</h1>
+
+{% if done %}
+<div class="success-banner">Workout saved!</div>
+{% endif %}
+
+{# ── Tab bar ── #}
+<div class="wk-tabs">
+    <a href="/workout?tab=routines"  class="wk-tab {% if tab == 'routines' %}active{% endif %}">Routines</a>
+    <a href="/workout?tab=exercises" class="wk-tab {% if tab == 'exercises' %}active{% endif %}">Exercises</a>
+</div>
+
+{# ══════════════════════════════════════════════════════ #}
+{# ROUTINES TAB                                          #}
+{# ══════════════════════════════════════════════════════ #}
+{% if tab == 'routines' %}
+
+{% for key, routine in routines.items() %}
+<div class="workout-card">
+    <div class="workout-card-header">
+        <span class="workout-card-name">{{ routine.name }}</span>
+        <span class="location-badge {{ routine.location | lower }}">{{ routine.location }}</span>
+    </div>
+
+    {% if routine.warmup %}
+    <div class="warmup-note">Warmup: {{ routine.warmup }}</div>
+    {% endif %}
+
+    <ul class="exercise-list">
+        {% for ex in routine.exercises %}
+        <li class="exercise-item">
+            <span class="exercise-item-name">{{ ex.name }}</span>
+            {% if ex.timed %}<span class="timed-tag">hold</span>{% endif %}
+            <span class="exercise-item-spec">
+                {%- if ex.timed -%}{{ ex.reps }}s × {{ ex.sets }}
+                {%- else -%}{{ ex.reps }} × {{ ex.sets }}{%- endif -%}
+            </span>
+        </li>
+        {% endfor %}
+    </ul>
+
+    <form method="POST" action="/workout/session/start">
+        <input type="hidden" name="routine" value="{{ key }}">
+        <input type="hidden" name="date" value="{{ today }}">
+        <button type="submit" class="btn-log-workout">Start {{ routine.name }}</button>
+    </form>
+</div>
+{% endfor %}
+
+{% endif %}
+
+{# ══════════════════════════════════════════════════════ #}
+{# EXERCISES TAB                                         #}
+{# ══════════════════════════════════════════════════════ #}
+{% if tab == 'exercises' %}
+
+<a href="/workout/log/new" class="btn btn-primary btn-full" style="margin-bottom:20px; text-decoration:none;">Log Workout</a>
+
+<label style="display:flex; align-items:center; gap:10px; margin-bottom:20px;
+              background:var(--surface); border:0.5px solid var(--border);
+              border-radius:10px; padding:12px 14px; cursor:pointer;
+              font-size:0.9rem; font-weight:600; color:var(--text);">
+    <input type="checkbox" id="hide-gym-toggle" onchange="filterGym(this.checked)"
+           style="width:18px; height:18px; accent-color:var(--accent); cursor:pointer;">
+    Show gym-only exercises
+</label>
+
+{% set ns = namespace(idx=0) %}
+
+{% for mg, exercises in by_muscle.items() %}
+{% if exercises %}
+<div class="mg-group" data-mg="{{ mg | lower }}">
+    <button class="mg-group-btn" onclick="toggleGroup(this)">
+        <span>{{ mg }}</span>
+        <span class="ex-chevron">›</span>
+    </button>
+    <ul class="mg-exercise-list">
+        {% for ex in exercises %}
+        {% set ns.idx = ns.idx + 1 %}
+        {% set eid = 'ex' ~ ns.idx %}
+        <li class="mg-exercise-item" data-location="{{ ex.location }}">
+            <button class="ex-row" onclick="togglePicker('{{ eid }}')">
+                <span class="mg-exercise-name">{{ ex.name }}</span>
+                <span class="ex-chevron" id="chev-{{ eid }}">›</span>
+            </button>
+            <div class="ex-picker" id="picker-{{ eid }}">
+                <div class="picker-row">
+                    <span class="picker-label">{{ 'Duration (s)' if ex.timed else 'Reps' }}</span>
+                    <div class="stepper">
+                        <button class="stepper-btn" onclick="step('{{ eid }}-reps',-1,{{ ex.reps_range[0] }},{{ ex.reps_range[1] }})">−</button>
+                        <span class="stepper-val" id="val-{{ eid }}-reps">{{ ex.reps }}</span>
+                        <button class="stepper-btn" onclick="step('{{ eid }}-reps', 1,{{ ex.reps_range[0] }},{{ ex.reps_range[1] }})">+</button>
+                    </div>
+                </div>
+                <div class="picker-row">
+                    <span class="picker-label">Sets</span>
+                    <div class="stepper">
+                        <button class="stepper-btn" onclick="step('{{ eid }}-sets',-1,{{ ex.sets_range[0] }},{{ ex.sets_range[1] }})">−</button>
+                        <span class="stepper-val" id="val-{{ eid }}-sets">{{ ex.sets }}</span>
+                        <button class="stepper-btn" onclick="step('{{ eid }}-sets', 1,{{ ex.sets_range[0] }},{{ ex.sets_range[1] }})">+</button>
+                    </div>
+                </div>
+                <div class="picker-range-hint">
+                    Range: {{ ex.reps_range[0] }}–{{ ex.reps_range[1] }}{{ 's' if ex.timed else '' }} × {{ ex.sets_range[0] }}–{{ ex.sets_range[1] }} sets
+                </div>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+{% endfor %}
+
+<div class="mg-group">
+    <button class="mg-group-btn" onclick="toggleGroup(this)">
+        <span>Cardio</span>
+        <span class="ex-chevron">›</span>
+    </button>
+    <ul class="mg-exercise-list">
+        {% for c in cardio %}
+        <li class="mg-exercise-item">
+            <span class="mg-exercise-name">{{ c.name }}</span>
+            <span style="font-size:0.8rem; color:var(--muted); font-weight:600;">{{ c.desc }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleGroup(btn) {
+    btn.closest('.mg-group').classList.toggle('open');
+}
+function togglePicker(id) {
+    const picker  = document.getElementById('picker-' + id);
+    const chevron = document.getElementById('chev-' + id);
+    const opening = !picker.classList.contains('open');
+    document.querySelectorAll('.ex-picker.open').forEach(p => {
+        p.classList.remove('open');
+        const c = document.getElementById('chev-' + p.id.replace('picker-', ''));
+        if (c) c.classList.remove('open');
+    });
+    if (opening) {
+        picker.classList.add('open');
+        chevron.classList.add('open');
+    }
+}
+function step(id, delta, min, max) {
+    const el = document.getElementById('val-' + id);
+    el.textContent = Math.max(min, Math.min(max, parseInt(el.textContent) + delta));
+}
+function filterGym(show) {
+    document.querySelectorAll('.mg-exercise-item[data-location="gym"]').forEach(el => {
+        el.style.display = show ? '' : 'none';
+    });
+}
+document.addEventListener('DOMContentLoaded', () => filterGym(false));
+</script>
+{% endblock %}

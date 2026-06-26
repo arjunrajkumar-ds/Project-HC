@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% block title %}Pilates{% endblock %}
+
+{% block extra_css %}
+<style>
+.pl-flash {
+    background: var(--pilates-bg); border: 1px solid var(--pilates-fg);
+    border-radius: 12px; padding: 14px 16px; margin-bottom: 18px;
+}
+.pl-flash-name { font-weight: 700; color: var(--pilates-fg); font-size: 0.95rem; }
+.pl-flash-meta { color: var(--muted); font-size: 0.8rem; margin-top: 3px; }
+.pl-flash-dismiss {
+    margin-top: 10px; background: none; border: none; color: var(--pilates-fg);
+    font-family: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer; padding: 0;
+}
+
+.pl-card {
+    display: block; text-decoration: none; color: inherit;
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-left: 3px solid var(--pilates-fg); border-radius: 12px;
+    padding: 14px 16px; margin-bottom: 10px;
+    -webkit-tap-highlight-color: transparent;
+}
+.pl-card:active { opacity: .8; }
+.pl-card-name { font-weight: 700; font-size: 0.98rem; color: var(--text); }
+.pl-card-desc { color: var(--muted); font-size: 0.8rem; margin-top: 3px; }
+.pl-card-meta {
+    display: flex; gap: 10px; margin-top: 8px;
+    font-size: 0.72rem; color: var(--dim);
+}
+.pl-card-meta .pill {
+    background: var(--pilates-bg); color: var(--pilates-fg);
+    border-radius: 999px; padding: 2px 9px; font-weight: 600;
+}
+.pl-empty { color: var(--dim); font-size: 0.88rem; }
+
+.pl-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.pl-tab {
+    flex: 1; text-align: center; text-decoration: none;
+    padding: 8px 0; border-radius: 9px; font-size: 0.82rem; font-weight: 700;
+    background: var(--surface); border: 0.5px solid var(--border); color: var(--muted);
+}
+.pl-tab.active { background: var(--pilates-bg); color: var(--pilates-fg); border-color: var(--pilates-fg); }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Reformer Pilates</h1>
+
+<div class="pl-tabs">
+    <a href="/pilates" class="pl-tab active">Routines</a>
+    <a href="/pilates/glossary" class="pl-tab">Glossary</a>
+</div>
+
+{% if flash_data %}
+<div class="pl-flash">
+    {% if flash_data.empty %}
+    <div class="pl-flash-name">Nothing logged</div>
+    <div class="pl-flash-meta">Tick at least one exercise before saving {{ flash_data.routine_name }}.</div>
+    {% else %}
+    <div class="pl-flash-name">✓ {{ flash_data.routine_name }} logged</div>
+    <div class="pl-flash-meta">{{ flash_data.done_count }} of {{ flash_data.total_count }} exercises completed.</div>
+    {% endif %}
+    <button class="pl-flash-dismiss" onclick="this.parentElement.remove()">Dismiss</button>
+</div>
+{% endif %}
+
+<p style="color:var(--muted);font-size:0.85rem;margin:-4px 0 16px">
+    Pick a routine to follow and log. Each exercise carries full reformer setup guidance.
+</p>
+
+{% if routines %}
+    {% for r in routines %}
+    <a href="/pilates/routine/{{ r.key }}" class="pl-card">
+        <div class="pl-card-name">{{ r.name }}</div>
+        {% if r.description %}<div class="pl-card-desc">{{ r.description }}</div>{% endif %}
+        <div class="pl-card-meta">
+            <span class="pill">{{ r.ex_count }} exercise{{ '' if r.ex_count == 1 else 's' }}</span>
+            {% if r.last_done %}<span>Last done {{ r.last_done[:10] | fmt_date }}</span>{% endif %}
+        </div>
+    </a>
+    {% endfor %}
+{% else %}
+    <p class="pl-empty">No routines yet.</p>
+{% endif %}
+{% endblock %}

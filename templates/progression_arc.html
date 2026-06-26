@@ -1,0 +1,287 @@
+{% extends 'base.html' %}
+{% block title %}Progression Arc{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Page header ────────────────────────────────────────────────── */
+.arc-page-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px;
+}
+.arc-page-header h1 { margin-bottom: 0; }
+.arc-manage-link {
+    font-size: 0.75rem; font-weight: 700; color: var(--dim);
+    text-decoration: none; padding: 5px 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; -webkit-tap-highlight-color: transparent;
+}
+.arc-manage-link:active { opacity: .7; }
+
+/* ── Filter pills ───────────────────────────────────────────────── */
+.arc-filters {
+    display: flex; gap: 8px; margin-bottom: 20px;
+}
+.arc-pill {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 20px; color: var(--dim); cursor: pointer;
+    font-family: inherit; font-size: 0.8rem; font-weight: 700;
+    padding: 6px 16px; letter-spacing: .04em;
+    -webkit-tap-highlight-color: transparent;
+}
+.arc-pill.active {
+    background: var(--accent); border-color: var(--accent); color: #fff;
+}
+.arc-pill:active { opacity: .7; }
+
+/* ── Grid ───────────────────────────────────────────────────────── */
+.arc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+/* ── Card ───────────────────────────────────────────────────────── */
+.arc-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+    transition: border-color .15s, box-shadow .15s;
+}
+.arc-card:active { opacity: .85; }
+.arc-card.cycle-complete {
+    border-color: #f59e0b;
+    box-shadow: 0 0 24px rgba(245,158,11,.12);
+}
+
+.arc-card-header {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 2px;
+}
+.arc-card-name {
+    font-size: .9rem; font-weight: 700; color: var(--text); flex: 1;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    min-width: 0;
+}
+.arc-card-muscle {
+    font-size: .7rem; color: var(--dim); margin-bottom: 6px;
+    padding-left: 2px;
+}
+
+/* ── SVG container ──────────────────────────────────────────────── */
+.arc-svg-wrap {
+    /* extra vertical padding so overflow labels aren't clipped by card */
+    padding: 6px 12px 4px;
+    margin: 0 -4px;
+}
+.arc-svg-wrap svg { display: block; width: 100%; overflow: visible; }
+
+/* ── Empty / loading states ─────────────────────────────────────── */
+.arc-empty {
+    color: var(--dim); font-size: .88rem; text-align: center;
+    padding: 48px 0; grid-column: 1/-1;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="arc-page-header">
+    <h1>Progression</h1>
+    <a href="/progression" class="arc-manage-link">Manage weights</a>
+</div>
+
+<div class="arc-filters" id="arc-filters">
+    <button class="arc-pill active" data-tier="all">All</button>
+    <button class="arc-pill"        data-tier="1">T1</button>
+    <button class="arc-pill"        data-tier="2">T2</button>
+    <button class="arc-pill"        data-tier="3">T3</button>
+</div>
+
+<div class="arc-grid" id="arc-grid">
+    <p class="arc-empty">Loading…</p>
+</div>
+
+<script>
+'use strict';
+(function () {
+
+/* ── Colour palette ─────────────────────────────────────────────── */
+const TIER_NODE  = { 1: '#5B21B6', 2: '#1D4ED8', 3: '#065F46' };
+const TIER_TRACK = { 1: '#EDE9FE', 2: '#DBEAFE', 3: '#D1FAE5' };
+const AMBER      = '#92400E';
+const AMBER_BG   = '#FEF3C7';
+
+/* ── State ──────────────────────────────────────────────────────── */
+let _data       = null;
+let _activeTier = 'all';
+
+/* ── Filter ─────────────────────────────────────────────────────── */
+function setFilter(tier) {
+    _activeTier = tier;
+    document.querySelectorAll('.arc-pill').forEach(p =>
+        p.classList.toggle('active', p.dataset.tier === tier));
+    renderGrid();
+}
+
+/* ── Grid ───────────────────────────────────────────────────────── */
+function renderGrid() {
+    const grid = document.getElementById('arc-grid');
+    if (!_data) { grid.innerHTML = '<p class="arc-empty">Loading…</p>'; return; }
+
+    const exs = _activeTier === 'all'
+        ? _data.exercises
+        : _data.exercises.filter(e => String(e.tier) === _activeTier);
+
+    if (!exs.length) {
+        grid.innerHTML = '<p class="arc-empty">No exercises set up for this tier yet.<br>'
+            + '<a href="/progression" style="color:var(--accent)">Set up progressions →</a></p>';
+        return;
+    }
+
+    grid.innerHTML = exs.map(ex =>
+        buildCard(ex, _data.schemes[String(ex.tier)] || [])
+    ).join('');
+}
+
+/* ── Card HTML ──────────────────────────────────────────────────── */
+function buildCard(ex, schemes) {
+    const completeCls = ex.cycle_complete ? ' cycle-complete' : '';
+    return `<div class="arc-card${completeCls}" onclick="location.href='/progression'">
+        <div class="arc-card-header">
+            <span class="tier-badge t${ex.tier}">T${ex.tier}</span>
+            <span class="arc-card-name">${ex.name}</span>
+        </div>
+        <div class="arc-card-muscle">${ex.muscle_group}</div>
+        <div class="arc-svg-wrap">${buildSVG(ex, schemes)}</div>
+    </div>`;
+}
+
+/* ── SVG arc ────────────────────────────────────────────────────── */
+function buildSVG(ex, schemes) {
+    const N = schemes.length;
+    if (N === 0) return '';
+
+    /* geometry params — tighter for 10-node T3 */
+    const compact  = N >= 9;
+    const R        = compact ? 70  : 78;      // arc radius
+    const nrNorm   = compact ? 11  : 14;      // node radius (normal)
+    const nrCurr   = compact ? 15  : 18;      // node radius (current)
+    const lFont    = compact ? 8.5 : 10.5;    // label font-size
+    const lOff     = 22;                      // extra px beyond node edge for label
+
+    const W = 260;
+    const H = compact ? 208 : 198;
+    const cx = W / 2;
+    const cy = H - 52;   /* centre of implied full circle */
+
+    const START_DEG = 200, END_DEG = 340, SWEEP = 140;
+
+    /* point on circle at given angle (SVG convention: y-down, 0°=right, CW+) */
+    const pt = (r, deg) => {
+        const rad = deg * Math.PI / 180;
+        return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+    };
+    const f = n => n.toFixed(2);
+
+    const [x0, y0] = pt(R, START_DEG);
+    const [xE, yE] = pt(R, END_DEG);
+    const tcolor   = TIER_NODE[ex.tier];
+    const trackBg  = TIER_TRACK[ex.tier];
+    const curOrder = ex.current_scheme.progression_order;
+    const uid      = ex.id;   /* unique per card */
+
+    /* ── defs: arrowhead marker ────────────────────────────────── */
+    const defs = `<defs>
+      <marker id="am${uid}" markerWidth="7" markerHeight="7"
+              refX="6" refY="3.5" orient="auto">
+        <path d="M7,0 L0,3.5 L7,7" fill="none"
+              stroke="#E8E5DF" stroke-width="1.2" stroke-linejoin="round"/>
+      </marker>
+    </defs>`;
+
+    /* ── main arc (dashed guide line) ──────────────────────────── */
+    /* small-arc (0), clockwise (1) from START to END through the top */
+    const arcPath = `<path d="M${f(x0)},${f(y0)} A${R},${R} 0 0,1 ${f(xE)},${f(yE)}"
+      fill="none" stroke="#E8E5DF" stroke-width="1" stroke-dasharray="4 3"/>`;
+
+    /* ── return arrow (dashed Bézier below the opening) ────────── */
+    const ctrlY   = cy + 30;
+    const labelY  = cy + 44;
+    const retPath = `<path d="M${f(xE)},${f(yE)} C${f(xE)},${f(ctrlY)} ${f(x0)},${f(ctrlY)} ${f(x0)},${f(y0)}"
+      fill="none" stroke="#C4BFB5" stroke-width="0.8" stroke-dasharray="3 3"
+      marker-end="url(#am${uid})"/>`;
+    const retLabel = `<text x="${cx}" y="${labelY}" text-anchor="middle"
+      font-size="8" fill="#A09A90" font-family="-apple-system,BlinkMacSystemFont,sans-serif"
+      >↑ weight reset</text>`;
+
+    /* ── centre weight / state text ────────────────────────────── */
+    const centreY = cy - R * 0.60;
+    let centreSvg;
+    if (ex.cycle_complete) {
+        centreSvg = `
+          <text x="${cx}" y="${centreY - 2}" text-anchor="middle"
+            font-size="13" font-weight="800" fill="${AMBER}"
+            font-family="-apple-system,BlinkMacSystemFont,sans-serif">Complete</text>
+          <text x="${cx}" y="${centreY + 14}" text-anchor="middle"
+            font-size="8.5" fill="${AMBER}"
+            font-family="-apple-system,BlinkMacSystemFont,sans-serif">add weight ↑</text>`;
+    } else {
+        const raw = ex.weight_kg;
+        const wtStr = ex.reps_only
+            ? 'BW'
+            : (raw > 0 ? (raw % 1 === 0 ? raw + 'kg' : raw.toFixed(1) + 'kg') : '—');
+        centreSvg = `<text x="${cx}" y="${centreY + 8}" text-anchor="middle"
+          font-size="20" font-weight="800" fill="#18181B"
+          font-family="-apple-system,BlinkMacSystemFont,sans-serif">${wtStr}</text>`;
+    }
+
+    /* ── nodes ──────────────────────────────────────────────────── */
+    const nodesSvg = schemes.map((sch, i) => {
+        const deg    = N > 1 ? START_DEG + i * SWEEP / (N - 1) : (START_DEG + END_DEG) / 2;
+        const [nx, ny] = pt(R, deg);
+        const isCurr = sch.progression_order === curOrder;
+        const isDone = sch.progression_order < curOrder;
+        const nr     = isCurr ? nrCurr : nrNorm;
+
+        /* label sits radially outward: beyond node edge by lOff px */
+        const [lx, ly] = pt(R + nr + lOff, deg);
+
+        let fill, stroke, sw, opacity, textFill;
+        if (isDone) {
+            fill = tcolor;  stroke = tcolor; sw = 1.5; opacity = 1;   textFill = '#6B7280';
+        } else if (isCurr) {
+            fill = AMBER_BG; stroke = AMBER; sw = 2;   opacity = 1;   textFill = AMBER;
+        } else {
+            fill = '#F9F8F5'; stroke = '#E8E5DF'; sw = 1; opacity = 0.6; textFill = '#A09A90';
+        }
+
+        const circle = `<circle cx="${f(nx)}" cy="${f(ny)}" r="${nr}"
+          fill="${fill}" stroke="${stroke}" stroke-width="${sw}" opacity="${opacity}"/>`;
+
+        const label = `<text x="${f(lx)}" y="${f(ly)}"
+          text-anchor="middle" dominant-baseline="middle"
+          font-size="${lFont}" fill="${textFill}" opacity="${opacity}"
+          font-family="-apple-system,BlinkMacSystemFont,sans-serif">${sch.label}</text>`;
+
+        return circle + label;
+    }).join('');
+
+    return `<svg viewBox="0 0 ${W} ${H}" overflow="visible">
+      ${defs}${arcPath}${retPath}${retLabel}${centreSvg}${nodesSvg}
+    </svg>`;
+}
+
+/* ── Boot ───────────────────────────────────────────────────────── */
+document.querySelectorAll('.arc-pill').forEach(btn => {
+    btn.addEventListener('click', () => setFilter(btn.dataset.tier));
+});
+
+fetch('/progression/api/arc')
+    .then(r => r.json())
+    .then(data => { _data = data; renderGrid(); })
+    .catch(() => {
+        document.getElementById('arc-grid').innerHTML =
+            '<p class="arc-empty">Failed to load data.</p>';
+    });
+
+})();
+</script>
+{% endblock %}

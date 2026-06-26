@@ -1,0 +1,413 @@
+{% extends 'base.html' %}
+{% block title %}Log Workout{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Date card ─────────────────────────────────────────────────────────── */
+.log-date-card {
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: 14px; padding: 16px; margin-bottom: 20px;
+    display: flex; align-items: center; gap: 12px;
+}
+.log-date-label {
+    font-size: 0.72rem; font-weight: 700; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .06em; flex-shrink: 0;
+}
+.log-date-card input[type="date"] {
+    background: none; border: none; padding: 0; min-height: auto;
+    font-size: 0.95rem; font-weight: 700; color: var(--text);
+    width: auto; flex: 1;
+}
+.log-date-card input[type="date"]:focus { outline: none; }
+
+/* ── Continue banner ───────────────────────────────────────────────────── */
+.continue-banner {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 14px;
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 16px;
+}
+.continue-banner-info { flex: 1; min-width: 0; }
+.continue-banner-title {
+    font-size: 0.72rem; font-weight: 700; color: var(--t2-fg);
+    text-transform: uppercase; letter-spacing: .07em; margin-bottom: 3px;
+}
+.continue-banner-exs {
+    font-size: 0.8rem; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.btn-continue {
+    background: var(--t2-bg); border: 2px solid var(--t2-fg);
+    border-radius: 10px; color: var(--t2-fg);
+    font-family: inherit; font-size: 0.85rem; font-weight: 800;
+    min-height: 40px; padding: 8px 16px; white-space: nowrap;
+    text-decoration: none; display: inline-flex; align-items: center;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-continue:active { opacity: .75; }
+
+/* ── Continue-mode bar ─────────────────────────────────────────────────── */
+.continue-mode-bar {
+    background: var(--t2-bg); border: 1px solid var(--t2-fg);
+    border-radius: 10px; padding: 10px 14px;
+    display: flex; flex-direction: column; gap: 6px;
+    margin-bottom: 16px;
+}
+.continue-mode-label {
+    font-size: 0.68rem; font-weight: 700; color: var(--t2-fg);
+    text-transform: uppercase; letter-spacing: .08em;
+}
+.continue-mode-done { display: flex; flex-wrap: wrap; gap: 5px; }
+.done-badge {
+    background: var(--surface); border-radius: 5px;
+    font-size: 0.72rem; font-weight: 600; padding: 3px 9px; color: var(--muted);
+    border: 0.5px solid var(--border);
+}
+
+/* ── Session log card ──────────────────────────────────────────────────── */
+.session-log-card {
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: 14px; padding: 16px; margin-bottom: 12px;
+}
+.session-log-empty {
+    color: var(--dim); font-size: 0.88rem; text-align: center;
+    padding: 12px 0;
+}
+.log-item-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 0; border-bottom: 1px solid var(--border);
+}
+.log-item-row:last-of-type { border-bottom: none; }
+.log-item-name { flex: 1; font-size: 0.9rem; font-weight: 600; color: var(--text); }
+.log-item-spec { font-size: 0.85rem; color: var(--muted); font-weight: 700; }
+.log-item-rm {
+    background: none; border: none; color: var(--dim);
+    font-size: 1.2rem; cursor: pointer; padding: 2px 6px; line-height: 1;
+    -webkit-tap-highlight-color: transparent;
+}
+.log-item-rm:active { color: #991B1B; }
+
+/* ── Muscle group accordion (reused from workout.html) ─────────────────── */
+.mg-group { margin-bottom: 10px; }
+.mg-group-btn {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+    font-family: inherit; font-size: 1rem; font-weight: 700; color: var(--text);
+    cursor: pointer; text-align: left;
+    -webkit-tap-highlight-color: transparent;
+}
+.mg-group-btn:active { opacity: .75; }
+.mg-group .mg-exercise-list { display: none; padding: 8px 0 4px; gap: 8px; }
+.mg-group.open .mg-group-btn { border-radius: 10px 10px 0 0; border-bottom-color: transparent; }
+.mg-group.open .mg-exercise-list {
+    display: flex; border: 0.5px solid var(--border); border-top: none;
+    border-radius: 0 0 10px 10px; padding: 8px 10px 10px; flex-direction: column;
+}
+.mg-group.open .mg-group-btn .ex-chevron { transform: rotate(90deg); }
+.ex-chevron { color: var(--dim); font-size: 1rem; flex-shrink: 0; transition: transform 0.15s; }
+.ex-chevron.open { transform: rotate(90deg); }
+
+.mg-exercise-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.mg-exercise-item {
+    display: flex; flex-direction: column; align-items: stretch;
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; gap: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+.mg-exercise-item[data-location="gym"] { display: none; }
+.ex-row {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    background: none; border: none; padding: 0; font-family: inherit;
+    text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.mg-exercise-name { flex: 1; font-size: 0.9rem; font-weight: 600; color: var(--text); }
+
+/* ── Picker / steppers ─────────────────────────────────────────────────── */
+.ex-picker { display: none; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.ex-picker.open { display: block; }
+.picker-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.picker-row:last-child { margin-bottom: 0; }
+.picker-label { flex: 1; font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+.stepper {
+    display: flex; align-items: center;
+    background: var(--surface-2); border-radius: 8px; overflow: hidden;
+    border: 1px solid var(--border);
+}
+.stepper-btn {
+    background: none; border: none; color: var(--text);
+    font-size: 1.1rem; font-weight: 700; cursor: pointer;
+    min-width: 40px; min-height: 38px; font-family: inherit;
+    -webkit-tap-highlight-color: transparent;
+}
+.stepper-btn:active { background: var(--border); }
+.stepper-val {
+    min-width: 40px; text-align: center;
+    font-size: 0.95rem; font-weight: 700; color: var(--text);
+    border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+    line-height: 38px;
+}
+
+.btn-add-ex {
+    width: 100%; margin-top: 12px;
+    background: var(--accent-light); border: none; border-radius: 8px;
+    color: var(--accent-text); cursor: pointer; font-family: inherit;
+    font-size: 0.9rem; font-weight: 700; min-height: 42px;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-add-ex:active { opacity: .75; }
+.btn-add-ex:disabled { opacity: .45; cursor: default; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+    <a href="/workout?tab=exercises" style="color:var(--dim); font-size:1.3rem; text-decoration:none; line-height:1;">‹</a>
+    <h1 style="margin-bottom:0;">Log Workout</h1>
+</div>
+
+{# ── Continue banner (today's session exists, not yet in continue mode) ── #}
+{% if today_sessions and not continue_session %}
+  {% for ts in today_sessions %}
+  <div class="continue-banner">
+      <div class="continue-banner-info">
+          <div class="continue-banner-title">Today's session</div>
+          <div class="continue-banner-exs">{{ ts.exercise_names or 'No exercises logged yet' }}</div>
+      </div>
+      <a href="/workout/log/new?continue={{ ts.id }}" class="btn-continue">Continue</a>
+  </div>
+  {% endfor %}
+{% endif %}
+
+{# ── Continue-mode bar ── #}
+{% if continue_session %}
+<div class="continue-mode-bar">
+    <div class="continue-mode-label">Continuing today's session</div>
+    {% if continue_session.exercises %}
+    <div class="continue-mode-done">
+        {% for ex in continue_session.exercises %}
+        <span class="done-badge">{{ ex.name }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+{# ── Date (hidden in continue mode — date is locked to today) ── #}
+{% if not continue_session %}
+<div class="log-date-card">
+    <span class="log-date-label">Date</span>
+    <input type="date" id="session-date" value="{{ today }}">
+</div>
+{% endif %}
+
+{# ── Session log ── #}
+<div class="section-title">Session</div>
+<div class="session-log-card" id="session-log-card" style="margin-top:8px;">
+    <div class="session-log-empty" id="log-empty">No exercises added yet</div>
+    <div id="log-items"></div>
+</div>
+<button type="button" class="btn btn-primary btn-full" id="save-btn"
+        onclick="saveSession()" disabled style="margin-bottom:28px; opacity:0.45;">
+    Save Session
+</button>
+
+{# ── Gym filter ── #}
+<div class="section-title" style="margin-top:4px;">Exercises</div>
+<label style="display:flex; align-items:center; gap:10px; margin-bottom:16px; margin-top:10px;
+              background:var(--surface); border:0.5px solid var(--border);
+              border-radius:10px; padding:12px 14px; cursor:pointer;
+              font-size:0.9rem; font-weight:600; color:var(--text);">
+    <input type="checkbox" id="hide-gym-toggle" onchange="filterGym(this.checked)"
+           style="width:18px; height:18px; accent-color:var(--accent); cursor:pointer;">
+    Show gym-only exercises
+</label>
+
+{% set ns = namespace(idx=0) %}
+
+{% for mg, exercises in by_muscle.items() %}
+{% if exercises %}
+<div class="mg-group" data-mg="{{ mg | lower }}">
+    <button class="mg-group-btn" onclick="toggleGroup(this)">
+        <span>{{ mg }}</span>
+        <span class="ex-chevron">›</span>
+    </button>
+    <ul class="mg-exercise-list">
+        {% for ex in exercises %}
+        {% set ns.idx = ns.idx + 1 %}
+        {% set eid = 'ex' ~ ns.idx %}
+        <li class="mg-exercise-item" data-location="{{ ex.location }}">
+            <button class="ex-row" onclick="togglePicker('{{ eid }}')">
+                <span class="mg-exercise-name">{{ ex.name }}</span>
+                <span class="ex-chevron" id="chev-{{ eid }}">›</span>
+            </button>
+            <div class="ex-picker" id="picker-{{ eid }}"
+                 data-name="{{ ex.name }}" data-timed="{{ 'true' if ex.timed else 'false' }}">
+                <div class="picker-row">
+                    <span class="picker-label">{{ 'Duration (s)' if ex.timed else 'Reps' }}</span>
+                    <div class="stepper">
+                        <button class="stepper-btn" onclick="step('{{ eid }}-reps',-1,{{ ex.reps_range[0] }},{{ ex.reps_range[1] }})">−</button>
+                        <span class="stepper-val" id="val-{{ eid }}-reps">{{ ex.reps }}</span>
+                        <button class="stepper-btn" onclick="step('{{ eid }}-reps', 1,{{ ex.reps_range[0] }},{{ ex.reps_range[1] }})">+</button>
+                    </div>
+                </div>
+                <div class="picker-row">
+                    <span class="picker-label">Sets</span>
+                    <div class="stepper">
+                        <button class="stepper-btn" onclick="step('{{ eid }}-sets',-1,{{ ex.sets_range[0] }},{{ ex.sets_range[1] }})">−</button>
+                        <span class="stepper-val" id="val-{{ eid }}-sets">{{ ex.sets }}</span>
+                        <button class="stepper-btn" onclick="step('{{ eid }}-sets', 1,{{ ex.sets_range[0] }},{{ ex.sets_range[1] }})">+</button>
+                    </div>
+                </div>
+                <button type="button" class="btn-add-ex" id="add-btn-{{ eid }}"
+                        onclick="addToSession('{{ eid }}')">
+                    Add to Session
+                </button>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+{% endfor %}
+
+<div class="mg-group">
+    <button class="mg-group-btn" onclick="toggleGroup(this)">
+        <span>Cardio</span>
+        <span class="ex-chevron">›</span>
+    </button>
+    <ul class="mg-exercise-list">
+        {% for c in cardio %}
+        <li class="mg-exercise-item">
+            <span class="mg-exercise-name">{{ c.name }}</span>
+            <span style="font-size:0.8rem; color:var(--muted); font-weight:600;">{{ c.desc }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+
+{# Hidden form — submitted by saveSession() #}
+<form id="log-form" method="POST" action="/workout/custom/log" style="display:none;">
+    <input type="hidden" name="date" id="form-date" value="{{ today }}">
+    {% if continue_session %}
+    <input type="hidden" name="continue_session_id" value="{{ continue_session.id }}">
+    {% endif %}
+    <div id="form-exercise-fields"></div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleGroup(btn) {
+    btn.closest('.mg-group').classList.toggle('open');
+}
+function togglePicker(id) {
+    const picker  = document.getElementById('picker-' + id);
+    const chevron = document.getElementById('chev-' + id);
+    const opening = !picker.classList.contains('open');
+    document.querySelectorAll('.ex-picker.open').forEach(p => {
+        p.classList.remove('open');
+        const c = document.getElementById('chev-' + p.id.replace('picker-', ''));
+        if (c) c.classList.remove('open');
+    });
+    if (opening) {
+        picker.classList.add('open');
+        chevron.classList.add('open');
+    }
+}
+function step(id, delta, min, max) {
+    const el = document.getElementById('val-' + id);
+    el.textContent = Math.max(min, Math.min(max, parseInt(el.textContent) + delta));
+}
+function filterGym(show) {
+    document.querySelectorAll('.mg-exercise-item[data-location="gym"]').forEach(el => {
+        el.style.display = show ? '' : 'none';
+    });
+}
+document.addEventListener('DOMContentLoaded', () => filterGym(false));
+
+// Keep form date in sync with date picker (date picker absent in continue mode)
+const _dateInput = document.getElementById('session-date');
+if (_dateInput) {
+    _dateInput.addEventListener('change', function() {
+        document.getElementById('form-date').value = this.value;
+    });
+}
+
+// ── Session log ───────────────────────────────────────────────────────────
+let _items = [];
+let _uid   = 0;
+
+function addToSession(eid) {
+    const picker = document.getElementById('picker-' + eid);
+    const name   = picker.dataset.name;
+    const timed  = picker.dataset.timed === 'true';
+    const reps   = parseInt(document.getElementById('val-' + eid + '-reps').textContent);
+    const sets   = parseInt(document.getElementById('val-' + eid + '-sets').textContent);
+    _items.push({ uid: ++_uid, eid, name, reps, sets, timed });
+    _setBtn(eid, true);
+    picker.classList.remove('open');
+    const chev = document.getElementById('chev-' + eid);
+    if (chev) chev.classList.remove('open');
+    _render();
+}
+
+function removeItem(uid) {
+    const item = _items.find(i => i.uid === uid);
+    _items = _items.filter(i => i.uid !== uid);
+    if (item) _setBtn(item.eid, false);
+    _render();
+}
+
+function _setBtn(eid, added) {
+    const btn = document.getElementById('add-btn-' + eid);
+    if (!btn) return;
+    btn.textContent = added ? 'Added ✓' : 'Add to Session';
+    btn.disabled    = added;
+}
+
+function _render() {
+    const empty  = document.getElementById('log-empty');
+    const items  = document.getElementById('log-items');
+    const fields = document.getElementById('form-exercise-fields');
+    const save   = document.getElementById('save-btn');
+
+    const hasItems = _items.length > 0;
+    empty.style.display   = hasItems ? 'none' : '';
+    save.disabled         = !hasItems;
+    save.style.opacity    = hasItems ? '' : '0.45';
+
+    if (!hasItems) {
+        items.innerHTML  = '';
+        fields.innerHTML = '';
+        return;
+    }
+
+    items.innerHTML = _items.map(item => {
+        const spec = item.timed ? `${item.reps}s × ${item.sets}` : `${item.reps} × ${item.sets}`;
+        return `<div class="log-item-row">
+            <span class="log-item-name">${item.name}</span>
+            <span class="log-item-spec">${spec}</span>
+            <button type="button" class="log-item-rm" onclick="removeItem(${item.uid})">×</button>
+        </div>`;
+    }).join('');
+
+    fields.innerHTML = _items.map(item =>
+        `<input type="hidden" name="ex_name" value="${item.name}">` +
+        `<input type="hidden" name="ex_reps" value="${item.reps}">` +
+        `<input type="hidden" name="ex_sets" value="${item.sets}">`
+    ).join('');
+}
+
+function saveSession() {
+    if (_items.length === 0) return;
+    const form = document.getElementById('log-form');
+    if (!form.querySelector('[name="_csrf"]')) {
+        const inp = document.createElement('input');
+        inp.type = 'hidden'; inp.name = '_csrf'; inp.value = window._csrf || '';
+        form.appendChild(inp);
+    }
+    form.submit();
+}
+</script>
+{% endblock %}

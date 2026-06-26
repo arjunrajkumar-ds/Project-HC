@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% block title %}Food Database{% endblock %}
+
+{% block extra_css %}
+<style>
+.fdb-search {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--text);
+    font-family: inherit; font-size: 0.95rem;
+    padding: 11px 14px; box-sizing: border-box;
+    margin-bottom: 12px; outline: none;
+}
+.fdb-search:focus { border-color: var(--accent); }
+
+.fdb-list { display: flex; flex-direction: column; gap: 4px; }
+.fdb-row {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface); border-radius: 10px;
+    padding: 11px 14px; text-decoration: none; color: inherit;
+    -webkit-tap-highlight-color: transparent;
+}
+.fdb-row:active { opacity: .7; }
+.fdb-name {
+    flex: 1; font-size: 0.88rem; font-weight: 700; color: var(--text);
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fdb-macros {
+    font-size: 0.72rem; color: var(--muted); white-space: nowrap; flex-shrink: 0;
+}
+.fdb-badge {
+    font-size: 0.6rem; font-weight: 800; letter-spacing: .05em;
+    text-transform: uppercase; border-radius: 20px;
+    padding: 3px 7px; flex-shrink: 0;
+    background: rgba(99,102,241,.15); color: var(--accent);
+}
+.fdb-unit {
+    font-size: 0.65rem; color: var(--dim); flex-shrink: 0;
+}
+.fdb-arrow { font-size: 0.9rem; color: var(--dim); flex-shrink: 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+    <a href="/food" style="
+        background:var(--surface);border:1px solid var(--border);
+        border-radius:8px;color:var(--muted);font-size:1.1rem;
+        padding:7px 12px;text-decoration:none;flex-shrink:0;
+        -webkit-tap-highlight-color:transparent;
+    ">‹</a>
+    <h1 style="margin:0;flex:1">Food Database</h1>
+    <a href="/food/edit/new" style="
+        background:var(--accent);border:none;border-radius:8px;
+        color:#fff;font-size:0.8rem;font-weight:800;
+        padding:9px 14px;text-decoration:none;flex-shrink:0;
+        -webkit-tap-highlight-color:transparent;
+    ">+ Add Food</a>
+</div>
+
+{% if food_library %}
+<input type="search" class="fdb-search" id="fdb-search"
+       placeholder="Search {{ food_library | length }} foods…"
+       oninput="filterFoods(this.value)" autocomplete="off">
+
+<div class="fdb-list" id="fdb-list">
+    {% for item in food_library %}
+    {% set is_pending = item.calories == 0 %}
+    <a href="/food/edit/{{ item.name | urlencode }}"
+       class="fdb-row"
+       data-name="{{ item.name | lower | e }}">
+        <span class="fdb-name">{{ item.name | strip_food_prefix | e }}</span>
+        {% if is_pending %}
+            <span class="fdb-badge">define</span>
+        {% else %}
+            <span class="fdb-macros">{{ item.calories | int }} kcal · {{ item.protein_g | round(1) }}g P</span>
+            <span class="fdb-unit">{% if item.unit_type == 'unit' %}/unit{% else %}/100g{% endif %}</span>
+        {% endif %}
+        <span class="fdb-arrow">›</span>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<p style="font-size:0.85rem;color:var(--dim);padding:20px 0">
+    No foods yet.
+    <a href="/food/edit/new" style="color:var(--accent)">Add the first one →</a>
+</p>
+{% endif %}
+
+<script>
+function filterFoods(q) {
+    const term = q.trim().toLowerCase();
+    document.querySelectorAll('#fdb-list .fdb-row').forEach(row => {
+        row.style.display = (!term || row.dataset.name.includes(term)) ? '' : 'none';
+    });
+}
+</script>
+{% endblock %}

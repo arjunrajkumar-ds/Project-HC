@@ -3,101 +3,59 @@
 
 {% block extra_css %}
 <style>
-/* ── Step 1 ─────────────────────────────────────────────────────── */
-.setup-form  { display: flex; flex-direction: column; gap: 20px; }
-.day-label   { font-size: 0.78rem; font-weight: 600; color: var(--muted);
-               text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
-.day-grid    { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-
-.day-btn {
-    border: none; border-radius: 14px; cursor: pointer;
-    font-family: inherit; font-size: 1.15rem; font-weight: 800;
-    min-height: 72px; padding: 16px 10px;
-    -webkit-tap-highlight-color: transparent;
-}
-.day-btn:active { opacity: .7; }
-.day-btn.push { background: var(--push-bg); color: var(--push-fg); }
-.day-btn.pull { background: var(--pull-bg); color: var(--pull-fg); }
-.day-btn.legs { background: var(--legs-bg); color: var(--legs-fg); }
-.day-btn.core { background: var(--core-bg); color: var(--core-fg); }
-
-/* ── Step 2 meta bar ─────────────────────────────────────────────── */
-.session-meta {
-    display: flex; align-items: center; gap: 10px;
-    margin-bottom: 18px; flex-wrap: wrap;
-}
-.session-date-display { font-size: 0.9rem; color: var(--muted); }
-.change-link { font-size: 0.82rem; color: var(--dim); margin-left: auto;
-               text-decoration: none; padding: 6px 0; }
-
-/* ── Exercise blocks ─────────────────────────────────────────────── */
+/* ── Form layout ─────────────────────────────────────────────────── */
 #session-form { display: flex; flex-direction: column; gap: 12px; }
 
-.exercise-block {
-    background: var(--surface); border-radius: 12px; padding: 14px;
+/* ── Day type selector ───────────────────────────────────────────── */
+.day-type-btns {
+    display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px;
 }
-.tier1-block { border: 1px solid #2a2a3e; }
+.btn-day {
+    background: #FFFFFF; border: 2px solid var(--border);
+    border-radius: 10px; cursor: pointer; font-family: inherit;
+    font-size: 0.88rem; font-weight: 700; min-height: 44px;
+    color: var(--dim); -webkit-tap-highlight-color: transparent;
+}
+.btn-day:active { opacity: .75; }
+.btn-day.active.push { border-color: var(--push-fg); background: var(--push-bg); color: var(--push-fg); }
+.btn-day.active.pull { border-color: var(--pull-fg); background: var(--pull-bg); color: var(--pull-fg); }
+.btn-day.active.legs { border-color: var(--legs-fg); background: var(--legs-bg); color: var(--legs-fg); }
+.btn-day.active.core { border-color: var(--core-fg); background: var(--core-bg); color: var(--core-fg); }
+
+/* ── Exercise blocks ─────────────────────────────────────────────── */
+.exercise-block {
+    background: #FFFFFF; border-radius: 12px; padding: 14px;
+}
+.tier1-block { border: 1px solid var(--t1-bg); }
 
 .block-header {
     display: flex; align-items: center; gap: 8px;
     margin-bottom: 12px; flex-wrap: wrap;
 }
-.block-title { font-weight: 600; font-size: 0.95rem; color: #fff; }
+.block-title { font-weight: 600; font-size: 0.95rem; color: var(--text); }
 .scheme-tag  { font-size: 0.7rem; color: var(--dim); margin-left: auto; }
 .muscle-tag  { font-size: 0.75rem; color: var(--muted); }
 
-/* ── Set rows ────────────────────────────────────────────────────── */
-/* 4 col: set-num | reps | weight | remove */
-.sets-header {
-    display: grid;
-    grid-template-columns: 32px 1fr 1fr 44px;
-    gap: 6px; align-items: center;
-    font-size: 0.67rem; font-weight: 600; color: #444;
-    text-transform: uppercase; letter-spacing: .05em;
-    margin-bottom: 4px; padding: 0 2px;
-}
-.set-row {
-    display: grid;
-    grid-template-columns: 32px 1fr 1fr 44px;
-    gap: 6px; align-items: center;
-    margin-bottom: 6px;
-}
-.set-num { font-size: 0.82rem; color: var(--dim); text-align: center; }
 
-/* Override base input padding for compact set rows */
-.set-row input[type="number"] {
-    padding: 11px 8px;
-    min-height: 48px;
-    text-align: center;
-    font-weight: 600;
-    background: var(--bg);
+/* ── Tier selector buttons ───────────────────────────────────────── */
+.tier-buttons {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;
+    margin-bottom: 4px;
 }
+.btn-tier {
+    background: #FFFFFF; border: 2px solid var(--border);
+    border-radius: 12px; cursor: pointer; font-family: inherit;
+    min-height: 60px; padding: 10px 6px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 5px; -webkit-tap-highlight-color: transparent;
+}
+.btn-tier-label { font-size: 0.68rem; color: var(--dim); font-weight: 500; }
+.btn-tier:active { opacity: .75; }
+.btn-tier.active.t1 { border-color: var(--t1-fg); background: var(--t1-bg); }
+.btn-tier.active.t2 { border-color: var(--t2-fg); background: var(--t2-bg); }
+.btn-tier.active.t3 { border-color: var(--t3-fg); background: var(--t3-bg); }
 
-.btn-rm-set {
-    background: none; border: 1px solid transparent; border-radius: 8px;
-    color: var(--border); cursor: pointer; font-size: 1rem;
-    min-height: 48px; min-width: 44px;
-    display: flex; align-items: center; justify-content: center;
-    -webkit-tap-highlight-color: transparent;
-}
-.btn-rm-set:active { color: var(--push-fg); border-color: var(--push-fg); }
-
-.btn-add-set {
-    background: none; border: 1px dashed var(--border); border-radius: 8px;
-    color: var(--dim); cursor: pointer; font-family: inherit; font-size: 0.9rem;
-    min-height: 48px; padding: 10px; width: 100%; margin-top: 6px;
-    -webkit-tap-highlight-color: transparent;
-}
-.btn-add-set:active { border-color: var(--pull-fg); color: var(--pull-fg); }
-
-/* ── Tier 3 section ──────────────────────────────────────────────── */
-.tier3-section {
-    background: var(--surface); border-radius: 12px; padding: 14px;
-    display: flex; flex-direction: column; gap: 10px;
-}
-.tier3-header { display: flex; align-items: center; gap: 8px; }
-.tier3-add-row { display: flex; gap: 8px; }
-.tier3-add-row select { flex: 1; }
+/* ── Add-exercise rows (T1/T2/T3 pickers) ───────────────────────── */
 
 .btn-add-t3 {
     background: var(--t3-bg); border: none; border-radius: 8px;
@@ -105,8 +63,73 @@
     font-size: 0.95rem; font-weight: 700;
     min-height: 48px; padding: 10px 16px; white-space: nowrap;
 }
-#tier3-blocks { display: flex; flex-direction: column; gap: 12px; }
-#tier3-blocks .exercise-block { background: var(--bg); margin: 0; }
+
+/* ── T2 picker panel ─────────────────────────────────────────────── */
+.picker-label {
+    font-size: 0.7rem; font-weight: 700; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .08em;
+}
+.t2-rec-chips {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    min-height: 44px; align-items: center;
+}
+.t2-rec-empty { font-size: 0.82rem; color: var(--dim); }
+.t2-chip {
+    background: #FFFFFF; border: 2px solid var(--border);
+    border-radius: 10px; cursor: pointer; font-family: inherit;
+    font-size: 0.85rem; font-weight: 700; min-height: 44px;
+    padding: 8px 14px; color: var(--muted);
+    -webkit-tap-highlight-color: transparent;
+}
+.t2-chip.push { background: var(--push-bg); border-color: var(--push-fg); color: var(--push-fg); }
+.t2-chip.pull { background: var(--pull-bg); border-color: var(--pull-fg); color: var(--pull-fg); }
+.t2-chip.legs { background: var(--legs-bg); border-color: var(--legs-fg); color: var(--legs-fg); }
+.t2-chip.core { background: var(--core-bg); border-color: var(--core-fg); color: var(--core-fg); }
+.t2-chip.added { opacity: .4; cursor: default; }
+.t2-chip:active:not(.added) { opacity: .75; }
+
+.t2-all-scroll {
+    display: flex; flex-direction: column; gap: 4px;
+}
+.t2-grp-btn {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 14px; cursor: pointer; font-family: inherit;
+    font-size: 0.82rem; font-weight: 700; color: var(--muted);
+    -webkit-tap-highlight-color: transparent; width: 100%; text-align: left;
+}
+.t2-grp-btn:active { opacity: .75; }
+.t2-grp-arrow { font-size: 0.7rem; transition: transform .2s ease; color: var(--dim); }
+.t2-grp-btn.open .t2-grp-arrow { transform: rotate(90deg); }
+.t2-grp-items {
+    display: none; flex-direction: column; gap: 4px;
+    padding: 0 0 2px 8px;
+}
+.t2-grp-items.open { display: flex; }
+.t2-all-item {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface-2); border-radius: 10px;
+    padding: 11px 14px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.t2-all-item:active:not(.added) { opacity: .75; }
+.t2-all-item.added { opacity: .4; pointer-events: none; }
+.t2-all-name   { font-size: 0.88rem; font-weight: 600; color: var(--text); flex: 1; }
+.t2-all-check  { font-size: 0.82rem; color: var(--legs-fg); flex-shrink: 0; visibility: hidden; }
+.t2-all-item.added .t2-all-check { visibility: visible; }
+.t2-all-item.t1-selected {
+    background: var(--t1-bg); border: 1px solid var(--t1-fg);
+}
+.t2-all-item.t1-selected .t2-all-name { color: var(--t1-fg); }
+
+.tier-section {
+    background: var(--surface); border-radius: 12px; padding: 14px;
+    display: flex; flex-direction: column; gap: 10px;
+}
+.tier-section-header { display: flex; align-items: center; gap: 8px; }
+#t1-blocks, #t2-blocks, #t3-blocks { display: flex; flex-direction: column; gap: 12px; }
+#t2-blocks .exercise-block,
+#t3-blocks .exercise-block { background: var(--surface-2); margin: 0; }
 
 .btn-rm-block {
     background: none; border: none; color: var(--dim); cursor: pointer;
@@ -116,7 +139,71 @@
 .btn-rm-block:active { color: var(--push-fg); }
 
 /* ── Notes + save ────────────────────────────────────────────────── */
-.notes-group { margin-top: 4px; }
+.notes-split {
+    display: flex; gap: 10px; margin-top: 4px; align-items: stretch;
+}
+
+/* Receipt panel */
+.receipt-panel {
+    flex: 1; background: var(--surface); border-radius: 12px;
+    padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
+    min-height: 110px;
+}
+.receipt-title {
+    font-size: 0.68rem; font-weight: 600; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .07em; flex-shrink: 0;
+}
+.receipt-body {
+    flex: 1; display: flex; flex-direction: column; gap: 6px;
+    overflow-y: auto; max-height: 160px;
+}
+.receipt-empty {
+    font-size: 0.78rem; color: var(--dim); font-style: italic;
+}
+.receipt-row {
+    display: flex; align-items: center; gap: 7px;
+}
+.receipt-name {
+    flex: 1; font-size: 0.8rem; font-weight: 600; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.receipt-stat {
+    font-size: 0.75rem; font-weight: 700; flex-shrink: 0;
+}
+.receipt-stat.ok      { color: var(--legs-fg); }
+.receipt-stat.fail    { color: var(--push-fg); }
+.receipt-stat.going   { color: var(--muted); }
+.receipt-stat.t3      { color: var(--t3-fg); }
+.receipt-rm {
+    background: none; border: none; color: var(--dim); font-size: 1rem;
+    cursor: pointer; padding: 0 2px; line-height: 1; flex-shrink: 0;
+}
+.receipt-rm:hover { color: var(--push-fg); }
+
+/* Remind panel */
+.remind-panel {
+    flex: 1; background: var(--surface); border-radius: 12px;
+    padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
+}
+.remind-panel-title {
+    font-size: 0.68rem; font-weight: 600; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .07em;
+}
+.remind-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px; flex: 1;
+}
+.btn-remind {
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 8px; cursor: pointer; font-family: inherit;
+    font-size: 0.78rem; font-weight: 600; color: var(--dim);
+    padding: 10px 6px; text-align: center;
+    -webkit-tap-highlight-color: transparent;
+    transition: border-color .15s, color .15s;
+}
+.btn-remind:active { border-color: var(--t3-fg); color: var(--t3-fg); }
+.btn-remind.reminded {
+    text-decoration: line-through; opacity: 0.45; pointer-events: none;
+}
 .btn-save-session {
     background: var(--accent); border: none; border-radius: 12px;
     color: #fff; cursor: pointer; font-family: inherit;
@@ -124,226 +211,1647 @@
     min-height: 56px; padding: 16px; width: 100%; margin-top: 6px;
     -webkit-tap-highlight-color: transparent;
 }
-.btn-save-session:active { opacity: .85; }
+.btn-save-session:active    { opacity: .85; }
+.btn-save-session:disabled  { opacity: .45; cursor: default; }
 
-/* ── Progression widget (compact, inside exercise blocks) ─────────── */
+/* ── Progression widget ───────────────────────────────────────────── */
 .prog-widget {
-    background: var(--bg);
-    border-radius: 8px;
-    padding: 10px 12px;
-    margin-bottom: 10px;
-    border: 1px solid var(--border);
+    background: var(--surface-2); border-radius: 8px; padding: 10px 12px;
+    margin-bottom: 10px; border: 1px solid var(--border);
 }
-.pw-target {
-    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
-    margin-bottom: 8px;
+.pw-main {
+    display: flex; align-items: flex-start; gap: 10px;
 }
-.pw-weight { font-size: 1.1rem; font-weight: 800; color: #fff; }
-.pw-kg     { font-size: 0.78rem; color: var(--dim); }
-.pw-arrow  { color: var(--dim); font-size: 0.85rem; }
-.pw-reps   { font-size: 0.95rem; font-weight: 700; color: var(--pull-fg); }
-.pw-stage  { font-size: 0.68rem; color: var(--dim); margin-left: auto; white-space: nowrap; }
-
-.pw-track  {
-    display: flex; align-items: center; gap: 3px;
-    margin-bottom: 8px; flex-wrap: wrap;
+.pw-weight-col {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    flex-shrink: 0;
 }
-.pw-dot {
-    width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+.pw-weight-input {
+    width: 72px; font-size: 1.2rem; font-weight: 800;
+    padding: 6px 8px; text-align: center; min-height: 44px;
+    background: #FFFFFF; border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text);
 }
-.pw-dot.done    { background: #4ade80; }
-.pw-dot.current { background: #fff; box-shadow: 0 0 0 2px var(--pull-fg); width: 11px; height: 11px; }
-.pw-dot.future  { background: var(--border); }
-.pw-sep { width: 6px; height: 2px; background: var(--border); border-radius: 1px; flex-shrink: 0; }
-
-.pw-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-
-.btn-pw-advance {
-    background: var(--surface-2); color: var(--pull-fg);
-    border: 1px solid var(--pull-fg); border-radius: 6px;
-    cursor: pointer; font-family: inherit; font-size: 0.8rem; font-weight: 700;
-    min-height: 36px; padding: 6px 12px;
+.pw-kg     { font-size: 0.72rem; color: var(--dim); }
+.pw-unit-toggle {
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 5px; color: var(--dim); cursor: pointer;
+    font-family: inherit; font-size: 0.65rem; font-weight: 700;
+    padding: 3px 7px; margin-top: 2px;
     -webkit-tap-highlight-color: transparent;
 }
-.btn-pw-advance.last { border-color: var(--t1-fg); color: var(--t1-fg); }
-.btn-pw-advance:active { opacity: .7; }
+.pw-unit-toggle:active { border-color: var(--t2-fg); color: var(--t2-fg); }
+.pw-barbell-note {
+    font-size: 0.68rem; color: var(--t2-fg);
+    background: var(--t2-bg); border-left: 2px solid var(--t2-fg);
+    border-radius: 4px; padding: 4px 8px; margin-top: 6px;
+}
 
-.pw-no-prog {
-    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    font-size: 0.8rem; color: var(--dim);
+.pw-grid {
+    display: flex; flex-direction: column; gap: 3px;
+    margin-bottom: 8px;
 }
-.pw-no-prog input {
-    width: 80px; min-height: 36px; padding: 6px 10px;
-    font-size: 16px; text-align: center;
+.pw-grid-row { display: flex; align-items: center; gap: 2px; }
+.pw-grid-label {
+    font-size: 0.62rem; color: var(--dim);
+    width: 22px; text-align: right; flex-shrink: 0;
+    padding-right: 3px;
 }
-.btn-pw-setwt {
-    background: var(--surface-2); color: var(--muted);
-    border: 1px solid var(--border); border-radius: 6px;
-    cursor: pointer; font-family: inherit; font-size: 0.8rem; font-weight: 600;
-    min-height: 36px; padding: 6px 12px;
+.pw-cell {
+    font-size: 0.65rem; font-weight: 700;
+    border-radius: 4px; padding: 4px 6px;
+    min-width: 28px; text-align: center; line-height: 1;
 }
+.pw-cell               { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.pw-cell.done          { background: var(--legs-bg); color: var(--legs-fg); }
+.pw-cell.current       { background: var(--surface); color: var(--text); box-shadow: 0 0 0 2px var(--accent); }
+.pw-cell.future        { background: var(--border); color: var(--dim); }
+.pw-cell.att-ok        { box-shadow: 0 0 0 2px var(--legs-fg); }
+.pw-cell.att-fail      { box-shadow: 0 0 0 2px var(--push-fg); }
+.pw-cell.current.att-ok   { box-shadow: 0 0 0 2px var(--accent), inset 0 0 0 1px var(--legs-fg); }
+.pw-cell.current.att-fail { box-shadow: 0 0 0 2px var(--accent), inset 0 0 0 1px var(--push-fg); }
+.pw-cell:active        { opacity: .7; }
+
+/* ── Weight input error state ────────────────────────────────────── */
+@keyframes shake {
+    0%,100% { transform: translateX(0); }
+    20%      { transform: translateX(-6px); }
+    40%      { transform: translateX(6px); }
+    60%      { transform: translateX(-4px); }
+    80%      { transform: translateX(4px); }
+}
+.pw-weight-input.error {
+    border-color: #f87171; animation: shake 0.35s ease;
+}
+
+/* ── Tick confirm button ──────────────────────────────────────────── */
+.pw-tick-col { display: flex; align-items: stretch; margin-left: auto; flex-shrink: 0; }
+.pw-tick {
+    background: var(--accent); border: none; border-radius: 8px;
+    color: #fff; cursor: pointer; font-size: 1.2rem; font-weight: 800;
+    min-width: 44px; padding: 0 10px; align-self: stretch;
+    display: flex; align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+}
+.pw-tick:active { opacity: .75; }
+
+/* ── Tracking state ──────────────────────────────────────────────── */
+.pw-track-row {
+    display: flex; align-items: stretch; gap: 8px;
+}
+.pw-summary-col {
+    flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 2px;
+}
+.pw-summary-scheme { font-size: 0.95rem; font-weight: 700; color: var(--text); }
+.pw-summary-wt     { font-size: 0.8rem; color: var(--dim); }
+.pw-tally-col {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-width: 54px; flex-shrink: 0;
+}
+.pw-tally     { font-size: 1.8rem; font-weight: 800; color: var(--text); line-height: 1; }
+.pw-tally-sub { font-size: 0.65rem; color: var(--dim); margin-top: 2px; }
+.pw-tap {
+    background: var(--t1-bg); border: 2px solid var(--t1-fg);
+    border-radius: 10px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.8rem; font-weight: 800; color: var(--t1-fg);
+    min-height: 72px; min-width: 72px; flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent; user-select: none;
+}
+.pw-tap.t2    { background: var(--t2-bg); border-color: var(--t2-fg); color: var(--t2-fg); }
+.pw-tap.t3    { background: var(--t3-bg); border-color: var(--t3-fg); color: var(--t3-fg); }
+.pw-tap:active { opacity: .7; transform: scale(.95); }
+.pw-action-row {
+    display: flex; gap: 6px; margin-top: 8px;
+}
+.pw-btn-scheme, .pw-btn-weight, .pw-giveup {
+    background: none; border: 1px solid var(--border); border-radius: 6px;
+    cursor: pointer; font-family: inherit; font-size: 0.75rem; font-weight: 700;
+    padding: 7px 10px; flex: 1;
+    -webkit-tap-highlight-color: transparent;
+    color: var(--muted);
+}
+.pw-btn-scheme:active { border-color: var(--pull-fg); color: var(--pull-fg); }
+.pw-btn-weight:active { border-color: var(--core-fg); color: var(--core-fg); }
+.pw-giveup            { color: var(--dim); }
+.pw-giveup:active     { border-color: #f87171; color: #f87171; }
+
+/* inline scheme picker (change-scheme flow) */
+.pw-scheme-panel {
+    margin-top: 8px; background: var(--surface-2); border-radius: 8px;
+    border: 1px solid var(--border); padding: 10px;
+}
+.pw-scheme-panel-label {
+    font-size: 0.62rem; font-weight: 700; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px;
+}
+
+/* inline weight editor (change-weight flow) */
+.pw-weight-panel {
+    margin-top: 8px; background: var(--surface-2); border-radius: 8px;
+    border: 1px solid var(--border); padding: 10px;
+    display: flex; align-items: center; gap: 8px;
+}
+.pw-weight-panel input {
+    flex: 1; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); font-family: inherit;
+    font-size: 16px; font-weight: 700; padding: 8px 10px;
+    min-height: 42px; -webkit-appearance: none;
+    -moz-appearance: textfield;
+}
+.pw-weight-panel input::-webkit-inner-spin-button,
+.pw-weight-panel input::-webkit-outer-spin-button { -webkit-appearance: none; }
+.pw-weight-panel input:focus { outline: none; border-color: var(--accent); }
+.pw-weight-unit { font-size: 0.78rem; color: var(--dim); font-weight: 700; }
+.pw-weight-confirm {
+    background: var(--accent); border: 1px solid var(--accent);
+    border-radius: 6px; color: #fff; cursor: pointer;
+    font-family: inherit; font-size: 0.78rem; font-weight: 800;
+    padding: 8px 12px; -webkit-tap-highlight-color: transparent; white-space: nowrap;
+}
+.pw-weight-confirm:active { opacity: .75; }
+
+/* inline give-up confirm panel */
+.pw-giveup-panel {
+    margin-top: 8px; background: #FEE2E2; border: 1px solid #FECACA;
+    border-radius: 8px; padding: 10px 12px;
+    display: flex; flex-direction: column; gap: 8px;
+}
+.pw-giveup-summary {
+    font-size: 0.82rem; color: var(--muted); font-weight: 600;
+}
+.pw-giveup-last-row {
+    display: flex; align-items: center; gap: 8px;
+}
+.pw-giveup-last-label {
+    font-size: 0.75rem; color: var(--dim); white-space: nowrap;
+}
+.pw-giveup-last-input {
+    width: 64px; background: var(--surface); border: 1px solid #FECACA;
+    border-radius: 6px; color: var(--text); font-family: inherit;
+    font-size: 16px; font-weight: 700; padding: 6px 8px;
+    -webkit-appearance: none; -moz-appearance: textfield;
+    text-align: center;
+}
+.pw-giveup-last-input::-webkit-inner-spin-button,
+.pw-giveup-last-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+.pw-giveup-last-input:focus { outline: none; border-color: var(--push-fg); }
+.pw-giveup-btns { display: flex; gap: 6px; }
+.pw-giveup-confirm {
+    flex: 1; background: var(--push-bg); border: 1px solid #FECACA;
+    border-radius: 6px; color: var(--push-fg); cursor: pointer;
+    font-family: inherit; font-size: 0.82rem; font-weight: 800;
+    padding: 8px; -webkit-tap-highlight-color: transparent;
+}
+.pw-giveup-confirm:active { opacity: .75; }
+.pw-giveup-cancel {
+    background: none; border: 1px solid var(--border);
+    border-radius: 6px; color: var(--dim); cursor: pointer;
+    font-family: inherit; font-size: 0.82rem; font-weight: 700;
+    padding: 8px 12px; -webkit-tap-highlight-color: transparent;
+}
+.pw-giveup-cancel:active { opacity: .75; }
+
+/* ── Done / failed banners ───────────────────────────────────────── */
+.pw-done-banner {
+    background: var(--accent-light); border: 1px solid var(--legs-fg); border-radius: 8px;
+    padding: 12px 14px; color: var(--accent-text); font-weight: 700; font-size: 0.88rem;
+    display: flex; align-items: center; gap: 8px;
+}
+.pw-fail-banner {
+    background: #FEE2E2; border: 1px solid #FECACA; border-radius: 8px;
+    padding: 12px 14px; color: #991B1B; font-weight: 600; font-size: 0.88rem;
+    display: flex; align-items: center; gap: 8px;
+}
+
+/* ── Rest timer bar ──────────────────────────────────────────────── */
+#rest-timer-bar {
+    position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: #FFFFFF; border: 1px solid var(--accent);
+    border-radius: 20px; padding: 8px 20px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 0.88rem; font-weight: 700; color: var(--accent);
+    box-shadow: 0 4px 16px rgba(0,0,0,.12);
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease;
+    z-index: 999; white-space: nowrap;
+}
+#rest-timer-bar.visible {
+    opacity: 1; pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+}
+#rest-timer-bar .rt-label { font-size: 0.72rem; color: var(--dim); font-weight: 600; letter-spacing: .06em; }
+#rest-timer-bar .rt-time  { font-size: 1.15rem; font-weight: 800; min-width: 42px; text-align: center; }
+#rest-timer-bar .rt-dot   {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent); flex-shrink: 0;
+    animation: rt-pulse 1s ease-in-out infinite;
+}
+@keyframes rt-pulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+
+/* ── Superset ────────────────────────────────────────────────────── */
+.btn-add-ss {
+    background: var(--surface-2); border: 1px dashed var(--border);
+    border-radius: 10px; color: var(--dim); cursor: pointer;
+    font-family: inherit; font-size: 0.8rem; font-weight: 700;
+    min-height: 38px; padding: 6px 14px; width: 100%;
+    margin-top: 8px; -webkit-tap-highlight-color: transparent;
+}
+.btn-add-ss:active { border-color: var(--t2-fg); color: var(--t2-fg); }
+
+.ss-group {
+    background: var(--surface-2); border: 0.5px solid var(--border);
+    border-radius: 12px; padding: 12px; margin-top: 8px;
+}
+.ss-group-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px;
+}
+.ss-header-label {
+    font-size: 0.65rem; font-weight: 800; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .1em;
+}
+.ss-dismiss-btn {
+    background: none; border: none; color: var(--dim); cursor: pointer;
+    font-size: 1.1rem; line-height: 1; padding: 0 4px;
+    -webkit-tap-highlight-color: transparent;
+}
+.ss-dismiss-btn:active { color: var(--push-fg); }
+
+.ss-slot {
+    background: var(--surface); border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 8px;
+    border: 1px solid transparent; transition: border-color .2s;
+}
+.ss-slot.ss-confirmed { border-color: var(--t2-fg); }
+.ss-slot.ss-done      { border-color: #4ade80; }
+.ss-slot.ss-failed    { border-color: var(--push-fg); }
+
+.ss-slot-header {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+}
+.ss-badge {
+    font-size: 0.6rem; font-weight: 800; letter-spacing: .07em;
+    padding: 2px 8px; border-radius: 4px; flex-shrink: 0;
+    background: var(--surface-2); color: var(--dim);
+}
+.ss-badge.confirmed { background: var(--t2-bg); color: var(--t2-fg); }
+.ss-badge.done      { background: var(--accent-light); color: var(--accent-text); }
+.ss-badge.failed    { background: var(--push-bg); color: var(--push-fg); }
+
+.ss-slot-name {
+    font-size: 0.82rem; font-weight: 600; color: var(--muted);
+    flex: 1; min-width: 0; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+}
+
+.ss-confirmed-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; background: var(--surface-2); border-radius: 8px;
+}
+.ss-confirmed-scheme { font-size: 0.82rem; font-weight: 600; color: var(--text); flex: 1; }
+.ss-confirmed-wt     { font-size: 0.8rem; color: var(--dim); }
+.ss-edit-btn {
+    background: none; border: 1px solid var(--border); border-radius: 5px;
+    color: var(--dim); cursor: pointer; font-family: inherit;
+    font-size: 0.68rem; padding: 2px 8px;
+    -webkit-tap-highlight-color: transparent;
+}
+.ss-edit-btn:active { border-color: var(--t2-fg); color: var(--t2-fg); }
+
+.ss-slot-track {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; background: var(--surface-2); border-radius: 8px;
+}
+.ss-track-info { flex: 1; }
+.ss-track-scheme { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+.ss-track-wt     { font-size: 0.72rem; color: var(--dim); margin-top: 1px; }
+.ss-track-tally  { font-size: 1.6rem; font-weight: 800; color: var(--text); line-height: 1; text-align: right; }
+.ss-track-tally-sub { font-size: 0.58rem; color: var(--dim); text-align: right; margin-top: 2px; }
+
+.ss-add-third-wrap { text-align: center; margin: 2px 0 6px; }
+.ss-add-third-btn {
+    background: none; border: none; color: var(--t2-fg); cursor: pointer;
+    font-family: inherit; font-size: 0.78rem; font-weight: 600;
+    padding: 4px 10px; -webkit-tap-highlight-color: transparent;
+}
+.ss-add-third-btn:active { color: var(--t2-fg); }
+
+.ss-group-controls { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+
+.ss-start-btn {
+    background: var(--t2-bg); border: 2px solid var(--t2-fg);
+    border-radius: 12px; color: var(--t2-fg); cursor: pointer;
+    font-family: inherit; font-size: 0.95rem; font-weight: 800;
+    min-height: 48px; width: 100%;
+    -webkit-tap-highlight-color: transparent;
+}
+.ss-start-btn:disabled { opacity: .3; pointer-events: none; }
+.ss-start-btn:active   { opacity: .75; }
+
+.ss-round-btn {
+    background: var(--accent); border: none; border-radius: 12px;
+    color: #fff; cursor: pointer; font-family: inherit;
+    font-size: 1rem; font-weight: 800; min-height: 52px; width: 100%;
+    -webkit-tap-highlight-color: transparent;
+}
+.ss-round-btn:active { opacity: .8; }
+
+.ss-giveup-btn {
+    background: none; border: 1px solid var(--border); border-radius: 6px;
+    color: var(--dim); cursor: pointer; font-family: inherit;
+    font-size: 0.78rem; padding: 6px 12px; width: 100%;
+    -webkit-tap-highlight-color: transparent;
+}
+.ss-giveup-btn:active { border-color: var(--push-fg); color: var(--push-fg); }
+
+.ss-rest-row {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 10px; padding: 8px 14px;
+}
+.ss-rest-dot  {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--t2-fg);
+    flex-shrink: 0; animation: rt-pulse 1s ease-in-out infinite;
+}
+.ss-rest-lbl  { font-size: 0.68rem; font-weight: 700; color: var(--dim); letter-spacing: .06em; }
+.ss-rest-time { font-size: 1.05rem; font-weight: 800; color: var(--t2-fg); min-width: 36px; text-align: center; }
+
+.ss-group-done-banner {
+    background: var(--accent-light); border: 1px solid var(--legs-fg); border-radius: 8px;
+    padding: 12px 14px; color: var(--accent-text); font-weight: 700; font-size: 0.88rem;
+    display: flex; align-items: center; gap: 8px;
+}
+
+/* ── Block dismiss animation ─────────────────────────────────────── */
+.block-dismissing {
+    overflow: hidden;
+    transition: transform 0.32s ease, opacity 0.22s ease;
+    transform: translateX(110%);
+    opacity: 0;
+}
+.block-collapsing {
+    overflow: hidden;
+    transition: max-height 0.22s ease, margin-bottom 0.22s ease,
+                padding-top 0.22s ease, padding-bottom 0.22s ease;
+    max-height: 0 !important;
+    margin-bottom: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+}
+
+/* ── Continue-session banner ─────────────────────────────────────── */
+.continue-banner {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 14px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin-bottom: 4px;
+}
+.continue-banner-info { flex: 1; min-width: 0; }
+.continue-banner-title {
+    font-size: 0.72rem; font-weight: 700; color: var(--t2-fg);
+    text-transform: uppercase; letter-spacing: .07em; margin-bottom: 3px;
+}
+.continue-banner-exs {
+    font-size: 0.8rem; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.btn-continue {
+    background: var(--t2-bg); border: 2px solid var(--t2-fg);
+    border-radius: 10px; color: var(--t2-fg); cursor: pointer;
+    font-family: inherit; font-size: 0.85rem; font-weight: 800;
+    min-height: 40px; padding: 8px 16px; white-space: nowrap;
+    text-decoration: none; display: inline-flex; align-items: center;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-continue:active { opacity: .75; }
+
+/* ── Inline exercise decay strip ─────────────────────────────────── */
+.ex-decay-wrap {
+    background: var(--surface-2); border-radius: 8px;
+    padding: 10px 12px; margin-bottom: 10px;
+    border: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 6px;
+    animation: fadeIn .18s ease;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+.ex-decay-eyebrow {
+    font-size: 0.56rem; font-weight: 800; text-transform: uppercase;
+    letter-spacing: .1em; color: var(--dim);
+}
+.ex-decay-bar { display: flex; gap: 2px; align-items: stretch; }
+.ex-decay-block {
+    flex: 1; border-radius: 2px; height: 14px;
+}
+.ex-decay-block.miss    { background: var(--border); }
+.ex-decay-block.today-m { background: var(--surface); border: 1px solid var(--border); }
+.ex-decay-block.hit     { /* colour set inline per muscle group */ }
+.ex-decay-axis {
+    display: flex; justify-content: space-between;
+    font-size: 0.46rem; color: var(--dim); margin-top: 1px;
+}
+.ex-decay-stats {
+    display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+}
+.ex-decay-days {
+    font-size: 1.0rem; font-weight: 800; letter-spacing: -0.02em; line-height: 1;
+}
+.ex-decay-days.fresh   { color: var(--legs-fg); }
+.ex-decay-days.due     { color: var(--core-fg); }
+.ex-decay-days.overdue { color: var(--push-fg); }
+.ex-decay-days.never   { color: var(--muted); font-size: 0.82rem; }
+.ex-decay-sub  { font-size: 0.62rem; color: var(--dim); }
+.ex-decay-last {
+    font-size: 0.65rem; color: var(--dim); margin-left: auto; white-space: nowrap;
+    position: relative;
+}
+.ex-decay-last-kg {
+    color: var(--text); font-weight: 700; cursor: pointer;
+    text-decoration: underline dotted; text-underline-offset: 2px;
+    -webkit-tap-highlight-color: transparent;
+}
+/* hover tooltip */
+.ex-decay-tip {
+    display: none; position: absolute; right: 0; bottom: calc(100% + 6px);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 11px;
+    font-size: 0.72rem; color: var(--text); white-space: nowrap;
+    box-shadow: 0 4px 16px rgba(0,0,0,.12); z-index: 100;
+    line-height: 1.6;
+}
+.ex-decay-last:hover .ex-decay-tip,
+.ex-decay-last.tip-open .ex-decay-tip { display: block; }
+.ex-decay-tip-row { display: flex; gap: 8px; align-items: center; }
+.ex-decay-tip-label { font-size: 0.62rem; color: var(--muted); min-width: 68px; }
+.ex-decay-tip-val   { font-weight: 700; }
+.ex-decay-tip-ok    { color: var(--legs-fg); }
+.ex-decay-tip-fail  { color: var(--push-fg); }
+.ex-decay-tip-date  { color: var(--dim); font-size: 0.62rem; }
+/* history panel */
+.ex-history-panel {
+    display: none; flex-direction: column; gap: 0;
+    background: var(--surface-2); border-radius: 8px;
+    border: 1px solid var(--border);
+    overflow: hidden; margin-top: 2px;
+}
+.ex-history-panel.open { display: flex; }
+.ex-hist-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 12px; border-bottom: 1px solid var(--border);
+    font-size: 0.78rem;
+}
+.ex-hist-row:last-child { border-bottom: none; }
+.ex-hist-date   { color: var(--muted); min-width: 64px; flex-shrink: 0; }
+.ex-hist-weight { font-weight: 800; color: var(--text); min-width: 52px; }
+.ex-hist-scheme { color: var(--dim); flex: 1; }
+.ex-decay-trend {
+    font-size: 0.65rem; font-weight: 700; white-space: nowrap;
+}
+.ex-decay-trend.up   { color: var(--legs-fg); }
+.ex-decay-trend.down { color: var(--push-fg); }
+.ex-decay-trend.same { color: var(--muted); }
+.ex-decay-loading {
+    font-size: 0.68rem; color: var(--dim); text-align: center; padding: 6px 0;
+}
+
+/* ── Continue-mode info bar ──────────────────────────────────────── */
+.continue-mode-bar {
+    background: var(--t2-bg); border: 1px solid var(--t2-fg);
+    border-radius: 10px; padding: 10px 14px;
+    display: flex; flex-direction: column; gap: 4px;
+}
+.continue-mode-label {
+    font-size: 0.68rem; font-weight: 700; color: var(--t2-fg);
+    text-transform: uppercase; letter-spacing: .08em;
+}
+.continue-mode-done {
+    font-size: 0.8rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 5px;
+}
+.done-badge {
+    background: var(--surface-2); border-radius: 5px;
+    font-size: 0.72rem; font-weight: 600; padding: 2px 8px; color: var(--muted);
+}
+
+/* ── Guided flow: progress header ────────────────────────────────── */
+.flow-progress { display: flex; align-items: center; gap: 5px; margin-bottom: 12px; }
+.flow-chip {
+    flex: 1; text-align: center; font-size: 0.62rem; font-weight: 800;
+    text-transform: uppercase; letter-spacing: .03em; color: var(--dim);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 4px; line-height: 1.1;
+}
+.flow-chip.active { color: var(--accent); border-color: var(--accent); background: var(--accent-light); }
+.flow-chip.done   { color: var(--legs-fg); border-color: var(--legs-fg); background: var(--legs-bg); }
+.flow-arrow { color: var(--dim); font-size: 0.7rem; flex-shrink: 0; }
+
+/* ── Stage container ─────────────────────────────────────────────── */
+.stage { background: var(--surface); border-radius: 14px; padding: 14px; margin-bottom: 4px; }
+.stage-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.stage-step {
+    font-size: 0.58rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--dim); background: var(--surface-2); border-radius: 6px; padding: 3px 7px;
+}
+.stage-title { font-weight: 800; font-size: 1rem; color: var(--text); }
+.stage-sub   { font-size: 0.72rem; color: var(--dim); margin: -4px 0 10px; }
+.t1-count {
+    margin-left: auto; font-size: 0.82rem; font-weight: 800;
+    color: var(--t1-fg); background: var(--t1-bg); padding: 4px 11px; border-radius: 9px;
+}
+.t1-count.full { color: var(--legs-fg); background: var(--legs-bg); }
+
+/* ── Tier-1 muscle freshness chips ───────────────────────────────── */
+.t1-fresh { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.fresh-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 0.72rem; font-weight: 700; border-radius: 8px;
+    padding: 6px 10px; border: 1px solid var(--border); cursor: pointer;
+    font-family: inherit; -webkit-tap-highlight-color: transparent;
+}
+.fresh-chip:active { opacity: .7; }
+.fresh-chip .fc-days { font-weight: 800; }
+.fresh-chip.fresh   { color: var(--legs-fg); background: var(--legs-bg); border-color: var(--legs-fg); }
+.fresh-chip.due     { color: var(--core-fg); background: var(--core-bg); border-color: var(--core-fg); }
+.fresh-chip.overdue { color: var(--push-fg); background: var(--push-bg); border-color: var(--push-fg); }
+
+.btn-add-another {
+    background: var(--surface-2); border: 1px dashed var(--border);
+    border-radius: 10px; color: var(--dim); cursor: pointer;
+    font-family: inherit; font-size: 0.82rem; font-weight: 700;
+    min-height: 42px; padding: 8px 14px; width: 100%; margin-top: 8px;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-add-another:active { border-color: var(--t1-fg); color: var(--t1-fg); }
+
+/* ── Accessories soft gate ───────────────────────────────────────── */
+#stage-acc.locked { opacity: .55; }
+.stage-head.tappable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.acc-chevron { margin-left: auto; color: var(--dim); font-size: 0.9rem; transition: transform .2s ease; }
+#acc-body.open ~ .stage-head .acc-chevron,
+.stage-head.open .acc-chevron { transform: rotate(90deg); }
+#acc-body { max-height: 0; overflow: hidden; transition: max-height .35s ease; }
+#acc-body.open { max-height: 8000px; }
+.acc-gate-note { font-size: 0.76rem; color: var(--dim); margin-bottom: 4px; }
+
+/* ── Warmup (Tier 4) blocks ──────────────────────────────────────── */
+.tier-badge.t4 { background: var(--swim-bg); color: var(--swim-fg); }
+.warmup-block {
+    background: var(--surface-2); border-radius: 10px; padding: 11px 12px;
+    margin-bottom: 8px; display: flex; flex-direction: column; gap: 9px;
+    animation: fadeIn .18s ease;
+}
+.warmup-head { display: flex; align-items: center; gap: 8px; }
+.warmup-name { font-weight: 700; font-size: 0.9rem; color: var(--text); flex: 1; }
+.warmup-metrics { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.wm-field { display: flex; flex-direction: column; gap: 3px; }
+.wm-field label { font-size: 0.58rem; font-weight: 700; color: var(--dim);
+                  text-transform: uppercase; letter-spacing: .05em; }
+.wm-field input { width: 96px; min-height: 44px; padding: 9px 11px; }
+.wm-done-btn {
+    background: #FFFFFF; border: 2px solid var(--swim-fg); color: var(--swim-fg);
+    border-radius: 10px; font-weight: 800; font-family: inherit; font-size: 0.88rem;
+    min-height: 44px; padding: 9px 18px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.wm-done-btn.on { background: var(--legs-bg); border-color: var(--legs-fg); color: var(--legs-fg); }
+.wm-done-btn:active { opacity: .75; }
+
+/* ── Connected stepper ───────────────────────────────────────────── */
+.stepper { display: flex; align-items: center; gap: 4px; margin: 6px 0 0; }
+.step-node {
+    width: 30px; height: 30px; border-radius: 50%; border: none;
+    font-family: inherit; font-size: 0.9rem; font-weight: 800; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+.step-node.active  { background: var(--accent);    color: #fff; }
+.step-node.done    { background: var(--legs-bg);   color: var(--legs-fg); }
+.step-node.pending { background: var(--surface-2); color: var(--dim); }
+.step-node.locked  { background: var(--surface-2); color: var(--dim); }
+.step-line { flex: 1; height: 2px; background: var(--border); }
+.step-line.filled { background: var(--accent); }
+.step-labels { display: flex; margin: 6px 0 14px; }
+.step-labels span { flex: 1; text-align: center; font-size: 0.68rem; color: var(--dim); font-weight: 600; }
+.step-labels span.on { color: var(--accent); font-weight: 800; }
+
+.wizard-stage { display: none; }
+.wizard-stage.is-active { display: block; }
+.mono { font-variant-numeric: tabular-nums; }
+
+.btn-continue-stage {
+    background: var(--accent); border: none; border-radius: 12px; color: #fff;
+    cursor: pointer; font-family: inherit; font-size: 1rem; font-weight: 800;
+    min-height: 52px; padding: 14px; width: 100%; margin-top: 12px;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-continue-stage:active { opacity: .85; }
+
+/* ── Tier 1 smart selector ───────────────────────────────────────── */
+.t1-sel-hint { font-size: 0.72rem; color: var(--dim); margin: 2px 0 8px; }
+.t1-sugg { background: var(--t1-bg); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.t1-sugg-label {
+    font-size: 0.66rem; font-weight: 800; color: var(--t1-fg);
+    text-transform: uppercase; letter-spacing: .06em; margin-bottom: 7px;
+}
+.t1-sugg-row { display: flex; gap: 7px; flex-wrap: wrap; }
+.t1-sugg-chip {
+    background: #FFFFFF; border: 1px solid var(--t1-fg); border-radius: 999px;
+    color: var(--t1-fg); font-family: inherit; font-size: 0.78rem; font-weight: 700;
+    padding: 6px 12px; cursor: pointer; min-height: 36px;
+    -webkit-tap-highlight-color: transparent;
+}
+.t1-sugg-chip:active { opacity: .75; }
+.t1-m-group { border-bottom: 1px solid var(--surface-2); }
+.t1-m-head {
+    display: flex; align-items: center; gap: 9px; width: 100%;
+    background: none; border: none; font-family: inherit; padding: 11px 2px;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.t1-m-name { width: 76px; text-align: left; font-size: 0.84rem; font-weight: 700; color: var(--text); flex-shrink: 0; }
+.t1-m-bar  { flex: 1; height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.t1-m-fill { display: block; height: 8px; border-radius: 4px; }
+.t1-m-fill.fresh { background: var(--legs-fg); } .t1-m-fill.due { background: var(--core-fg); } .t1-m-fill.overdue { background: var(--push-fg); }
+.t1-m-days { font-size: 0.72rem; width: 30px; text-align: right; flex-shrink: 0; }
+.t1-m-days.fresh { color: var(--legs-fg); } .t1-m-days.due { color: var(--core-fg); } .t1-m-days.overdue { color: var(--push-fg); }
+.t1-m-chev { color: var(--dim); font-size: 0.85rem; width: 12px; text-align: center; flex-shrink: 0; }
+.t1-m-lifts { display: flex; flex-direction: column; gap: 6px; padding: 0 0 10px; }
+.t1-lift {
+    display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+    background: #FFFFFF; border: 1px solid var(--border); border-radius: 11px;
+    padding: 10px 11px; font-family: inherit; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.t1-lift.rec { border: 2px solid var(--accent); background: var(--accent-light); }
+.t1-lift:disabled { opacity: .4; cursor: default; }
+.t1-lift:active:not(:disabled) { opacity: .75; }
+.t1-lift-main { flex: 1; min-width: 0; }
+.t1-lift-name { font-size: 0.85rem; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 6px; }
+.t1-lift-sub  { font-size: 0.72rem; color: var(--dim); display: block; margin-top: 2px; }
+.t1-lift-add  { font-size: 1.1rem; color: var(--dim); flex-shrink: 0; }
+.t1-lift-add.done { color: var(--legs-fg); }
+.pill-pr {
+    font-size: 0.58rem; font-weight: 800; background: var(--core-bg); color: var(--core-fg);
+    padding: 1px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: .04em;
+}
+.pill-sugg {
+    font-size: 0.62rem; font-weight: 800; background: var(--legs-bg); color: var(--legs-fg);
+    padding: 3px 9px; border-radius: 999px; flex-shrink: 0;
+}
+
 </style>
 {% endblock %}
 
 {% block content %}
 <h1>Log Gym Session</h1>
 
-{# ── Step 1: pick date + day type ────────────────────────────────── #}
-{% if step == 1 %}
+{# ── Continue-session banner (not in continue mode) ─────────────── #}
+{% if today_sessions and not continue_session %}
+  {% for ts in today_sessions %}
+    <div class="continue-banner">
+        <div class="continue-banner-info">
+            <div class="continue-banner-title">Today: {{ ts.day_type or 'Gym' }}</div>
+            <div class="continue-banner-exs">{{ ts.exercise_names or 'No exercises logged yet' }}</div>
+        </div>
+        <a href="{{ url_for('session_new') }}?continue={{ ts.id }}" class="btn-continue">Continue</a>
+    </div>
+  {% endfor %}
+{% endif %}
 
-<form method="GET" action="/session/new" class="setup-form">
+{# ── Continue-mode active bar ────────────────────────────────────── #}
+{% if continue_session %}
+<div class="continue-mode-bar">
+    <div class="continue-mode-label">Continuing today's {{ continue_session.day_type or 'gym' }} session</div>
+</div>
+{% endif %}
+
+<form method="POST" action="/session/new" id="session-form">
+    {% if continue_session %}
+    <input type="hidden" name="continue_session_id" value="{{ continue_session.id }}">
+    {% endif %}
     <div class="form-group">
         <label for="date">Date</label>
         <input type="date" id="date" name="date" value="{{ session_date }}" required>
     </div>
-    <div>
-        <p class="day-label">Day type</p>
-        <div class="day-grid">
-            <button type="submit" name="day_type" value="push" class="day-btn push">Push</button>
-            <button type="submit" name="day_type" value="pull" class="day-btn pull">Pull</button>
-            <button type="submit" name="day_type" value="legs" class="day-btn legs">Legs</button>
-            <button type="submit" name="day_type" value="core" class="day-btn core">Core</button>
-        </div>
+
+    <input type="hidden" name="day_type" id="day-type-input" value="">
+
+    {# ── Connected stepper ───────────────────────────────────────── #}
+    <div class="stepper" id="stepper">
+        <button type="button" class="step-node active"  id="step-warmup" onclick="goStage('warmup')" aria-label="Warmup step">1</button>
+        <span class="step-line" id="line-1"></span>
+        <button type="button" class="step-node pending" id="step-t1"     onclick="goStage('t1')"     aria-label="Tier 1 step">2</button>
+        <span class="step-line" id="line-2"></span>
+        <button type="button" class="step-node locked"  id="step-acc"    onclick="goStage('acc')"    aria-label="Accessories step">3</button>
     </div>
-</form>
-
-{# ── Step 2: log exercises ────────────────────────────────────────── #}
-{% elif step == 2 %}
-
-{% set day_labels = {'push': 'Push', 'pull': 'Pull', 'legs': 'Legs', 'core': 'Core'} %}
-
-<div class="session-meta">
-    <span class="type-badge {{ day_type }}">{{ day_labels[day_type] }}</span>
-    <span class="session-date-display">{{ session_date }}</span>
-    <a href="/session/new" class="change-link">change</a>
-</div>
-
-<form method="POST" action="/session/new" id="session-form">
-    <input type="hidden" name="date"     value="{{ session_date }}">
-    <input type="hidden" name="day_type" value="{{ day_type }}">
-
-    {# ── Tier 1 ─────────────────────────────────────────────────── #}
-    <div class="exercise-block tier1-block" data-idx="0">
-        <div class="block-header">
-            <span class="tier-badge t1">T1</span>
-            <span class="block-title">Heavy Compound</span>
-            <span class="scheme-tag">3–6 reps</span>
-        </div>
-        <div class="form-group" style="margin-bottom:10px">
-            <label>Exercise</label>
-            <select name="exercise_id_0" id="t1-select" onchange="onT1Change(this)">
-                {% for ex in tier1_list %}
-                <option value="{{ ex.id }}" {% if loop.first %}selected{% endif %}>
-                    {{- ex.name -}}
-                    {%- if ex.days_since is none %} · never
-                    {%- else %} · {{ ex.days_since }}d ago{% endif %}
-                </option>
-                {% endfor %}
-            </select>
-        </div>
-        {# Progression widget — populated by JS on DOMContentLoaded / dropdown change #}
-        <div id="prog-widget-0"></div>
-        <div class="sets-header">
-            <span>Set</span><span>Reps</span><span>kg</span><span></span>
-        </div>
-        <div class="sets-container" id="sets-0"></div>
-        <button type="button" class="btn-add-set" onclick="addSet(0)">+ Add Set</button>
+    <div class="step-labels">
+        <span id="lbl-warmup" class="on">Warmup</span>
+        <span id="lbl-t1">Tier 1</span>
+        <span id="lbl-acc">Accessories</span>
     </div>
 
-    {# ── Tier 2 ─────────────────────────────────────────────────── #}
-    {% for ex in tier2 %}
-    {% set idx = loop.index %}
-    {% set prog = t2_progs.get(ex.id) %}
-    <div class="exercise-block" data-idx="{{ idx }}">
-        <div class="block-header">
-            <span class="tier-badge t2">T2</span>
-            <span class="block-title">{{ ex.name }}</span>
-            <span class="scheme-tag">6–8 reps</span>
+    {# ── Stage 1 · Warmup (Tier 4) ───────────────────────────────── #}
+    <div class="stage wizard-stage is-active" id="stage-warmup">
+        <div class="stage-head">
+            <span class="stage-step">Step 1</span>
+            <span class="stage-title">Warmup</span>
         </div>
-        <input type="hidden" name="exercise_id_{{ idx }}" value="{{ ex.id }}">
-        <div id="prog-t2-{{ ex.id }}">{% include '_prog_widget.html' with context %}</div>
-        <div class="sets-header">
-            <span>Set</span><span>Reps</span><span>kg</span><span></span>
-        </div>
-        <div class="sets-container" id="sets-{{ idx }}"></div>
-        <button type="button" class="btn-add-set" onclick="addSet({{ idx }})">+ Add Set</button>
-    </div>
-    {% endfor %}
-
-    {# ── Tier 3 free-pick ───────────────────────────────────────── #}
-    <div class="tier3-section">
-        <div class="tier3-header">
-            <span class="tier-badge t3">T3</span>
-            <span class="block-title">Aesthetics</span>
-            <span class="scheme-tag">8–12 reps</span>
-        </div>
-        <div class="tier3-add-row">
-            <select id="tier3-select">
-                <option value="">— add exercise —</option>
-                {% for ex in tier3 %}
-                <option value="{{ ex.id }}"
-                        data-name="{{ ex.name }}"
-                        data-muscle="{{ ex.muscle_group }}">{{ ex.name }}</option>
-                {% endfor %}
-            </select>
-            <button type="button" class="btn-add-t3" onclick="addTier3()">Add</button>
-        </div>
-        <div id="tier3-blocks"></div>
+        <div class="stage-sub">Cardio, mobility &amp; your own warmups — optional.</div>
+        <div id="warmup-blocks"></div>
+        <div class="t2-all-scroll" id="warmup-picker" style="margin-top:4px"></div>
+        <button type="button" class="btn-continue-stage" onclick="goStage('t1')">Continue to Tier 1</button>
     </div>
 
-    {# ── Notes + save ────────────────────────────────────────────── #}
-    <div class="form-group notes-group">
-        <label for="notes">Session Notes (optional)</label>
-        <input type="text" id="notes" name="notes" placeholder="e.g. felt strong today">
+    {# ── Stage 2 · Tier 1 (daily anchor) ─────────────────────────── #}
+    <div class="stage wizard-stage" id="stage-t1">
+        <div class="stage-head">
+            <span class="stage-step">Step 2</span>
+            <span class="stage-title">Tier 1 — daily anchor</span>
+            <span class="t1-count" id="t1-count">0 / 2</span>
+        </div>
+        <div id="t1-select"></div>
+        <div id="t1-blocks"></div>
+        <button type="button" class="btn-add-another" id="btn-add-t1"
+                style="display:none" onclick="showT1Select()">+ Add another Tier 1</button>
+    </div>
+
+    {# ── Stage 3 · Accessories (Tier 2 & 3) ──────────────────────── #}
+    <div class="stage wizard-stage" id="stage-acc">
+        <div class="stage-head">
+            <span class="stage-step">Step 3</span>
+            <span class="stage-title">Accessories — T2 &amp; T3</span>
+        </div>
+        <div class="stage-sub">Supporting &amp; aesthetic work, grouped by muscle.</div>
+        <div id="t2-blocks"></div>
+        <div id="t3-blocks"></div>
+        <p class="picker-label" style="margin-top:6px">By muscle group</p>
+        <div class="t2-all-scroll" id="acc-picker" style="margin-top:2px"></div>
+    </div>
+
+    {# ── Receipt + remind ────────────────────────────────────────── #}
+    <div class="notes-split">
+        <div class="receipt-panel">
+            <div class="receipt-title">Session Log</div>
+            <div class="receipt-body" id="receipt-body">
+                <span class="receipt-empty">Sets appear here as you log them.</span>
+            </div>
+        </div>
+        <div class="remind-panel">
+            <div class="remind-panel-title">Don't forget:</div>
+            <div class="remind-grid">
+                <button type="button" class="btn-remind" onclick="openAccessoryGroup('Biceps')">Biceps</button>
+                <button type="button" class="btn-remind" onclick="openAccessoryGroup('Triceps')">Triceps</button>
+                <button type="button" class="btn-remind" onclick="openAccessoryGroup('Shoulders')">Shoulders</button>
+                <button type="button" class="btn-remind" onclick="openAccessoryGroup('Core')">Core</button>
+            </div>
+        </div>
     </div>
 
     <button type="submit" class="btn-save-session">Save Session</button>
 </form>
 
+<div id="rest-timer-bar">
+    <span class="rt-dot"></span>
+    <span class="rt-label">REST</span>
+    <span class="rt-time" id="rt-display">0:00</span>
+</div>
+
 <script>
-    let nextIdx     = {{ 1 + tier2|length }};
-    const T1_PROGS  = {{ t1_progs_json | safe }};
-    // T2 progressions keyed by exercise id, for pre-fill defaults
-    const T2_PROGS  = {
-        {% for ex in tier2 %}
-        {% set p = t2_progs.get(ex.id) %}
-        {% if p %}"{{ ex.id }}": {"target_reps": {{ p.target_reps }}, "weight_kg": {{ p.weight_kg }}},{% endif %}
-        {% endfor %}
-    };
+    let nextIdx = 1;
+    const PROGS      = {{ progs_json | safe }};
+    const TIER1_LIST = {{ tier1_json | safe }};
+    const TIER2_LIST = {{ tier2_json | safe }};
+    const TIER3_LIST = {{ tier3_json | safe }};
+    const TIER4_LIST = {{ tier4_json | safe }};
+    const SCHEMES        = {{ schemes_json | safe }};
+    const EX_DECAY_DATA  = {}; // exId → fetched decay payload (cached)
+    const T2_ADDED   = new Set();
+    const T3_ADDED   = new Set();
+    const T1_NAMES   = {}; // idx → exercise name
 
-    function addSet(idx, defaultReps, defaultKg) {
-        const container = document.getElementById('sets-' + idx);
-        const setNum    = container.querySelectorAll('.set-row').length + 1;
-        const row       = document.createElement('div');
-        row.className   = 'set-row';
-        const rVal = defaultReps !== undefined ? defaultReps : '';
-        const wVal = defaultKg   !== undefined ? defaultKg   : '';
-        row.innerHTML =
-            `<span class="set-num">${setNum}</span>` +
-            `<input type="number" name="reps_${idx}" placeholder="reps"
-                    min="1" inputmode="numeric" required value="${rVal}">` +
-            `<input type="number" name="weight_${idx}" placeholder="kg"
-                    min="0" step="0.5" inputmode="decimal" required value="${wVal}">` +
-            `<button type="button" class="btn-rm-set"
-                     onclick="removeSet(this,${idx})">✕</button>`;
-        container.appendChild(row);
+    // ── Receipt ───────────────────────────────────────────────────
+    const RECEIPT    = {}; // String(exId) → entry
+
+    function renderReceipt() {
+        const body = document.getElementById('receipt-body');
+        if (!body) return;
+        const entries = Object.values(RECEIPT);
+        if (!entries.length) {
+            body.innerHTML = '<span class="receipt-empty">Sets appear here as you log them.</span>';
+            return;
+        }
+        body.innerHTML = Object.entries(RECEIPT).map(([exId, e]) => {
+            let stat = '';
+            if      (e.phase === 'completed') stat = `<span class="receipt-stat ok">✓ ${e.sets}×${e.reps} @ ${_wtDisplay(e.weight, e.unit || 'kg')}</span>`;
+            else if (e.phase === 'failed')    stat = `<span class="receipt-stat fail">✗ ${e.tally}/${e.sets} @ ${_wtDisplay(e.weight, e.unit || 'kg')}</span>`;
+            else if (e.phase === 'tracking')  stat = `<span class="receipt-stat going">${e.tally}/${e.sets} sets</span>`;
+            else if (e.phase === 't3')        stat = `<span class="receipt-stat t3">${e.count} set${e.count !== 1 ? 's' : ''}</span>`;
+            else if (e.phase === 't4')        stat = `<span class="receipt-stat going">${e.summary || 'warmup'}</span>`;
+            return `<div class="receipt-row">
+                <span class="tier-badge t${e.tier}">T${e.tier}</span>
+                <span class="receipt-name">${e.name}</span>
+                ${stat}
+                <button type="button" class="receipt-rm" onclick="removeFromReceipt(${exId})" title="Remove">×</button>
+            </div>`;
+        }).join('');
+        body.scrollTop = body.scrollHeight;
+        updateRemindButtons();
     }
 
-    function removeSet(btn, idx) {
-        const container = btn.closest('.set-row').parentElement;
-        btn.closest('.set-row').remove();
-        container.querySelectorAll('.set-num').forEach((el, i) => el.textContent = i + 1);
+    function removeFromReceipt(exId) {
+        const exIdStr = String(exId);
+        const entry = RECEIPT[exIdStr];
+        if (!entry) return;
+
+        if (entry.tier === 4) { removeWarmupByExId(exId); return; }
+
+        const form = document.getElementById('session-form');
+        const exInput = form.querySelector('input[name^="exercise_id_"][value="' + exId + '"]');
+        if (exInput) {
+            const idx = exInput.name.slice('exercise_id_'.length);
+            ['scheme_id_', 'prog_weight_', 'ex_result_', 'ex_tally_', 'ex_last_reps_'].forEach(p => {
+                const el = form.querySelector('input[name="' + p + idx + '"]');
+                if (el) el.value = '';
+            });
+            exInput.value = '';
+            const block = exInput.closest('.exercise-block');
+            if (block) block.remove();
+        }
+
+        if (entry.tier === 2) {
+            T2_ADDED.delete(exId);
+            const chip = document.getElementById('t2-chip-' + exId);
+            if (chip) chip.classList.remove('added');
+            const allItem = document.getElementById('t2-all-' + exId);
+            if (allItem) allItem.classList.remove('added');
+        } else if (entry.tier === 3) {
+            T3_ADDED.delete(exId);
+            const item = document.getElementById('t3p-ex-' + exId);
+            if (item) item.classList.remove('added');
+        }
+
+        delete EX_PHASE[exIdStr];
+        delete RECEIPT[exIdStr];
+        renderReceipt();
     }
 
-    function addTier3() {
-        const sel    = document.getElementById('tier3-select');
-        if (!sel.value) return;
-        const exId     = sel.value;
-        const exName   = sel.options[sel.selectedIndex].dataset.name;
-        const exMuscle = sel.options[sel.selectedIndex].dataset.muscle;
-        const idx      = nextIdx++;
+    function _getMuscleGroup(exId, tier) {
+        const list = tier === 1 ? TIER1_LIST : tier === 2 ? TIER2_LIST : TIER3_LIST;
+        return (list.find(e => e.id === exId) || {}).muscle_group || '';
+    }
 
-        const block    = document.createElement('div');
+    function updateRemindButtons() {
+        const hit = new Set(Object.values(RECEIPT).map(e => e.muscle_group).filter(Boolean));
+        document.querySelectorAll('.btn-remind').forEach(btn => {
+            btn.classList.toggle('reminded', hit.has(btn.textContent.trim()));
+        });
+    }
+
+    function preserveAndDismissBlock(block) {
+        // Rescue all named form fields before removing the node
+        const form = document.getElementById('session-form');
+        block.querySelectorAll('[name]').forEach(el => {
+            const h = document.createElement('input');
+            h.type = 'hidden'; h.name = el.name; h.value = el.value;
+            form.appendChild(h);
+        });
+        const blocksContainer = block.parentElement; // capture before removal
+        // Phase 1: slide right + fade
+        const h = block.offsetHeight;
+        block.classList.add('block-dismissing');
+        setTimeout(() => {
+            // Phase 2: collapse height so layout closes up smoothly
+            block.style.maxHeight = h + 'px';
+            block.classList.add('block-collapsing');
+            setTimeout(() => {
+                block.remove();
+                // If tier section is now empty, hide it
+                if (blocksContainer &&
+                    blocksContainer.querySelectorAll('.exercise-block').length === 0) {
+                    const tierSection = blocksContainer.closest('.tier-section');
+                    if (tierSection) {
+                        tierSection.style.display = 'none';
+                        const tierId = tierSection.id.replace('tier-section-', '');
+                        const btn = document.getElementById('btn-tier-' + tierId);
+                        if (btn) btn.classList.remove('active', 't1', 't2', 't3');
+                    }
+                }
+            }, 240);
+        }, 330);
+    }
+
+    function getExerciseName(idx, tier) {
+        if (tier === 1) return T1_NAMES[String(idx)] || '';
+        const block = document.querySelector(`[data-idx="${idx}"]`);
+        if (!block) return '';
+        const title = block.querySelector('.block-title');
+        return title ? title.textContent.trim() : '';
+    }
+
+    function _dayLabel(ds) {
+        return ds === null ? ' · never' : ` · ${ds}d ago`;
+    }
+
+    function _buildAccordionGroup(container, grp, exs, itemId, onClickFn, addedCheck, checkClass) {
+        const safeGrp = grp.replace(/\s+/g, '-');
+        const itemsId = `${itemId}-items-${safeGrp}`;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 't2-grp-btn';
+        btn.dataset.group = grp;
+        btn.innerHTML = `<span>${grp}</span><span class="t2-grp-arrow">›</span>`;
+        btn.onclick = () => {
+            const open = btn.classList.toggle('open');
+            document.getElementById(itemsId).classList.toggle('open', open);
+        };
+        container.appendChild(btn);
+
+        const itemsEl = document.createElement('div');
+        itemsEl.className = 't2-grp-items';
+        itemsEl.id = itemsId;
+        exs.forEach(ex => {
+            const item = document.createElement('div');
+            item.className = 't2-all-item' + (addedCheck(ex.id) ? ' added' : '');
+            item.id = `${itemId}-ex-${ex.id}`;
+            item.innerHTML =
+                `<span class="t2-all-name">${ex.name}` +
+                `<span style="font-size:.73rem;color:var(--dim);font-weight:400">${_dayLabel(ex.days_since)}</span></span>` +
+                (checkClass ? `<span class="${checkClass}">✓</span>` : '');
+            item.onclick = () => onClickFn(ex);
+            itemsEl.appendChild(item);
+        });
+        container.appendChild(itemsEl);
+    }
+
+    function buildT1Picker(idx) {
+        const container = document.getElementById('t1-picker-' + idx);
+        if (!container) return;
+        const groups = {};
+        TIER1_LIST.forEach(ex => { (groups[ex.muscle_group] = groups[ex.muscle_group] || []).push(ex); });
+        Object.entries(groups).forEach(([grp, exs]) =>
+            _buildAccordionGroup(container, grp, exs, `t1p${idx}`,
+                ex => selectT1(idx, ex.id, ex.name, container),
+                () => false, null)
+        );
+    }
+
+    function selectT1(idx, exId, exName, container) {
+        const cont = container || document.getElementById('t1-picker-' + idx);
+        cont.querySelectorAll('.t2-all-item').forEach(el => el.classList.remove('t1-selected'));
+        const item = document.getElementById(`t1p${idx}-ex-${exId}`);
+        if (item) item.classList.add('t1-selected');
+        const hidden = document.getElementById('t1-exid-' + idx);
+        if (hidden) hidden.value = exId;
+        T1_NAMES[String(idx)] = exName;
+        const exData = TIER1_LIST.find(e => e.id === exId);
+        EX_IS_BARBELL[String(exId)] = !!(exData?.is_barbell);
+        EX_REPS_ONLY[String(exId)]  = !!(exData?.reps_only);
+        showExerciseDecay('decay-strip-' + idx, exId, 1);
+        renderProgWidget('prog-widget-' + idx, exId, 1, PROGS[String(exId)]);
+    }
+
+    function buildT3Picker() {
+        const container = document.getElementById('t3-picker');
+        if (!container) return;
+        const groups = {};
+        TIER3_LIST.forEach(ex => { (groups[ex.muscle_group] = groups[ex.muscle_group] || []).push(ex); });
+        Object.entries(groups).forEach(([grp, exs]) =>
+            _buildAccordionGroup(container, grp, exs, 't3p',
+                ex => addT3(ex.id, ex.name, ex.muscle_group),
+                id => T3_ADDED.has(id), 't2-all-check')
+        );
+    }
+
+    // ── Day type ──────────────────────────────────────────────────
+
+    function setDayType(dt) {
+        document.getElementById('day-type-input').value = dt;
+        document.querySelectorAll('.btn-day').forEach(b => b.classList.remove('active'));
+        const active = document.querySelector('.btn-day.' + dt);
+        if (active) active.classList.add('active');
+        updateT2Picker(dt);
+    }
+
+    function updateT2Picker(dt) {
+        const chips = document.getElementById('t2-rec-chips');
+        const empty = document.getElementById('t2-rec-empty');
+        chips.querySelectorAll('.t2-chip').forEach(c => c.remove());
+        const recs = TIER2_LIST.filter(ex => ex.day_type === dt);
+        empty.style.display = recs.length ? 'none' : '';
+        recs.forEach(ex => {
+            const chip = document.createElement('button');
+            chip.type      = 'button';
+            chip.className = `t2-chip ${dt}${T2_ADDED.has(ex.id) ? ' added' : ''}`;
+            chip.id        = `t2-chip-${ex.id}`;
+            chip.textContent = (T2_ADDED.has(ex.id) ? '✓ ' : '') + ex.name;
+            chip.dataset.exid = ex.id;
+            chip.onclick = () => addT2(ex.id, ex.name, ex.muscle_group);
+            chips.appendChild(chip);
+        });
+    }
+
+    function buildT2AllList() {
+        const container = document.getElementById('t2-all-scroll');
+        const groups = {};
+        TIER2_LIST.forEach(ex => { (groups[ex.muscle_group] = groups[ex.muscle_group] || []).push(ex); });
+        Object.entries(groups).forEach(([grp, exs]) => {
+            const itemsId = `t2-grp-items-${grp.replace(/\s+/g, '-')}`;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 't2-grp-btn';
+            btn.innerHTML = `<span>${grp}</span><span class="t2-grp-arrow">›</span>`;
+            btn.onclick = () => {
+                const open = btn.classList.toggle('open');
+                document.getElementById(itemsId).classList.toggle('open', open);
+            };
+            container.appendChild(btn);
+
+            const itemsEl = document.createElement('div');
+            itemsEl.className = 't2-grp-items';
+            itemsEl.id = itemsId;
+            exs.forEach(ex => {
+                const item = document.createElement('div');
+                item.className = 't2-all-item';
+                item.id = `t2-all-${ex.id}`;
+                item.innerHTML =
+                    `<span class="t2-all-name">${ex.name}</span>` +
+                    `<span class="t2-all-check">✓</span>`;
+                item.onclick = () => addT2(ex.id, ex.name, ex.muscle_group);
+                itemsEl.appendChild(item);
+            });
+            container.appendChild(itemsEl);
+        });
+    }
+
+    // ── Tier toggle ───────────────────────────────────────────────
+
+    function toggleTier(n) {
+        const section = document.getElementById('tier-section-' + n);
+        const btn     = document.getElementById('btn-tier-' + n);
+        const opening = section.style.display === 'none';
+        section.style.display = opening ? '' : 'none';
+        btn.classList.toggle('active', opening);
+        if (opening && n === 1) {
+            const t1blocks = document.getElementById('t1-blocks');
+            if (t1blocks &&
+                !t1blocks.querySelector('.exercise-block') &&
+                !t1blocks.querySelector('.ss-group'))
+                addFreshT1Block();
+        }
+    }
+
+    function addFreshT1Block() {
+        const idx = nextIdx++;
+        const block = document.createElement('div');
+        block.className = 'exercise-block tier1-block';
+        block.dataset.idx = idx;
+        block.innerHTML =
+            `<input type="hidden" name="exercise_id_${idx}" id="t1-exid-${idx}" value="">` +
+            `<input type="hidden" name="scheme_id_${idx}"   id="scheme-id-${idx}"   value="">` +
+            `<input type="hidden" name="prog_weight_${idx}" id="prog-weight-${idx}" value="">` +
+            `<input type="hidden" name="ex_result_${idx}"    id="ex-result-${idx}"    value="">` +
+            `<input type="hidden" name="ex_tally_${idx}"     id="ex-tally-${idx}"     value="0">` +
+            `<input type="hidden" name="ex_last_reps_${idx}" id="ex-last-reps-${idx}" value="0">` +
+            `<div class="t2-all-scroll" id="t1-picker-${idx}" style="margin-bottom:10px"></div>` +
+            `<div id="decay-strip-${idx}"></div>` +
+            `<div id="prog-widget-${idx}"></div>`;
+        document.getElementById('t1-blocks').appendChild(block);
+        buildT1Picker(idx);
+    }
+
+
+    // ── Progression widget ────────────────────────────────────────
+
+    const EX_PHASE = {}; // exId → {phase, tally, sets, reps, weight, scheme_id}
+    const EX_UNIT      = {}; // exId → 'lb' when toggled (absent = kg)
+    const EX_IS_BARBELL = {}; // exId → true for barbell T1 exercises
+    const EX_REPS_ONLY  = {}; // exId → true for bodyweight/reps-only exercises
+
+    function _schemeOutcomes(exId, weight_kg) {
+        const decay = EX_DECAY_DATA[String(exId)];
+        if (!decay?.scheme_outcomes_by_weight || weight_kg == null) return {};
+        const owb  = decay.scheme_outcomes_by_weight;
+        const w    = parseFloat(weight_kg);
+        // Match any key within 0.01kg (handles "80" vs "80.0" formatting)
+        for (const k of Object.keys(owb)) {
+            if (Math.abs(parseFloat(k) - w) < 0.01) return owb[k];
+        }
+        return {};
+    }
+
+    function _buildGrid(tierSchemes, prog, idx, exId, tier, containerId) {
+        const bysets = {};
+        tierSchemes.forEach(s => { (bysets[s.sets] = bysets[s.sets] || []).push(s); });
+        const outcomes = _schemeOutcomes(exId, prog?.weight_kg);
+        let html = '<div class="pw-grid">';
+        Object.keys(bysets).sort((a, b) => a - b).forEach(sc => {
+            html += `<div class="pw-grid-row"><span class="pw-grid-label">${sc}×</span>`;
+            bysets[sc].forEach(s => {
+                const isCurrent = (s.progression_order - 1) === prog.stage;
+                const outcome   = outcomes[String(s.id)];
+                const attCls    = outcome === 'completed' ? ' att-ok' : outcome === 'failed' ? ' att-fail' : '';
+                const cls       = isCurrent ? 'current' : 'future';
+                html += `<div class="pw-cell ${cls}${attCls}" role="button"
+                    title="${s.sets}×${s.reps}"
+                    onclick="selectStage('${idx}',${exId},${tier},'${containerId}',${s.id})">${s.reps}</div>`;
+            });
+            html += '</div>';
+        });
+        return html + '</div>';
+    }
+
+    function renderProgWidget(containerId, exId, tier, prog) {
+        const el  = document.getElementById(containerId);
+        if (!el) return;
+        const idx = containerId.replace('prog-widget-', '');
+        const st  = EX_PHASE[String(exId)];
+
+        // ── Completed ────────────────────────────────────────────────
+        if (st?.phase === 'completed') {
+            el.innerHTML = `<div class="prog-widget">
+                <div class="pw-done-banner">✓ Done — ${st.sets} × ${st.reps} @ ${_wtDisplay(st.weight, st.unit || 'kg')}</div>
+            </div>`;
+            return;
+        }
+
+        // ── Failed ───────────────────────────────────────────────────
+        if (st?.phase === 'failed') {
+            const lastRepsStr = st.last_reps > 0 ? `, ${st.last_reps} on last` : '';
+            el.innerHTML = `<div class="prog-widget">
+                <div class="pw-fail-banner">✗ ${st.tally} / ${st.sets} sets${lastRepsStr} — ${_wtDisplay(st.weight, st.unit || 'kg')}</div>
+            </div>`;
+            return;
+        }
+
+        // ── Tracking ─────────────────────────────────────────────────
+        if (st?.phase === 'tracking') {
+            const tapCls = tier === 2 ? 'pw-tap t2' : tier === 3 ? 'pw-tap t3' : 'pw-tap';
+            el.innerHTML = `<div class="prog-widget">
+                <div class="pw-track-row">
+                    <div class="pw-summary-col">
+                        <span class="pw-summary-scheme">${st.sets} × ${st.reps} reps</span>
+                        <span class="pw-summary-wt">${_wtDisplay(st.weight, st.unit || 'kg')}</span>
+                    </div>
+                    <div class="pw-tally-col">
+                        <div class="pw-tally">${st.tally}</div>
+                        <div class="pw-tally-sub">/ ${st.sets} sets</div>
+                    </div>
+                    <div class="${tapCls}"
+                         onclick="incrementTally('${idx}',${exId},${tier},'${containerId}')">+</div>
+                </div>
+                <div class="pw-action-row">
+                    <button type="button" class="pw-btn-scheme"
+                            onclick="startChangeScheme('${idx}',${exId},${tier},'${containerId}')">Change scheme</button>
+                    <button type="button" class="pw-btn-weight"
+                            onclick="startChangeWeight('${idx}',${exId},${tier},'${containerId}')">Change weight</button>
+                    <button type="button" class="pw-giveup"
+                            onclick="startGiveUp('${idx}',${exId},${tier},'${containerId}')">Give up</button>
+                </div>
+            </div>`;
+            return;
+        }
+
+        // ── Changing scheme ───────────────────────────────────────────
+        if (st?.phase === 'changing_scheme') {
+            const tierSchemes = SCHEMES['ex_' + String(exId)] || SCHEMES[String(tier)] || [];
+            const gridHtml    = _buildGridChanger(tierSchemes, st.scheme_id, idx, exId, tier, containerId);
+            el.innerHTML = `<div class="prog-widget">
+                <div class="pw-scheme-panel">
+                    <div class="pw-scheme-panel-label">Pick new scheme</div>
+                    ${gridHtml}
+                </div>
+            </div>`;
+            return;
+        }
+
+        // ── Changing weight ───────────────────────────────────────────
+        if (st?.phase === 'changing_weight') {
+            const isLb    = st.unit === 'lb';
+            const dispWt  = isLb ? (st.displayWt || st.weight) : st.weight;
+            const unitLbl = isLb ? 'lb' : 'kg';
+            el.innerHTML = `<div class="prog-widget">
+                <div class="pw-weight-panel">
+                    <input type="number" id="pw-newwt-${exId}"
+                           value="${dispWt}" step="0.5" min="0" inputmode="decimal"
+                           placeholder="0.0">
+                    <span class="pw-weight-unit">${unitLbl}</span>
+                    <button type="button" class="pw-weight-confirm"
+                            onclick="applyWeightChange('${idx}',${exId},${tier},'${containerId}')">Set</button>
+                </div>
+            </div>`;
+            document.getElementById('pw-newwt-' + exId)?.select();
+            return;
+        }
+
+        // ── Give-up confirm ───────────────────────────────────────────
+        if (st?.phase === 'giving_up') {
+            el.innerHTML = `<div class="prog-widget">
+                <div class="pw-giveup-panel">
+                    <span class="pw-giveup-summary">${st.tally} / ${st.sets} sets completed</span>
+                    <div class="pw-giveup-last-row">
+                        <span class="pw-giveup-last-label">Reps on last set</span>
+                        <input type="number" class="pw-giveup-last-input"
+                               id="pw-last-reps-${exId}"
+                               min="0" max="${st.reps}" inputmode="numeric"
+                               placeholder="—">
+                    </div>
+                    <div class="pw-giveup-btns">
+                        <button type="button" class="pw-giveup-confirm"
+                                onclick="confirmGiveUp('${idx}',${exId},${tier},'${containerId}')">Record & finish</button>
+                        <button type="button" class="pw-giveup-cancel"
+                                onclick="cancelGiveUp('${idx}',${exId},${tier},'${containerId}')">Cancel</button>
+                    </div>
+                </div>
+            </div>`;
+            document.getElementById('pw-last-reps-' + exId)?.focus();
+            return;
+        }
+
+        // ── Selecting (default) ──────────────────────────────────────
+        const currentWt    = prog?.weight_kg ?? '';
+        const currentStage = prog?.stage     ?? -1;
+
+        // Sync hidden inputs if prog exists
+        const hiddenScheme = document.getElementById('scheme-id-'   + idx);
+        const hiddenWeight = document.getElementById('prog-weight-' + idx);
+        if (hiddenScheme && prog?.scheme_id) hiddenScheme.value = prog.scheme_id;
+        if (hiddenWeight && currentWt)       hiddenWeight.value = currentWt;
+
+        const tierSchemes = SCHEMES[String(tier)] || [];
+        // Build grid with a synthetic prog-like object for stage highlighting
+        const gridProg    = { stage: currentStage };
+        const gridHtml    = _buildGrid(tierSchemes, gridProg, idx, exId, tier, containerId);
+
+        const unit      = EX_UNIT[String(exId)] || 'kg';
+        const displayWt = (unit === 'lb' && currentWt) ? _kgToDisplay(currentWt, exId) : currentWt;
+
+        const showNote   = unit === 'lb' && EX_IS_BARBELL[String(exId)];
+        const repsOnly   = !!(EX_REPS_ONLY[String(exId)]);
+        el.innerHTML = `<div class="prog-widget">
+            <div class="pw-main">
+                ${repsOnly ? '' : `<div class="pw-weight-col">
+                    <input type="number" class="pw-weight-input" id="pw-wt-input-${exId}"
+                           value="${displayWt}" min="0" step="0.5" inputmode="decimal"
+                           placeholder="${unit}"
+                           oninput="updateProgWeight('${idx}',${exId},this.value)">
+                    <span class="pw-kg" id="pw-unit-lbl-${exId}">${unit}</span>
+                    <button type="button" class="pw-unit-toggle" id="pw-unit-btn-${exId}"
+                            onclick="toggleUnit(${exId},'${idx}')">${unit === 'lb' ? 'kg' : 'lb'}</button>
+                </div>`}
+                ${gridHtml}
+                <div class="pw-tick-col">
+                    <button type="button" class="pw-tick"
+                            onclick="confirmSelection('${idx}',${exId},${tier},'${containerId}')">✓</button>
+                </div>
+            </div>
+            ${showNote ? `<div class="pw-barbell-note" id="pw-bb-note-${exId}">Plates only — bar (20 kg) added to total</div>` : `<div class="pw-barbell-note" id="pw-bb-note-${exId}" style="display:none">Plates only — bar (20 kg) added to total</div>`}
+        </div>`;
+    }
+
+    function _lbToKg(raw, exId) {
+        if (EX_UNIT[String(exId)] !== 'lb') return raw;
+        return raw * 0.453592 + (EX_IS_BARBELL[String(exId)] ? 20 : 0);
+    }
+
+    // Inverse: stored total_kg → user-facing display value (plates in lb, or total in kg)
+    function _kgToDisplay(kg, exId) {
+        if (EX_UNIT[String(exId)] !== 'lb') return kg;
+        const platesLb = EX_IS_BARBELL[String(exId)]
+            ? (kg - 20) / 0.453592
+            : kg / 0.453592;
+        return parseFloat(Math.max(0, platesLb).toFixed(1));
+    }
+
+    // Format total_kg as display string: "179.1 lb (81.2 kg)" or "80 kg"
+    function _wtDisplay(wt_kg, unit) {
+        if (unit === 'lb') {
+            const totalLb = (wt_kg / 0.453592).toFixed(1);
+            const kgRnd   = +wt_kg.toFixed(1);
+            return `${totalLb} lb (${kgRnd} kg)`;
+        }
+        return `${wt_kg} kg`;
+    }
+
+    function updateProgWeight(idx, exId, val) {
+        const raw = parseFloat(val) || 0;
+        const wt  = _lbToKg(raw, exId);
+        const hidden = document.getElementById('prog-weight-' + idx);
+        if (hidden) hidden.value = wt > 0 ? wt : '';
+        if (PROGS[String(exId)]) PROGS[String(exId)].weight_kg = wt;
+    }
+
+    function toggleUnit(exId, idx) {
+        const toLb     = EX_UNIT[String(exId)] !== 'lb';
+        const isBarbell = EX_IS_BARBELL[String(exId)];
+        const inp      = document.getElementById('pw-wt-input-' + exId);
+        // Convert input value BEFORE flipping EX_UNIT so helpers see old state
+        if (inp) {
+            const v = parseFloat(inp.value) || 0;
+            if (v > 0) {
+                if (toLb) {
+                    // kg total → plates in lb
+                    inp.value = parseFloat(
+                        (isBarbell ? (v - 20) / 0.453592 : v / 0.453592).toFixed(1)
+                    );
+                } else {
+                    // plates in lb → kg total
+                    inp.value = parseFloat(
+                        (v * 0.453592 + (isBarbell ? 20 : 0)).toFixed(1)
+                    );
+                }
+            }
+        }
+        EX_UNIT[String(exId)] = toLb ? 'lb' : 'kg';
+        if (inp) updateProgWeight(idx, exId, inp.value);
+        const unit = EX_UNIT[String(exId)];
+        const lbl = document.getElementById('pw-unit-lbl-' + exId);
+        if (lbl) lbl.textContent = unit;
+        const btn = document.getElementById('pw-unit-btn-' + exId);
+        if (btn) btn.textContent = unit === 'lb' ? 'kg' : 'lb';
+        if (inp) inp.placeholder = unit;
+        const note = document.getElementById('pw-bb-note-' + exId);
+        if (note) note.style.display = (unit === 'lb' && isBarbell) ? '' : 'none';
+    }
+
+    function selectStage(idx, exId, tier, containerId, schemeId) {
+        const tierSchemes = SCHEMES[String(tier)] || [];
+        const scheme = tierSchemes.find(s => s.id === schemeId);
+        if (!scheme) return;
+        const wtInput    = document.getElementById('pw-wt-input-' + exId);
+        const rawWtSel   = wtInput ? (parseFloat(wtInput.value) || 0) : 0;
+        const currentWt  = rawWtSel > 0
+            ? _lbToKg(rawWtSel, exId)
+            : (PROGS[String(exId)]?.weight_kg || 0);
+        const newProg = {
+            exercise_id:  exId,
+            weight_kg:    currentWt,
+            scheme_id:    schemeId,
+            reps:         scheme.reps,
+            sets:         scheme.sets,
+            stage:        scheme.progression_order - 1,
+            total_stages: tierSchemes.length,
+            is_last:      scheme.progression_order === tierSchemes.length,
+        };
+        PROGS[String(exId)] = newProg;
+        renderProgWidget(containerId, exId, tier, newProg);
+    }
+
+    function confirmSelection(idx, exId, tier, containerId) {
+        const prog = PROGS[String(exId)];
+        const schemeId = prog?.scheme_id || parseInt(document.getElementById('scheme-id-' + idx)?.value);
+        if (!schemeId) return; // no stage selected yet
+        const wtInput = document.getElementById('pw-wt-input-' + exId);
+        const rawWt   = parseFloat(wtInput?.value);
+        if (!rawWt || rawWt <= 0) {
+            if (wtInput) {
+                wtInput.classList.remove('error');
+                void wtInput.offsetWidth; // restart animation
+                wtInput.classList.add('error');
+                wtInput.addEventListener('animationend', () => wtInput.classList.remove('error'), {once: true});
+                wtInput.focus();
+            }
+            return;
+        }
+
+        const isLb = EX_UNIT[String(exId)] === 'lb';
+        const wt   = _lbToKg(rawWt, exId);
+
+        // Lock in weight
+        const hiddenWeight = document.getElementById('prog-weight-' + idx);
+        if (hiddenWeight) hiddenWeight.value = wt;
+
+        // Superset intercept — route to selecting_done instead of tracking
+        if (_ssConfirm(idx, exId, tier, containerId, wt, schemeId)) return;
+
+        const tierSchemes = SCHEMES[String(tier)] || [];
+        const scheme      = tierSchemes.find(s => s.id === schemeId) || {};
+        const _st = {
+            phase: 'tracking', tally: 0,
+            sets: prog?.sets || scheme.sets,
+            reps: prog?.reps || scheme.reps,
+            weight: wt, displayWt: rawWt, unit: isLb ? 'lb' : 'kg',
+            scheme_id: schemeId,
+        };
+        EX_PHASE[String(exId)] = _st;
+        RECEIPT[String(exId)] = {
+            name: getExerciseName(idx, tier), tier,
+            phase: 'tracking', tally: 0,
+            sets: _st.sets, reps: _st.reps, weight: wt, displayWt: rawWt, unit: _st.unit,
+            muscle_group: _getMuscleGroup(exId, tier),
+        };
+        renderReceipt();
+        renderProgWidget(containerId, exId, tier, prog);
+    }
+
+    function incrementTally(idx, exId, tier, containerId) {
+        const st = EX_PHASE[String(exId)];
+        if (!st || st.phase !== 'tracking') return;
+        st.tally++;
+
+        const tallyHidden = document.getElementById('ex-tally-' + idx);
+        if (tallyHidden) tallyHidden.value = st.tally;
+
+        if (st.tally >= st.sets) {
+            stopRestTimer();
+            st.phase = 'completed';
+            const resultHidden = document.getElementById('ex-result-' + idx);
+            if (resultHidden) resultHidden.value = 'completed';
+            const re = RECEIPT[String(exId)];
+            if (re) { re.phase = 'completed'; renderReceipt(); }
+            renderProgWidget(containerId, exId, tier, PROGS[String(exId)]);
+            if (tier === 1) onT1Done();
+            setTimeout(() => {
+                const block = document.querySelector(`[data-idx="${idx}"]`);
+                if (block) preserveAndDismissBlock(block);
+            }, 750);
+            return;
+        } else {
+            startRestTimer();
+            const re = RECEIPT[String(exId)];
+            if (re) { re.tally = st.tally; renderReceipt(); }
+        }
+        renderProgWidget(containerId, exId, tier, PROGS[String(exId)]);
+    }
+
+    // ── Helper: build scheme grid with applySchemeChange onclick ────
+    function _buildGridChanger(tierSchemes, currentSchemeId, idx, exId, tier, containerId) {
+        const bysets  = {};
+        tierSchemes.forEach(s => { (bysets[s.sets] = bysets[s.sets] || []).push(s); });
+        const st      = EX_PHASE[String(exId)];
+        const outcomes = _schemeOutcomes(exId, st?.weight ?? PROGS[String(exId)]?.weight_kg);
+        let html = '<div class="pw-grid">';
+        Object.keys(bysets).sort((a, b) => a - b).forEach(sc => {
+            html += `<div class="pw-grid-row"><span class="pw-grid-label">${sc}×</span>`;
+            bysets[sc].forEach(s => {
+                const cls     = s.id === currentSchemeId ? 'current' : 'future';
+                const outcome = outcomes[String(s.id)];
+                const attCls  = outcome === 'completed' ? ' att-ok' : outcome === 'failed' ? ' att-fail' : '';
+                html += `<div class="pw-cell ${cls}${attCls}" role="button"
+                    title="${s.sets}×${s.reps}"
+                    onclick="applySchemeChange('${idx}',${exId},${tier},'${containerId}',${s.id})">${s.reps}</div>`;
+            });
+            html += '</div>';
+        });
+        return html + '</div>';
+    }
+
+    function startChangeScheme(idx, exId, tier, containerId) {
+        const st = EX_PHASE[String(exId)];
+        if (!st) return;
+        st.phase = 'changing_scheme';
+        renderProgWidget(containerId, exId, tier, PROGS[String(exId)]);
+    }
+
+    function applySchemeChange(idx, exId, tier, containerId, schemeId) {
+        const st          = EX_PHASE[String(exId)];
+        const tierSchemes = SCHEMES[String(tier)] || [];
+        const scheme      = tierSchemes.find(s => s.id === schemeId);
+        if (!st || !scheme) return;
+        st.phase     = 'tracking';
+        st.scheme_id = schemeId;
+        st.sets      = scheme.sets;
+        st.reps      = scheme.reps;
+        // Update hidden scheme input so backend records the new scheme
+        const hiddenScheme = document.getElementById('scheme-id-' + idx);
+        if (hiddenScheme) hiddenScheme.value = schemeId;
+        // Update PROGS so progression widget reflects new scheme
+        if (PROGS[String(exId)]) {
+            PROGS[String(exId)].scheme_id = schemeId;
+            PROGS[String(exId)].reps      = scheme.reps;
+            PROGS[String(exId)].sets      = scheme.sets;
+        }
+        const re = RECEIPT[String(exId)];
+        if (re) { re.sets = scheme.sets; re.reps = scheme.reps; renderReceipt(); }
+        renderProgWidget(containerId, exId, tier, PROGS[String(exId)]);
+    }
+
+    function startChangeWeight(idx, exId, tier, containerId) {
+        const st = EX_PHASE[String(exId)];
+        if (!st) return;
+        st.phase = 'changing_weight';
+        renderProgWidget(containerId, exId, tier, PROGS[String(exId)]);
+    }
+
+    function applyWeightChange(idx, exId, tier, containerId) {
+        const st      = EX_PHASE[String(exId)];
+        const input   = document.getElementById('pw-newwt-' + exId);
+        const rawWt   = parseFloat(input?.value);
+        if (!st || !rawWt || rawWt <= 0) { input?.focus(); return; }
+        const wt      = _lbToKg(rawWt, exId);
+        st.phase      = 'tracking';
+        st.weight     = wt;
+        st.displayWt  = rawWt;
+        const hiddenWeight = document.getElementById('prog-weight-' + idx);
+        if (hiddenWeight) hiddenWeight.value = wt;
+        if (PROGS[String(exId)]) PROGS[String(exId)].weight_kg = wt;
+        const re = RECEIPT[String(exId)];
+        if (re) { re.weight = wt; renderReceipt(); }
+        renderProgWidget(containerId, exId, tier, PROGS[String(exId)]);
+    }
+
+    function startGiveUp(idx, exId, tier, containerId) {
+        const st = EX_PHASE[String(exId)];
+        if (!st) return;
+        stopRestTimer();
+        st.phase = 'giving_up';
+        renderProgWidget(containerId, exId, tier, PROGS[String(exId)]);
+    }
+
+    function cancelGiveUp(idx, exId, tier, containerId) {
+        const st = EX_PHASE[String(exId)];
+        if (!st) return;
+        st.phase = 'tracking';
+        renderProgWidget(containerId, exId, tier, PROGS[String(exId)]);
+    }
+
+    function confirmGiveUp(idx, exId, tier, containerId) {
+        const st       = EX_PHASE[String(exId)];
+        if (!st) return;
+        const lastReps = parseInt(document.getElementById('pw-last-reps-' + exId)?.value) || 0;
+        st.phase       = 'failed';
+        st.last_reps   = lastReps;
+        const resultHidden   = document.getElementById('ex-result-'    + idx);
+        const tallyHidden    = document.getElementById('ex-tally-'     + idx);
+        const lastRepsHidden = document.getElementById('ex-last-reps-' + idx);
+        if (resultHidden)   resultHidden.value   = 'failed';
+        if (tallyHidden)    tallyHidden.value     = st.tally;
+        if (lastRepsHidden) lastRepsHidden.value  = lastReps;
+        const re = RECEIPT[String(exId)];
+        if (re) { re.phase = 'failed'; re.tally = st.tally; re.last_reps = lastReps; renderReceipt(); }
+        renderProgWidget(containerId, exId, tier, PROGS[String(exId)]);
+        if (tier === 1) onT1Done();
+        setTimeout(() => {
+            const block = document.querySelector(`[data-idx="${idx}"]`);
+            if (block) preserveAndDismissBlock(block);
+        }, 1200);
+    }
+
+    // ── T1 ────────────────────────────────────────────────────────
+
+    // ── T2 ────────────────────────────────────────────────────────
+
+    function addT2(exId, exName, exMuscle) {
+        if (T2_ADDED.has(exId)) return;
+        T2_ADDED.add(exId);
+
+        // Mark chip added (if visible)
+        const chip = document.getElementById('t2-chip-' + exId);
+        if (chip) { chip.classList.add('added'); chip.textContent = '✓ ' + exName; }
+
+        // Mark all-list item added
+        const allItem = document.getElementById('t2-all-' + exId);
+        if (allItem) allItem.classList.add('added');
+
+        const idx = nextIdx++;
+        const block = document.createElement('div');
+        block.className = 'exercise-block';
+        block.dataset.idx  = idx;
+        block.dataset.exid = exId;
+        block.innerHTML =
+            `<div class="block-header">` +
+                `<span class="tier-badge t2">T2</span>` +
+                `<span class="block-title">${exName}</span>` +
+                `<button type="button" class="btn-rm-block"
+                         onclick="removeT2Block(this,${exId},'${exName.replace(/'/g,"\\'")}')">Remove</button>` +
+            `</div>` +
+            `<input type="hidden" name="exercise_id_${idx}" value="${exId}">` +
+            `<input type="hidden" name="scheme_id_${idx}"  id="scheme-id-${idx}"  value="">` +
+            `<input type="hidden" name="prog_weight_${idx}" id="prog-weight-${idx}" value="">` +
+            `<input type="hidden" name="ex_result_${idx}"    id="ex-result-${idx}"    value="">` +
+            `<input type="hidden" name="ex_tally_${idx}"     id="ex-tally-${idx}"     value="0">` +
+            `<input type="hidden" name="ex_last_reps_${idx}" id="ex-last-reps-${idx}" value="0">` +
+            `<div id="decay-strip-${idx}"></div>` +
+            `<div id="prog-widget-${idx}"></div>`;
+
+        document.getElementById('t2-blocks').appendChild(block);
+        showExerciseDecay('decay-strip-' + idx, exId, 2);
+        renderProgWidget('prog-widget-' + idx, exId, 2, PROGS[String(exId)]);
+    }
+
+    function removeT2Block(btn, exId, exName) {
+        btn.closest('.exercise-block').remove();
+        T2_ADDED.delete(exId);
+        delete EX_PHASE[String(exId)];
+        delete RECEIPT[String(exId)];
+
+        const chip = document.getElementById('t2-chip-' + exId);
+        if (chip) { chip.classList.remove('added'); chip.textContent = exName; }
+
+        const allItem = document.getElementById('t2-all-' + exId);
+        if (allItem) allItem.classList.remove('added');
+
+        renderReceipt();
+    }
+
+    // ── T3 ────────────────────────────────────────────────────────
+
+    function addT3(exId, exName, exMuscle) {
+        if (T3_ADDED.has(exId)) return;
+        T3_ADDED.add(exId);
+        const item = document.getElementById('t3p-ex-' + exId);
+        if (item) item.classList.add('added');
+
+        const idx = nextIdx++;
+        const block = document.createElement('div');
         block.className  = 'exercise-block';
         block.dataset.idx = idx;
         block.innerHTML =
@@ -352,135 +1860,1181 @@
                 `<span class="block-title">${exName}</span>` +
                 `<span class="muscle-tag">${exMuscle}</span>` +
                 `<button type="button" class="btn-rm-block"
-                         onclick="this.closest('.exercise-block').remove()">Remove</button>` +
+                         onclick="removeT3Block(this,${exId})">Remove</button>` +
             `</div>` +
             `<input type="hidden" name="exercise_id_${idx}" value="${exId}">` +
-            `<div class="sets-header"><span>Set</span><span>Reps</span><span>kg</span><span></span></div>` +
-            `<div class="sets-container" id="sets-${idx}"></div>` +
-            `<button type="button" class="btn-add-set" onclick="addSet(${idx})">+ Add Set</button>`;
+            `<input type="hidden" name="scheme_id_${idx}"  id="scheme-id-${idx}"  value="">` +
+            `<input type="hidden" name="prog_weight_${idx}" id="prog-weight-${idx}" value="">` +
+            `<input type="hidden" name="ex_result_${idx}"    id="ex-result-${idx}"    value="">` +
+            `<input type="hidden" name="ex_tally_${idx}"     id="ex-tally-${idx}"     value="0">` +
+            `<input type="hidden" name="ex_last_reps_${idx}" id="ex-last-reps-${idx}" value="0">` +
+            `<div id="decay-strip-${idx}"></div>` +
+            `<div id="prog-widget-${idx}"></div>`;
 
-        document.getElementById('tier3-blocks').appendChild(block);
-        addSet(idx);
-        sel.value = '';
-    }
-
-    // When T1 dropdown changes, re-render progression widget
-    function onT1Change(sel) {
-        const exId = sel.value;
-        const prog = T1_PROGS[exId];
-        renderProgWidget('prog-widget-0', exId, 1, prog);
-        // clear and re-seed first set row with new target
-        const cont = document.getElementById('sets-0');
-        cont.innerHTML = '';
-        if (prog) addSet(0, prog.target_reps, prog.weight_kg);
-        else       addSet(0);
-    }
-
-    function renderProgWidget(containerId, exId, tier, prog) {
-        const el = document.getElementById(containerId);
-        if (!el) return;
-        if (!prog) {
-            el.innerHTML = `
-                <div class="prog-widget">
-                    <div class="pw-no-prog">
-                        <span>No progression yet. Set starting weight:</span>
-                        <input type="number" id="pwwt-${exId}" placeholder="kg"
-                               min="0" step="0.5" inputmode="decimal">
-                        <button class="btn-pw-setwt"
-                                onclick="setProgWeight(${exId},${tier})">Set</button>
-                    </div>
-                </div>`;
-            return;
+        document.getElementById('t3-blocks').appendChild(block);
+        showExerciseDecay('decay-strip-' + idx, exId, 3);
+        if (!RECEIPT[String(exId)]) {
+            RECEIPT[String(exId)] = { name: exName, tier: 3, phase: 't3', count: 0, muscle_group: exMuscle };
+            renderReceipt();
         }
-        const total = prog.total_stages;
-        const dots = prog.ladder.map((step, i) => {
-            let cls = i < prog.stage ? 'done' : (i === prog.stage ? 'current' : 'future');
-            // Add separator between rep groups
-            const prevReps = i > 0 ? prog.ladder[i-1].reps : null;
-            const sep = (prevReps !== null && step.reps !== prevReps)
-                ? `<div class="pw-sep"></div>` : '';
-            return `${sep}<div class="pw-dot ${cls}" title="${step.reps}r×${step.sets}s"></div>`;
-        }).join('');
+        const prog = PROGS[String(exId)];
+        renderProgWidget('prog-widget-' + idx, exId, 3, prog);
+    }
 
-        const nextLabel = prog.is_last
-            ? `Complete → +2.5 kg`
-            : `+1 Stage (${prog.ladder[prog.stage+1]?.sets}×${prog.ladder[prog.stage+1]?.reps}r)`;
+    function removeT3Block(btn, exId) {
+        btn.closest('.exercise-block').remove();
+        T3_ADDED.delete(exId);
+        delete EX_PHASE[String(exId)];
+        delete RECEIPT[String(exId)];
+        const item = document.getElementById('t3p-ex-' + exId);
+        if (item) item.classList.remove('added');
+        renderReceipt();
+    }
 
-        el.innerHTML = `
-            <div class="prog-widget">
-                <div class="pw-target">
-                    <span class="pw-weight">${prog.weight_kg}</span>
-                    <span class="pw-kg">kg</span>
-                    <span class="pw-arrow">→</span>
-                    <span class="pw-reps">${prog.target_sets} × ${prog.target_reps} reps</span>
-                    <span class="pw-stage">Stage ${prog.stage+1}/${total}</span>
+    // ── Don't-forget shortcuts ────────────────────────────────────
+
+    function openT3ForGroup(muscle, nameHint) {
+        const section = document.getElementById('tier-section-3');
+        const tierBtn = document.getElementById('btn-tier-3');
+        if (section.style.display === 'none') {
+            section.style.display = '';
+            tierBtn.classList.add('active', 't3');
+        }
+        // Find the matching group and open it
+        const picker = document.getElementById('t3-picker');
+        const hint   = nameHint.toLowerCase();
+        let targetGrp = null;
+        TIER3_LIST.forEach(ex => {
+            if (ex.muscle_group.toLowerCase() !== muscle.toLowerCase()) return;
+            if (!targetGrp) targetGrp = ex.muscle_group;
+            if (hint && ex.name.toLowerCase().includes(hint)) targetGrp = ex.muscle_group;
+        });
+        if (targetGrp && picker) {
+            picker.querySelectorAll('.t2-grp-btn').forEach(b => {
+                if (b.dataset.group === targetGrp && !b.classList.contains('open')) {
+                    b.classList.add('open');
+                    const itemsEl = document.getElementById(
+                        `t3p-items-${targetGrp.replace(/\s+/g, '-')}`);
+                    if (itemsEl) itemsEl.classList.add('open');
+                }
+            });
+        }
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // ── Rest timer ───────────────────────────────────────────────
+    let _rtInterval = null;
+    let _rtStart    = null;
+
+    function _rtFmt(secs) {
+        const m = Math.floor(secs / 60);
+        const s = secs % 60;
+        return m + ':' + String(s).padStart(2, '0');
+    }
+
+    function startRestTimer() {
+        if (_rtInterval) clearInterval(_rtInterval);
+        _rtStart = Date.now();
+        const bar = document.getElementById('rest-timer-bar');
+        const disp = document.getElementById('rt-display');
+        disp.textContent = '0:00';
+        bar.classList.add('visible');
+        _rtInterval = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - _rtStart) / 1000);
+            disp.textContent = _rtFmt(elapsed);
+        }, 1000);
+    }
+
+    function stopRestTimer() {
+        if (_rtInterval) { clearInterval(_rtInterval); _rtInterval = null; }
+        const bar = document.getElementById('rest-timer-bar');
+        bar.classList.remove('visible');
+    }
+
+    // ── Superset ─────────────────────────────────────────────────
+
+    const SUPERSET_GROUPS = {};
+    let ssCounter = 0;
+    const SS_T1_USED = new Set(); // T1 exIds reserved inside supersets
+
+    function createSupersetGroup(tier) {
+        const groupId = 'ss_' + (++ssCounter);
+        SUPERSET_GROUPS[groupId] = {
+            groupId, tier, slots: [],
+            currentRound: 1, timerInterval: null, tracking: false,
+        };
+
+        const container = document.getElementById('t' + tier + '-blocks');
+        if (!container) return;
+
+        // Show tier section without triggering addFreshT1Block
+        const section = document.getElementById('tier-section-' + tier);
+        if (section && section.style.display === 'none') {
+            section.style.display = '';
+            const btn = document.getElementById('btn-tier-' + tier);
+            if (btn) btn.classList.add('active');
+        }
+
+        const groupEl = document.createElement('div');
+        groupEl.className  = 'ss-group';
+        groupEl.id         = 'ss-group-' + groupId;
+        groupEl.dataset.groupId = groupId;
+        groupEl.innerHTML  = `
+            <div class="ss-group-header">
+                <span class="ss-header-label">Superset</span>
+                <button type="button" class="ss-dismiss-btn"
+                        onclick="ssDismissSetup('${groupId}')">×</button>
+            </div>
+            <div id="ss-slots-${groupId}"></div>
+            <div class="ss-add-third-wrap" id="ss-add-third-${groupId}" style="display:none">
+                <button type="button" class="ss-add-third-btn"
+                        onclick="ssAddSlot('${groupId}')">+ Add third</button>
+            </div>
+            <div class="ss-group-controls" id="ss-controls-${groupId}">
+                <button type="button" class="ss-start-btn" id="ss-start-${groupId}"
+                        disabled onclick="ssStart('${groupId}')">Start superset</button>
+            </div>`;
+        container.appendChild(groupEl);
+
+        ssAddSlot(groupId); // A1
+        ssAddSlot(groupId); // A2
+    }
+
+    function ssAddSlot(groupId) {
+        const grp = SUPERSET_GROUPS[groupId];
+        if (!grp || grp.slots.length >= 3 || grp.tracking) return;
+
+        const label = ['A1', 'A2', 'A3'][grp.slots.length];
+        const idx   = nextIdx++;
+        grp.slots.push({ label, idx, exId: null, confirmed: false });
+
+        const slotsEl = document.getElementById('ss-slots-' + groupId);
+        if (!slotsEl) return;
+
+        const slotEl = document.createElement('div');
+        slotEl.className          = 'ss-slot';
+        slotEl.id                 = 'ss-slot-' + groupId + '-' + label;
+        slotEl.dataset.idx        = idx;
+        slotEl.dataset.group      = groupId;
+        slotEl.dataset.slotLabel  = label;
+        slotEl.innerHTML = `
+            <div class="ss-slot-header">
+                <span class="ss-badge" id="ss-badge-${groupId}-${label}">${label}</span>
+                <span class="ss-slot-name" id="ss-sname-${groupId}-${label}"></span>
+            </div>
+            <div id="ss-picker-${groupId}-${label}"></div>
+            <input type="hidden" name="exercise_id_${idx}" id="t1-exid-${idx}"     value="">
+            <input type="hidden" name="scheme_id_${idx}"   id="scheme-id-${idx}"   value="">
+            <input type="hidden" name="prog_weight_${idx}" id="prog-weight-${idx}" value="">
+            <input type="hidden" name="ex_result_${idx}"   id="ex-result-${idx}"   value="">
+            <input type="hidden" name="ex_tally_${idx}"    id="ex-tally-${idx}"    value="0">
+            <div id="decay-strip-${idx}"></div>
+            <div id="prog-widget-${idx}"></div>`;
+        slotsEl.appendChild(slotEl);
+
+        _ssBuilPicker(grp.tier, groupId, label, idx);
+
+        // Show/hide "Add third" based on slot count
+        const addThird = document.getElementById('ss-add-third-' + groupId);
+        if (addThird) addThird.style.display = grp.slots.length === 2 ? '' : 'none';
+    }
+
+    function _ssBuilPicker(tier, groupId, label, idx) {
+        const container = document.getElementById('ss-picker-' + groupId + '-' + label);
+        if (!container) return;
+        const list = tier === 1 ? TIER1_LIST : tier === 2 ? TIER2_LIST : TIER3_LIST;
+
+        const byGrp = {};
+        list.forEach(ex => (byGrp[ex.muscle_group] = byGrp[ex.muscle_group] || []).push(ex));
+
+        Object.entries(byGrp).forEach(([grp, exs]) => {
+            const safeGrp = grp.replace(/\s+/g, '-');
+            const itemsId = 'sspi-' + groupId + '-' + label + '-' + safeGrp;
+
+            const grpBtn = document.createElement('button');
+            grpBtn.type = 'button';
+            grpBtn.className = 't2-grp-btn';
+            grpBtn.innerHTML = '<span>' + grp + '</span><span class="t2-grp-arrow">›</span>';
+            grpBtn.onclick = () => {
+                const open = grpBtn.classList.toggle('open');
+                document.getElementById(itemsId)?.classList.toggle('open', open);
+            };
+            container.appendChild(grpBtn);
+
+            const itemsEl = document.createElement('div');
+            itemsEl.className = 't2-grp-items';
+            itemsEl.id = itemsId;
+
+            exs.forEach(ex => {
+                const used = tier === 1 ? SS_T1_USED.has(ex.id)
+                           : tier === 2 ? T2_ADDED.has(ex.id)
+                           : T3_ADDED.has(ex.id);
+                const item = document.createElement('div');
+                item.className = 't2-all-item' + (used ? ' added' : '');
+                item.innerHTML = '<span class="t2-all-name">' + ex.name + '</span>'
+                               + '<span class="t2-all-check">✓</span>';
+                if (!used) item.onclick = () =>
+                    _ssPickEx(groupId, label, idx, ex.id, ex.name, tier);
+                itemsEl.appendChild(item);
+            });
+            container.appendChild(itemsEl);
+        });
+    }
+
+    function _ssPickEx(groupId, label, idx, exId, exName, tier) {
+        const grp = SUPERSET_GROUPS[groupId];
+        if (!grp) return;
+
+        // Mark as used in the appropriate set
+        if (tier === 1) {
+            SS_T1_USED.add(exId);
+            const exData = TIER1_LIST.find(e => e.id === exId);
+            EX_IS_BARBELL[String(exId)] = !!(exData?.is_barbell);
+            EX_REPS_ONLY[String(exId)]  = !!(exData?.reps_only);
+        } else if (tier === 2) T2_ADDED.add(exId);
+        else T3_ADDED.add(exId);
+
+        const slot = grp.slots.find(s => s.label === label);
+        if (slot) slot.exId = exId;
+
+        // Show name in header
+        const nameEl = document.getElementById('ss-sname-' + groupId + '-' + label);
+        if (nameEl) nameEl.textContent = exName;
+
+        // Write exercise_id hidden
+        const exHidden = document.getElementById('t1-exid-' + idx);
+        if (exHidden) exHidden.value = exId;
+
+        // Hide picker
+        const picker = document.getElementById('ss-picker-' + groupId + '-' + label);
+        if (picker) picker.style.display = 'none';
+
+        // Show exercise history before weight entry
+        showExerciseDecay('decay-strip-' + idx, exId, tier);
+
+        // Render prog-widget in selecting state
+        renderProgWidget('prog-widget-' + idx, exId, tier, PROGS[String(exId)]);
+    }
+
+    // Called from confirmSelection when the block is inside a superset slot
+    function _ssConfirm(idx, exId, tier, containerId, wt, schemeId) {
+        const slotEl = document.querySelector('[data-idx="' + idx + '"][data-group]');
+        if (!slotEl) return false; // not a superset slot
+
+        const groupId = slotEl.dataset.group;
+        const label   = slotEl.dataset.slotLabel;
+        const grp     = SUPERSET_GROUPS[groupId];
+        if (!grp) return false;
+
+        const tierSchemes = SCHEMES[String(tier)] || [];
+        const scheme      = tierSchemes.find(s => s.id === schemeId) || {};
+        const prog        = PROGS[String(exId)];
+
+        const isLbSS  = EX_UNIT[String(exId)] === 'lb';
+        const dispWtSS = isLbSS ? (wt / 0.453592).toFixed(1) : wt;
+        EX_PHASE[String(exId)] = {
+            phase: 'selecting_done', tally: 0,
+            sets:  prog?.sets  || scheme.sets,
+            reps:  prog?.reps  || scheme.reps,
+            weight: wt, displayWt: dispWtSS, unit: isLbSS ? 'lb' : 'kg',
+            scheme_id: schemeId,
+        };
+
+        // Mark slot confirmed
+        const slot = grp.slots.find(s => s.label === label);
+        if (slot) slot.confirmed = true;
+
+        // Update badge
+        const badge = document.getElementById('ss-badge-' + groupId + '-' + label);
+        if (badge) badge.className = 'ss-badge confirmed';
+
+        // Update slot border
+        slotEl.classList.add('ss-confirmed');
+
+        // Render confirmed summary
+        const st  = EX_PHASE[String(exId)];
+        const el  = document.getElementById(containerId);
+        if (el) el.innerHTML = `<div class="ss-confirmed-row">
+            <span class="ss-confirmed-scheme">${st.sets} × ${st.reps} reps</span>
+            <span class="ss-confirmed-wt">${_wtDisplay(st.weight, st.unit || 'kg')}</span>
+            <button type="button" class="ss-edit-btn"
+                    onclick="_ssEdit('${idx}',${exId},${tier},'${containerId}')">edit</button>
+        </div>`;
+
+        // Add to receipt as 'tracking' (will update live)
+        const exName = document.getElementById('ss-sname-' + groupId + '-' + label)?.textContent || '';
+        RECEIPT[String(exId)] = {
+            name: exName, tier, phase: 'tracking', tally: 0,
+            sets: st.sets, reps: st.reps, weight: wt, displayWt: st.displayWt, unit: st.unit,
+            muscle_group: _getMuscleGroup(exId, tier),
+        };
+        renderReceipt();
+
+        _ssCheckReady(groupId);
+        return true;
+    }
+
+    function _ssEdit(idx, exId, tier, containerId) {
+        const slotEl  = document.querySelector('[data-idx="' + idx + '"][data-group]');
+        if (!slotEl) return;
+        const groupId = slotEl.dataset.group;
+        const label   = slotEl.dataset.slotLabel;
+        const grp     = SUPERSET_GROUPS[groupId];
+        if (!grp) return;
+
+        const slot = grp.slots.find(s => s.label === label);
+        if (slot) slot.confirmed = false;
+
+        delete EX_PHASE[String(exId)];
+        delete RECEIPT[String(exId)];
+        renderReceipt();
+
+        slotEl.classList.remove('ss-confirmed');
+        const badge = document.getElementById('ss-badge-' + groupId + '-' + label);
+        if (badge) badge.className = 'ss-badge';
+
+        // Disable start button
+        const startBtn = document.getElementById('ss-start-' + groupId);
+        if (startBtn) startBtn.disabled = true;
+
+        renderProgWidget(containerId, exId, tier, PROGS[String(exId)]);
+    }
+
+    function _ssCheckReady(groupId) {
+        const grp = SUPERSET_GROUPS[groupId];
+        if (!grp) return;
+        const ready = grp.slots.length >= 2 && grp.slots.every(s => s.confirmed);
+        const btn   = document.getElementById('ss-start-' + groupId);
+        if (btn) btn.disabled = !ready;
+    }
+
+    function ssStart(groupId) {
+        const grp = SUPERSET_GROUPS[groupId];
+        if (!grp || !grp.slots.every(s => s.confirmed)) return;
+        grp.tracking = true;
+
+        // Hide setup controls
+        document.getElementById('ss-add-third-' + groupId)?.style
+            && (document.getElementById('ss-add-third-' + groupId).style.display = 'none');
+        const dismissBtn = document.querySelector('#ss-group-' + groupId + ' .ss-dismiss-btn');
+        if (dismissBtn) dismissBtn.style.display = 'none';
+
+        // Transition each slot to tracking view
+        grp.slots.forEach(slot => {
+            const st = EX_PHASE[String(slot.exId)];
+            if (!st) return;
+            st.phase = 'tracking';
+
+            const slotEl = document.getElementById('ss-slot-' + groupId + '-' + slot.label);
+            if (slotEl) slotEl.classList.remove('ss-confirmed');
+
+            const badge = document.getElementById('ss-badge-' + groupId + '-' + slot.label);
+            if (badge) badge.className = 'ss-badge';
+
+            const widgetEl = document.getElementById('prog-widget-' + slot.idx);
+            if (widgetEl) widgetEl.innerHTML = `<div class="ss-slot-track">
+                <div class="ss-track-info">
+                    <div class="ss-track-scheme">${st.sets} × ${st.reps} reps</div>
+                    <div class="ss-track-wt">${_wtDisplay(st.weight, st.unit || 'kg')}</div>
                 </div>
-                <div class="pw-track">${dots}</div>
-                <div class="pw-actions">
-                    <button class="btn-pw-advance ${prog.is_last ? 'last' : ''}"
-                            onclick="advanceProg(${exId},${tier},'${containerId}')">
-                        ${nextLabel}
-                    </button>
+                <div>
+                    <div class="ss-track-tally" id="ss-tally-${groupId}-${slot.label}">0</div>
+                    <div class="ss-track-tally-sub">/ ${st.sets} sets</div>
                 </div>
             </div>`;
+        });
+
+        _ssRenderControls(groupId);
     }
 
-    async function advanceProg(exId, tier, containerId) {
-        const res  = await fetch('/progression/advance', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({exercise_id: exId, tier: tier})
+    function _ssRenderControls(groupId) {
+        const grp = SUPERSET_GROUPS[groupId];
+        const el  = document.getElementById('ss-controls-' + groupId);
+        if (!el || !grp) return;
+        el.innerHTML = `
+            <button type="button" class="ss-round-btn" id="ss-round-btn-${groupId}"
+                    onclick="ssRound('${groupId}')">Complete round ${grp.currentRound}</button>
+            <button type="button" class="ss-giveup-btn"
+                    onclick="ssGiveUp('${groupId}')">Give up superset</button>`;
+    }
+
+    function ssRound(groupId) {
+        const grp = SUPERSET_GROUPS[groupId];
+        if (!grp || !grp.tracking) return;
+
+        grp.slots.forEach(slot => {
+            const st = EX_PHASE[String(slot.exId)];
+            if (!st || st.phase === 'completed') return;
+
+            st.tally++;
+
+            const tallyHidden = document.getElementById('ex-tally-' + slot.idx);
+            if (tallyHidden) tallyHidden.value = st.tally;
+
+            if (st.tally >= st.sets) {
+                st.phase = 'completed';
+
+                const resultHidden = document.getElementById('ex-result-' + slot.idx);
+                if (resultHidden) resultHidden.value = 'completed';
+
+                const badge = document.getElementById('ss-badge-' + groupId + '-' + slot.label);
+                if (badge) badge.className = 'ss-badge done';
+
+                const slotEl = document.getElementById('ss-slot-' + groupId + '-' + slot.label);
+                if (slotEl) slotEl.classList.add('ss-done');
+
+                const widgetEl = document.getElementById('prog-widget-' + slot.idx);
+                if (widgetEl) widgetEl.innerHTML =
+                    `<div class="pw-done-banner">✓ Done — ${st.sets} × ${st.reps} @ ${_wtDisplay(st.weight, st.unit || 'kg')}</div>`;
+
+                const tallyEl = document.getElementById('ss-tally-' + groupId + '-' + slot.label);
+                if (tallyEl) tallyEl.textContent = '✓';
+
+                const re = RECEIPT[String(slot.exId)];
+                if (re) { re.phase = 'completed'; }
+            } else {
+                const tallyEl = document.getElementById('ss-tally-' + groupId + '-' + slot.label);
+                if (tallyEl) tallyEl.textContent = st.tally;
+
+                const re = RECEIPT[String(slot.exId)];
+                if (re) { re.tally = st.tally; }
+            }
         });
-        const prog = await res.json();
-        if (prog.weight_bumped) {
-            alert(`🎉 Weight up to ${prog.weight_kg} kg! Restarting ladder.`);
-        }
-        // Update T1_PROGS in-place so addSet uses new target
-        T1_PROGS[String(exId)] = prog;
-        renderProgWidget(containerId, exId, tier, prog);
-        // Update the first set row's prefill if it's still empty
-        const cont = document.getElementById('sets-' + (tier === 1 ? 0 : null));
-        if (cont && cont.querySelectorAll('.set-row').length === 1) {
-            const rIn = cont.querySelector(`input[name^="reps_"]`);
-            const wIn = cont.querySelector(`input[name^="weight_"]`);
-            if (rIn && !rIn.value) rIn.value = prog.target_reps;
-            if (wIn && !wIn.value) wIn.value = prog.weight_kg;
+
+        renderReceipt();
+
+        const stillGoing = grp.slots.some(s => {
+            const st = EX_PHASE[String(s.exId)];
+            return st && st.phase !== 'completed';
+        });
+
+        if (!stillGoing) {
+            _ssStopTimer(groupId);
+            const el = document.getElementById('ss-controls-' + groupId);
+            if (el) el.innerHTML =
+                '<div class="ss-group-done-banner">✓ Superset complete</div>';
+            setTimeout(() => _ssDismissDOM(groupId), 750);
+        } else {
+            grp.currentRound++;
+            _ssStartTimer(groupId);
         }
     }
 
-    async function setProgWeight(exId, tier) {
-        const wt = parseFloat(document.getElementById('pwwt-' + exId)?.value);
-        if (!wt || wt <= 0) return;
-        const res  = await fetch('/progression/set-weight', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({exercise_id: exId, tier: tier, weight_kg: wt})
-        });
-        const prog = await res.json();
-        T1_PROGS[String(exId)] = prog;
-        renderProgWidget('prog-widget-0', exId, tier, prog);
+    function _ssStartTimer(groupId) {
+        _ssStopTimer(groupId);
+        const grp   = SUPERSET_GROUPS[groupId];
+        if (!grp) return;
+        const start = Date.now();
+
+        const tick = () => {
+            const secs = Math.floor((Date.now() - start) / 1000);
+            const m = Math.floor(secs / 60);
+            const s = String(secs % 60).padStart(2, '0');
+            const el = document.getElementById('ss-controls-' + groupId);
+            if (!el) return;
+            el.innerHTML = `
+                <div class="ss-rest-row">
+                    <span class="ss-rest-dot"></span>
+                    <span class="ss-rest-lbl">REST</span>
+                    <span class="ss-rest-time">${m}:${s}</span>
+                </div>
+                <button type="button" class="ss-round-btn"
+                        onclick="ssRound('${groupId}')">Complete round ${grp.currentRound}</button>
+                <button type="button" class="ss-giveup-btn"
+                        onclick="ssGiveUp('${groupId}')">Give up superset</button>`;
+        };
+        tick();
+        grp.timerInterval = setInterval(tick, 1000);
     }
+
+    function _ssStopTimer(groupId) {
+        const grp = SUPERSET_GROUPS[groupId];
+        if (!grp || !grp.timerInterval) return;
+        clearInterval(grp.timerInterval);
+        grp.timerInterval = null;
+    }
+
+    function ssGiveUp(groupId) {
+        const grp = SUPERSET_GROUPS[groupId];
+        if (!grp) return;
+        if (!confirm('Give up this superset? Partial sets will be saved.')) return;
+
+        _ssStopTimer(groupId);
+
+        grp.slots.forEach(slot => {
+            const st = EX_PHASE[String(slot.exId)];
+            if (!st || st.phase === 'completed') return;
+
+            st.phase = 'failed';
+            const resultHidden = document.getElementById('ex-result-' + slot.idx);
+            if (resultHidden) resultHidden.value = 'failed';
+            const tallyHidden  = document.getElementById('ex-tally-' + slot.idx);
+            if (tallyHidden)  tallyHidden.value  = st.tally;
+
+            const badge = document.getElementById('ss-badge-' + groupId + '-' + slot.label);
+            if (badge) badge.className = 'ss-badge failed';
+
+            const slotEl = document.getElementById('ss-slot-' + groupId + '-' + slot.label);
+            if (slotEl) { slotEl.classList.add('ss-failed'); slotEl.classList.remove('ss-done'); }
+
+            const widgetEl = document.getElementById('prog-widget-' + slot.idx);
+            if (widgetEl) widgetEl.innerHTML =
+                `<div class="pw-fail-banner">✗ ${st.tally} / ${st.sets} sets @ ${_wtDisplay(st.weight, st.unit || 'kg')}</div>`;
+
+            const re = RECEIPT[String(slot.exId)];
+            if (re) { re.phase = 'failed'; re.tally = st.tally; }
+        });
+
+        renderReceipt();
+        setTimeout(() => _ssDismissDOM(groupId), 1200);
+    }
+
+    function ssDismissSetup(groupId) {
+        // × button before tracking starts
+        const grp = SUPERSET_GROUPS[groupId];
+        if (!grp || grp.tracking) return;
+
+        grp.slots.forEach(slot => {
+            if (!slot.exId) return;
+            if (grp.tier === 1) SS_T1_USED.delete(slot.exId);
+            else if (grp.tier === 2) T2_ADDED.delete(slot.exId);
+            else T3_ADDED.delete(slot.exId);
+            delete EX_PHASE[String(slot.exId)];
+            delete RECEIPT[String(slot.exId)];
+        });
+        renderReceipt();
+
+        document.getElementById('ss-group-' + groupId)?.remove();
+        delete SUPERSET_GROUPS[groupId];
+    }
+
+    function _ssDismissDOM(groupId) {
+        const grp     = SUPERSET_GROUPS[groupId];
+        const groupEl = document.getElementById('ss-group-' + groupId);
+        if (!groupEl || !grp) return;
+
+        // Rescue all hidden inputs to the form before removing DOM
+        const form = document.getElementById('session-form');
+        grp.slots.forEach(slot => {
+            const slotEl = document.getElementById('ss-slot-' + groupId + '-' + slot.label);
+            if (!slotEl) return;
+            slotEl.querySelectorAll('[name]').forEach(inp => {
+                const h = document.createElement('input');
+                h.type = 'hidden'; h.name = inp.name; h.value = inp.value;
+                form.appendChild(h);
+            });
+        });
+
+        // Slide + collapse animation (same as preserveAndDismissBlock)
+        const h = groupEl.offsetHeight;
+        groupEl.style.transition = 'transform .32s ease, opacity .22s ease';
+        groupEl.style.transform  = 'translateX(110%)';
+        groupEl.style.opacity    = '0';
+        setTimeout(() => {
+            groupEl.style.maxHeight    = h + 'px';
+            groupEl.style.transition   = 'max-height .22s ease, margin .22s ease, padding .22s ease';
+            groupEl.style.overflow     = 'hidden';
+            groupEl.style.maxHeight    = '0';
+            groupEl.style.marginTop    = '0';
+            groupEl.style.marginBottom = '0';
+            groupEl.style.paddingTop   = '0';
+            groupEl.style.paddingBottom = '0';
+            setTimeout(() => {
+                groupEl.remove();
+                delete SUPERSET_GROUPS[groupId];
+            }, 240);
+        }, 330);
+    }
+
+    // ── Exercise decay strip ──────────────────────────────────────
+
+    const MG_COLORS = {
+        'Chest':            'var(--pull-fg)',
+        'Back':             'var(--t1-fg)',
+        'Legs':             'var(--legs-fg)',
+        'Shoulders':        'var(--core-fg)',
+        'Biceps':           'var(--swim-fg)',
+        'Triceps':          '#fb923c',
+        'Core':             '#f87171',
+        'Posterior Chain':  'var(--legs-fg)',
+        'Upper Back':       'var(--t1-fg)',
+    };
+
+    async function showExerciseDecay(containerId, exId, tier) {
+        const el = document.getElementById(containerId);
+        if (!el) return;
+
+        // Show loading placeholder immediately so the user sees something
+        el.innerHTML = `<div class="ex-decay-wrap">
+            <span class="ex-decay-loading">Loading history…</span>
+        </div>`;
+
+        let data;
+        try {
+            const resp = await fetch('/api/exercise-activity/' + exId);
+            data = await resp.json();
+        } catch (_) {
+            el.innerHTML = '';
+            return;
+        }
+        EX_DECAY_DATA[String(exId)] = data;
+
+        const arr  = data.activity;   // 21 entries, index 0 = oldest
+        const DAYS = arr.length;
+        const col  = MG_COLORS[data.muscle_group] || 'var(--t1-fg)';
+
+        // Compute days since last + last session weight
+        let daysSince  = null;
+        let lastWeight = null;
+        let prevWeight = null;  // session before last
+        let hitCount   = 0;
+
+        for (let i = arr.length - 1; i >= 0; i--) {
+            if (!arr[i].hit) continue;
+            hitCount++;
+            if (daysSince === null) {
+                daysSince  = arr.length - 1 - i;
+                lastWeight = arr[i].weight_kg;
+            } else if (prevWeight === null) {
+                prevWeight = arr[i].weight_kg;
+                break;
+            }
+        }
+
+        // If nothing in the 21-day window, fall back to all-time data
+        if (daysSince === null && data.days_since_all_time !== null) {
+            daysSince  = data.days_since_all_time;
+            lastWeight = data.last_weight_all_time;
+        }
+
+        // Status string + colour
+        let status, daysLabel;
+        if (daysSince === null) {
+            status    = 'never';
+            daysLabel = 'Never done';
+        } else if (daysSince === 0) {
+            status    = 'fresh';
+            daysLabel = 'Today';
+        } else if (daysSince <= 6) {
+            status    = 'fresh';
+            daysLabel = daysSince + 'd ago';
+        } else if (daysSince <= 10) {
+            status    = 'due';
+            daysLabel = daysSince + 'd ago';
+        } else {
+            status    = 'overdue';
+            daysLabel = daysSince + 'd ago';
+        }
+
+        // Trend vs previous session
+        let trendHtml = '';
+        if (lastWeight !== null && prevWeight !== null) {
+            const diff = lastWeight - prevWeight;
+            if (Math.abs(diff) < 0.1) {
+                trendHtml = `<span class="ex-decay-trend same">= same weight</span>`;
+            } else if (diff > 0) {
+                trendHtml = `<span class="ex-decay-trend up">↑ +${diff.toFixed(1)} kg vs prev</span>`;
+            } else {
+                trendHtml = `<span class="ex-decay-trend down">↓ ${diff.toFixed(1)} kg vs prev</span>`;
+            }
+        }
+
+        // Build tooltip HTML from attempt data
+        function fmtDate(iso) {
+            if (!iso) return '';
+            const d = new Date(iso + 'T00:00:00');
+            return d.toLocaleDateString('en-GB', {day: 'numeric', month: 'short'});
+        }
+        function fmtAttempt(a, label) {
+            if (!a) return '';
+            const scheme = `${a.sets_target}×${a.reps}`;
+            const done   = a.sets_done < a.sets_target
+                ? `${a.sets_done}/${a.sets_target} sets`
+                : scheme;
+            const ok     = a.result === 'completed';
+            const cls    = ok ? 'ex-decay-tip-ok' : 'ex-decay-tip-fail';
+            const mark   = ok ? '✓' : '✗';
+            return `<div class="ex-decay-tip-row">
+                <span class="ex-decay-tip-label">${label}</span>
+                <span class="ex-decay-tip-val ${cls}">${mark} ${done}</span>
+                <span class="ex-decay-tip-date">${fmtDate(a.date)}</span>
+            </div>`;
+        }
+
+        const la = data.last_attempt;
+        const lc = data.last_completed;
+        // Show last_completed separately only if it differs from last_attempt
+        const showCompleted = lc && la && lc.date !== la.date;
+        const tipHtml = (la || lc) ? `
+            <div class="ex-decay-tip">
+                ${fmtAttempt(la, 'Last attempt')}
+                ${showCompleted ? fmtAttempt(lc, 'Last done') : ''}
+            </div>` : '';
+
+        // Last session label — kg is interactive
+        const lastKgHtml = lastWeight !== null
+            ? `<span class="ex-decay-last" id="last-kg-${exId}">
+                Last: <span class="ex-decay-last-kg" id="last-kg-btn-${exId}"
+                    onclick="toggleHistory('${containerId}', '${exId}')">${lastWeight} kg</span>
+                ${tipHtml}
+               </span>`
+            : '';
+
+        // Build history rows HTML
+        const hist = data.history || [];
+        const histRows = hist.map(h =>
+            `<div class="ex-hist-row">
+                <span class="ex-hist-date">${fmtDate(h.date)}</span>
+                <span class="ex-hist-weight">${h.weight_kg} kg</span>
+                <span class="ex-hist-scheme">${h.sets}×${h.reps}</span>
+             </div>`
+        ).join('');
+        const histPanel = hist.length ? `
+            <div class="ex-history-panel" id="ex-hist-${exId}">
+                ${histRows}
+            </div>` : '';
+
+        // Build 21 decay blocks
+        const blocks = arr.map((day, i) => {
+            const isToday  = i === arr.length - 1;
+            if (isToday)   return `<div class="ex-decay-block today-m"></div>`;
+            if (!day.hit)  return `<div class="ex-decay-block miss"></div>`;
+            const daysBack = arr.length - 1 - i;
+            const opacity  = Math.max(0.2, 1 - (daysBack / DAYS) * 0.7);
+            return `<div class="ex-decay-block hit"
+                        style="background:${col};opacity:${opacity.toFixed(2)}"
+                        title="${day.date}: ${day.weight_kg}kg"></div>`;
+        }).join('');
+
+        el.innerHTML = `<div class="ex-decay-wrap">
+            <span class="ex-decay-eyebrow">Last 21 days</span>
+            <div class="ex-decay-bar">${blocks}</div>
+            <div class="ex-decay-axis"><span>21d ago</span><span>today</span></div>
+            <div class="ex-decay-stats">
+                <span class="ex-decay-days ${status}">${daysLabel}</span>
+                <span class="ex-decay-sub">since last</span>
+                ${lastKgHtml}
+                ${trendHtml}
+            </div>
+            ${histPanel}
+        </div>`;
+    }
+
+    window.toggleHistory = function(containerId, exId) {
+        const panel = document.getElementById('ex-hist-' + exId);
+        if (!panel) return;
+        const open = panel.classList.toggle('open');
+        // On mobile, tooltip stays closed; on desktop hover handles it
+        const lastSpan = document.getElementById('last-kg-' + exId);
+        if (lastSpan) lastSpan.classList.toggle('tip-open', false);
+    };
+
+    // ── Guided flow: stepper, wizard navigation, Tier-1 counter ───
+
+    let T1_DONE = 0;
+    let currentStage = 'warmup';
+    let T1_OPEN_M = null;       // muscle group expanded in the selector
+
+    // Kept as a safe no-op for warmup helpers that still call it
+    function setProgressChip() {}
+
+    function staleMeta(d) {
+        if (d == null)  return { cls: 'overdue', label: 'never' };
+        if (d === 0)    return { cls: 'fresh',   label: 'today' };
+        if (d <= 6)     return { cls: 'fresh',   label: d + 'd ago' };
+        if (d <= 10)    return { cls: 'due',     label: d + 'd ago' };
+        return { cls: 'overdue', label: d + 'd ago' };
+    }
+
+    function _setNode(id, state, content) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.className = 'step-node ' + state;
+        el.innerHTML = content;
+    }
+
+    function renderStepper() {
+        const done2 = T1_DONE >= 2;
+        const wState = currentStage === 'warmup' ? 'active' : 'done';
+        const tState = currentStage === 't1' ? 'active' : (done2 ? 'done' : 'pending');
+        const aState = currentStage === 'acc' ? 'active' : (done2 ? 'pending' : 'locked');
+        _setNode('step-warmup', wState, wState === 'done' ? '✓' : '1');
+        _setNode('step-t1', tState, tState === 'done' ? '✓' : '2');
+        _setNode('step-acc', aState, aState === 'done' ? '✓' : '3');
+        const l1 = document.getElementById('line-1');
+        const l2 = document.getElementById('line-2');
+        if (l1) l1.className = 'step-line' + (wState === 'done' ? ' filled' : '');
+        if (l2) l2.className = 'step-line' + (done2 ? ' filled' : '');
+        ['warmup', 't1', 'acc'].forEach(st => {
+            const lbl = document.getElementById('lbl-' + st);
+            if (lbl) lbl.classList.toggle('on', currentStage === st);
+        });
+    }
+
+    function goStage(stage) {
+        currentStage = stage;
+        ['warmup', 't1', 'acc'].forEach(st => {
+            const el = document.getElementById('stage-' + st);
+            if (el) el.classList.toggle('is-active', st === stage);
+        });
+        if (stage === 't1') {
+            const blocks = document.getElementById('t1-blocks');
+            if (blocks && !blocks.querySelector('.exercise-block')) showT1Select();
+        }
+        renderStepper();
+        const top = document.getElementById('stepper');
+        if (top) top.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function updateT1Counter() {
+        const c = document.getElementById('t1-count');
+        if (c) { c.textContent = T1_DONE + ' / 2'; c.classList.toggle('full', T1_DONE >= 2); }
+        renderStepper();
+    }
+
+    function onT1Done() {
+        T1_DONE++;
+        updateT1Counter();
+        setTimeout(() => {
+            if (T1_DONE < 2) {
+                showT1Select();
+            } else {
+                const addBtn = document.getElementById('btn-add-t1');
+                if (addBtn) addBtn.style.display = '';
+                goStage('acc');
+            }
+        }, 1300);
+    }
+
+    // ── Tier 1 smart selector (muscle staleness → choose lift) ─────
+
+    function _t1UsedIds() {
+        return new Set(Object.keys(RECEIPT)
+            .filter(k => RECEIPT[k].tier === 1)
+            .map(k => Number(k)));
+    }
+
+    function _t1LiftRow(ex, rec, usedSet) {
+        const used = usedSet.has(ex.id);
+        const dm = staleMeta(ex.days_since);
+        const lw = (ex.last_weight != null)
+            ? `<span class="mono">${ex.last_weight}</span> kg · ` : '';
+        const pr = ex.is_pr ? `<span class="pill-pr">PR</span>` : '';
+        const right = rec
+            ? `<span class="pill-sugg">Suggested</span>`
+            : (used ? `<span class="t1-lift-add done">✓</span>` : `<span class="t1-lift-add">+</span>`);
+        return `<button type="button" class="t1-lift${rec ? ' rec' : ''}" ${used ? 'disabled' : ''} onclick="pickT1Lift(${ex.id})">
+            <span class="t1-lift-main">
+                <span class="t1-lift-name">${ex.name}${pr}</span>
+                <span class="t1-lift-sub">${lw}<span class="${dm.cls}">${dm.label}</span></span>
+            </span>${right}</button>`;
+    }
+
+    function buildT1Selector() {
+        const el = document.getElementById('t1-select');
+        if (!el) return;
+        const usedSet = _t1UsedIds();
+
+        const groups = {};
+        TIER1_LIST.forEach(ex => { (groups[ex.muscle_group] = groups[ex.muscle_group] || []).push(ex); });
+
+        // Muscle staleness = most-recent (min) days_since; never = most stale
+        const order = Object.keys(groups).map(g => {
+            let st = null;
+            groups[g].forEach(ex => { const d = ex.days_since; if (d != null && (st == null || d < st)) st = d; });
+            return { g, st };
+        });
+        order.sort((a, b) => (a.st == null ? 9999 : a.st) < (b.st == null ? 9999 : b.st) ? 1 : -1);
+
+        // Suggested = top 2 stalest muscles, each's most-overdue unused lift
+        const sugg = [];
+        order.forEach(o => {
+            if (sugg.length >= 2) return;
+            const lifts = groups[o.g].filter(ex => !usedSet.has(ex.id));
+            if (!lifts.length) return;
+            lifts.sort((a, b) => (a.days_since == null ? 9999 : a.days_since) < (b.days_since == null ? 9999 : b.days_since) ? 1 : -1);
+            sugg.push(lifts[0]);
+        });
+        const recId = sugg.length ? sugg[0].id : null;
+
+        let html = '';
+        if (sugg.length) {
+            html += `<div class="t1-sugg"><div class="t1-sugg-label">Suggested today</div><div class="t1-sugg-row">`
+                + sugg.map(ex => `<button type="button" class="t1-sugg-chip" onclick="pickT1Lift(${ex.id})">${ex.name} · ${ex.days_since == null ? 'new' : ex.days_since + 'd'}</button>`).join('')
+                + `</div></div>`;
+        }
+        html += `<div class="t1-sel-hint">Stalest muscle first — open one to choose the lift.</div>`;
+        html += order.map(o => {
+            const meta = staleMeta(o.st);
+            const open = T1_OPEN_M === o.g;
+            const pct = Math.min(100, o.st == null ? 100 : Math.round(o.st / 18 * 100));
+            const mlabel = o.st == null ? 'never' : o.st + 'd';
+            const head = `<button type="button" class="t1-m-head" onclick="toggleT1Muscle('${o.g.replace(/'/g, "\\'")}')">
+                <span class="t1-m-name">${o.g}</span>
+                <span class="t1-m-bar"><span class="t1-m-fill ${meta.cls}" style="width:${pct}%"></span></span>
+                <span class="t1-m-days ${meta.cls}">${mlabel}</span>
+                <span class="t1-m-chev">${open ? '⌄' : '›'}</span></button>`;
+            const lifts = open
+                ? `<div class="t1-m-lifts">` + groups[o.g].map(ex => _t1LiftRow(ex, ex.id === recId, usedSet)).join('') + `</div>`
+                : '';
+            return `<div class="t1-m-group">${head}${lifts}</div>`;
+        }).join('');
+        el.innerHTML = html;
+    }
+
+    function toggleT1Muscle(g) {
+        T1_OPEN_M = (T1_OPEN_M === g) ? null : g;
+        buildT1Selector();
+    }
+
+    function showT1Select() {
+        buildT1Selector();
+        const s = document.getElementById('t1-select');
+        if (s) s.style.display = '';
+    }
+
+    function pickT1Lift(exId) {
+        const ex = TIER1_LIST.find(e => e.id === exId);
+        if (!ex) return;
+        if (_t1UsedIds().has(exId)) return;
+        const sel = document.getElementById('t1-select');
+        if (sel) sel.style.display = 'none';
+        addT1Block(exId, ex.name);
+    }
+
+    function addT1Block(exId, exName) {
+        const idx = nextIdx++;
+        const block = document.createElement('div');
+        block.className = 'exercise-block tier1-block';
+        block.dataset.idx = idx;
+        block.innerHTML =
+            `<div class="block-header">` +
+                `<span class="tier-badge t1">T1</span>` +
+                `<span class="block-title">${exName}</span>` +
+                `<button type="button" class="btn-rm-block" onclick="cancelT1Block(${idx})">Change</button>` +
+            `</div>` +
+            `<input type="hidden" name="exercise_id_${idx}" id="t1-exid-${idx}" value="${exId}">` +
+            `<input type="hidden" name="scheme_id_${idx}"   id="scheme-id-${idx}"   value="">` +
+            `<input type="hidden" name="prog_weight_${idx}" id="prog-weight-${idx}" value="">` +
+            `<input type="hidden" name="ex_result_${idx}"    id="ex-result-${idx}"    value="">` +
+            `<input type="hidden" name="ex_tally_${idx}"     id="ex-tally-${idx}"     value="0">` +
+            `<input type="hidden" name="ex_last_reps_${idx}" id="ex-last-reps-${idx}" value="0">` +
+            `<div id="decay-strip-${idx}"></div>` +
+            `<div id="prog-widget-${idx}"></div>`;
+        document.getElementById('t1-blocks').appendChild(block);
+        T1_NAMES[String(idx)] = exName;
+        const exData = TIER1_LIST.find(e => e.id === exId);
+        EX_IS_BARBELL[String(exId)] = !!(exData && exData.is_barbell);
+        EX_REPS_ONLY[String(exId)]  = !!(exData && exData.reps_only);
+        showExerciseDecay('decay-strip-' + idx, exId, 1);
+        renderProgWidget('prog-widget-' + idx, exId, 1, PROGS[String(exId)]);
+    }
+
+    function cancelT1Block(idx) {
+        const b = document.querySelector(`#t1-blocks [data-idx="${idx}"]`);
+        if (b) b.remove();
+        showT1Select();
+    }
+
+    // ── Warmup (Tier 4) ───────────────────────────────────────────
+
+    let WARMUP_SEQ = 0;
+    const WARMUP_ADDED = new Set();
+
+    function buildWarmupPicker() {
+        const container = document.getElementById('warmup-picker');
+        if (!container) return;
+        const groups = {};
+        TIER4_LIST.forEach(ex => { (groups[ex.muscle_group] = groups[ex.muscle_group] || []).push(ex); });
+        Object.entries(groups).forEach(([grp, exs]) =>
+            _buildAccordionGroup(container, grp, exs, 'wup',
+                ex => addWarmup(ex),
+                id => WARMUP_ADDED.has(id), 't2-all-check')
+        );
+    }
+
+    function addWarmup(ex) {
+        if (WARMUP_ADDED.has(ex.id)) return;
+        WARMUP_ADDED.add(ex.id);
+        const pitem = document.getElementById('wup-ex-' + ex.id);
+        if (pitem) pitem.classList.add('added');
+
+        const sfx = 'w' + (WARMUP_SEQ++);
+        const m = ex.metrics || {};
+        const doneOnly = !('distance' in m) && !m.time && !m.resistance;
+
+        let metricsHtml;
+        if (doneOnly) {
+            metricsHtml = `<div class="warmup-metrics">
+                <input type="hidden" name="cardio_done_${sfx}" id="wm-done-${sfx}" value="">
+                <button type="button" class="wm-done-btn" id="wm-done-btn-${sfx}"
+                        onclick="toggleWarmupDone(${ex.id},'${sfx}')">Mark done</button>
+            </div>`;
+        } else {
+            let fields = '';
+            if ('distance' in m) fields += `<div class="wm-field">
+                <label>Distance (${m.distance})</label>
+                <input type="number" name="cardio_distance_${sfx}" min="0" step="any"
+                       inputmode="decimal" placeholder="0"
+                       oninput="updateWarmupSummary(${ex.id},'${sfx}')"></div>`;
+            if (m.time) fields += `<div class="wm-field">
+                <label>Time (min)</label>
+                <input type="number" name="cardio_duration_${sfx}" min="0" step="any"
+                       inputmode="decimal" placeholder="0"
+                       oninput="updateWarmupSummary(${ex.id},'${sfx}')"></div>`;
+            if (m.resistance) fields += `<div class="wm-field">
+                <label>Resistance</label>
+                <input type="number" name="cardio_resistance_${sfx}" min="0" step="any"
+                       inputmode="decimal" placeholder="0"
+                       oninput="updateWarmupSummary(${ex.id},'${sfx}')"></div>`;
+            metricsHtml = `<div class="warmup-metrics">${fields}</div>`;
+        }
+
+        const block = document.createElement('div');
+        block.className = 'warmup-block';
+        block.dataset.exid = ex.id;
+        block.dataset.sfx  = sfx;
+        block.innerHTML =
+            `<div class="warmup-head">
+                <span class="tier-badge t4">T4</span>
+                <span class="warmup-name">${ex.name}</span>
+                <button type="button" class="btn-rm-block" onclick="removeWarmupByExId(${ex.id})">Remove</button>
+            </div>` +
+            `<input type="hidden" name="cardio_exercise_id_${sfx}" value="${ex.id}">` +
+            metricsHtml;
+        document.getElementById('warmup-blocks').appendChild(block);
+
+        RECEIPT[String(ex.id)] = { name: ex.name, tier: 4, phase: 't4',
+            summary: doneOnly ? 'done?' : 'logging', muscle_group: ex.muscle_group };
+        renderReceipt();
+        setProgressChip('warmup', 'done');
+    }
+
+    function updateWarmupSummary(exId, sfx) {
+        const re = RECEIPT[String(exId)];
+        if (!re) return;
+        const ex   = TIER4_LIST.find(e => String(e.id) === String(exId)) || {};
+        const unit = (ex.metrics && ex.metrics.distance) || 'm';
+        const dist = document.querySelector(`[name="cardio_distance_${sfx}"]`);
+        const dur  = document.querySelector(`[name="cardio_duration_${sfx}"]`);
+        const res  = document.querySelector(`[name="cardio_resistance_${sfx}"]`);
+        const parts = [];
+        if (dist && dist.value) parts.push(dist.value + unit);
+        if (dur && dur.value)   parts.push(dur.value + 'min');
+        if (res && res.value)   parts.push('L' + res.value);
+        re.summary = parts.length ? parts.join(' · ') : 'logging';
+        renderReceipt();
+    }
+
+    function toggleWarmupDone(exId, sfx) {
+        const hidden = document.getElementById('wm-done-' + sfx);
+        const btn    = document.getElementById('wm-done-btn-' + sfx);
+        const on = hidden.value !== '1';
+        hidden.value = on ? '1' : '';
+        if (btn) { btn.classList.toggle('on', on); btn.textContent = on ? '✓ Done' : 'Mark done'; }
+        const re = RECEIPT[String(exId)];
+        if (re) { re.summary = on ? 'done' : 'done?'; renderReceipt(); }
+    }
+
+    function removeWarmupByExId(exId) {
+        const block = document.querySelector(`.warmup-block[data-exid="${exId}"]`);
+        if (block) block.remove();
+        WARMUP_ADDED.delete(Number(exId));
+        WARMUP_ADDED.delete(exId);
+        const pitem = document.getElementById('wup-ex-' + exId);
+        if (pitem) pitem.classList.remove('added');
+        delete RECEIPT[String(exId)];
+        renderReceipt();
+        if (!document.querySelector('.warmup-block')) setProgressChip('warmup', '');
+    }
+
+    // ── Accessories picker (T2 + T3 by muscle) ────────────────────
+
+    function buildAccessoryPicker() {
+        const container = document.getElementById('acc-picker');
+        if (!container) return;
+        const groups = {};
+        TIER2_LIST.forEach(ex => { (groups[ex.muscle_group] = groups[ex.muscle_group] || []).push(Object.assign({}, ex, {tier: 2})); });
+        TIER3_LIST.forEach(ex => { (groups[ex.muscle_group] = groups[ex.muscle_group] || []).push(Object.assign({}, ex, {tier: 3})); });
+        Object.keys(groups).sort().forEach(grp => {
+            const itemsId = 'acc-items-' + grp.replace(/\s+/g, '-');
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 't2-grp-btn';
+            btn.dataset.group = grp;
+            btn.innerHTML = `<span>${grp}</span><span class="t2-grp-arrow">›</span>`;
+            btn.onclick = () => {
+                const open = btn.classList.toggle('open');
+                document.getElementById(itemsId).classList.toggle('open', open);
+            };
+            container.appendChild(btn);
+
+            const itemsEl = document.createElement('div');
+            itemsEl.className = 't2-grp-items';
+            itemsEl.id = itemsId;
+            groups[grp].forEach(ex => {
+                const added = ex.tier === 2 ? T2_ADDED.has(ex.id) : T3_ADDED.has(ex.id);
+                const item = document.createElement('div');
+                item.className = 't2-all-item' + (added ? ' added' : '');
+                item.id = ex.tier === 2 ? ('t2-all-' + ex.id) : ('t3p-ex-' + ex.id);
+                item.innerHTML =
+                    `<span class="tier-badge t${ex.tier}" style="margin-right:6px">T${ex.tier}</span>` +
+                    `<span class="t2-all-name">${ex.name}` +
+                    `<span style="font-size:.73rem;color:var(--dim);font-weight:400">${_dayLabel(ex.days_since)}</span></span>` +
+                    `<span class="t2-all-check">✓</span>`;
+                item.onclick = () => ex.tier === 2
+                    ? addT2(ex.id, ex.name, ex.muscle_group)
+                    : addT3(ex.id, ex.name, ex.muscle_group);
+                itemsEl.appendChild(item);
+            });
+            container.appendChild(itemsEl);
+        });
+    }
+
+    function openAccessoryGroup(muscle) {
+        goStage('acc');
+        const container = document.getElementById('acc-picker');
+        const btn   = container.querySelector(`.t2-grp-btn[data-group="${muscle}"]`);
+        const items = document.getElementById('acc-items-' + muscle.replace(/\s+/g, '-'));
+        if (btn && items && !btn.classList.contains('open')) { btn.classList.add('open'); items.classList.add('open'); }
+        document.getElementById('stage-acc').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // ── Init ──────────────────────────────────────────────────────
 
     document.addEventListener('DOMContentLoaded', () => {
-        // Render and seed T1 progression widget + first set
-        const t1Sel = document.getElementById('t1-select');
-        const t1Id  = t1Sel ? t1Sel.value : null;
-        const t1p   = t1Id ? T1_PROGS[t1Id] : null;
-        renderProgWidget('prog-widget-0', parseInt(t1Id), 1, t1p);
-        if (t1p) addSet(0, t1p.target_reps, t1p.weight_kg);
-        else     addSet(0);
-
-        // Seed T2 blocks with their targets
-        {% for ex in tier2 %}
-        {% set idx = loop.index %}
-        {% set p = t2_progs.get(ex.id) %}
-        {% if p %}
-        addSet({{ idx }}, {{ p.target_reps }}, {{ p.weight_kg }});
-        {% else %}
-        addSet({{ idx }});
-        {% endif %}
+        buildWarmupPicker();
+        buildAccessoryPicker();
+        buildT1Selector();
+        let _startStage = 'warmup';
+        {% if continue_session and continue_session.exercises %}
+        {% for ex in continue_session.exercises %}
+        RECEIPT['{{ ex.id }}'] = {
+            name: {{ ex.name | tojson }},
+            tier: {{ ex.tier }},
+            phase: 'completed',
+            sets: {{ ex.sets }},
+            reps: {{ ex.reps }},
+            weight: {{ ex.weight_kg }},
+            unit: 'kg',
+            muscle_group: {{ ex.muscle_group | tojson }},
+        };
         {% endfor %}
+        renderReceipt();
+        T1_DONE = Object.values(RECEIPT).filter(e => e.tier === 1 && e.phase === 'completed').length;
+        if (T1_DONE >= 2) {
+            const b = document.getElementById('btn-add-t1');
+            if (b) b.style.display = '';
+        }
+        _startStage = T1_DONE >= 2 ? 'acc' : 't1';
+        {% endif %}
+        updateT1Counter();
+        goStage(_startStage);
+        document.getElementById('session-form').addEventListener('submit', () => {
+            const btn = document.querySelector('.btn-save-session');
+            btn.disabled = true;
+            btn.textContent = 'Saving…';
+        });
     });
 </script>
-{% endif %}
 {% endblock %}
