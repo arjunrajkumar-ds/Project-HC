@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}Swim{% endblock %}
+{% block body_class %}{% if not current_profile or current_profile.id != 2 %}pandora{% endif %}{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/swim.css') }}">
@@ -252,7 +253,7 @@ window.SW_WORKOUTS[{{ w.id }}] = {
                 </marker>
                 <marker id="arr-{{ stroke }}-locked" markerWidth="8" markerHeight="8"
                         refX="6" refY="3" orient="auto">
-                    <path d="M0,0 L0,6 L8,3 z" fill="#E8E5DF"/>
+                    <path d="M0,0 L0,6 L8,3 z" fill="var(--border)"/>
                 </marker>
                 {% endfor %}
             </defs>

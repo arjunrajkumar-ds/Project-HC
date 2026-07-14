@@ -1,5 +1,12 @@
 __pycache__/
 *.pyc
 venv/
+.recover_venv/
 .DS_Store
 tracker.db
+gym_tracker.db
+tracker.db.bak-*
+*.db.bak-*
+pycdc/
+_iotest.tmp
+.vscode/

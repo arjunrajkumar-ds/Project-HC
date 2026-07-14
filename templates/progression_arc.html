@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}Progression Arc{% endblock %}
+{% block body_class %}{% if not current_profile or current_profile.id != 2 %}pandora{% endif %}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -29,7 +30,7 @@
     -webkit-tap-highlight-color: transparent;
 }
 .arc-pill.active {
-    background: var(--accent); border-color: var(--accent); color: #fff;
+    background: var(--accent); border-color: var(--accent); color: var(--bg);
 }
 .arc-pill:active { opacity: .7; }
 
@@ -104,10 +105,20 @@
 (function () {
 
 /* ── Colour palette ─────────────────────────────────────────────── */
-const TIER_NODE  = { 1: '#5B21B6', 2: '#1D4ED8', 3: '#065F46' };
-const TIER_TRACK = { 1: '#EDE9FE', 2: '#DBEAFE', 3: '#D1FAE5' };
-const AMBER      = '#92400E';
-const AMBER_BG   = '#FEF3C7';
+const _cs = getComputedStyle(document.body);
+const _v  = (name, fb) => (_cs.getPropertyValue(name) || fb).trim();
+/* tier accents read from theme tokens (bright -fg in Pandora, deep in light) */
+const TIER_NODE  = { 1: _v('--t1-fg', '#5B21B6'), 2: _v('--t2-fg', '#1D4ED8'), 3: _v('--t3-fg', '#065F46') };
+const TIER_TRACK = { 1: _v('--t1-bg', '#EDE9FE'), 2: _v('--t2-bg', '#DBEAFE'), 3: _v('--t3-bg', '#D1FAE5') };
+const AMBER      = _v('--waiting', '#92400E');
+const AMBER_BG   = _v('--core-bg', '#FEF3C7');
+/* structural colours */
+const C_GRID     = _v('--border', '#E8E5DF');
+const C_GRID2    = _v('--dimmer', '#C4BFB5');
+const C_DIM      = _v('--dim', '#A09A90');
+const C_MUTED    = _v('--muted', '#6B7280');
+const C_TEXT     = _v('--text-strong', '#18181B');
+const C_SURFACE2 = _v('--surface-2', '#F9F8F5');
 
 /* ── State ──────────────────────────────────────────────────────── */
 let _data       = null;
@@ -193,23 +204,23 @@ function buildSVG(ex, schemes) {
       <marker id="am${uid}" markerWidth="7" markerHeight="7"
               refX="6" refY="3.5" orient="auto">
         <path d="M7,0 L0,3.5 L7,7" fill="none"
-              stroke="#E8E5DF" stroke-width="1.2" stroke-linejoin="round"/>
+              stroke="${C_GRID}" stroke-width="1.2" stroke-linejoin="round"/>
       </marker>
     </defs>`;
 
     /* ── main arc (dashed guide line) ──────────────────────────── */
     /* small-arc (0), clockwise (1) from START to END through the top */
     const arcPath = `<path d="M${f(x0)},${f(y0)} A${R},${R} 0 0,1 ${f(xE)},${f(yE)}"
-      fill="none" stroke="#E8E5DF" stroke-width="1" stroke-dasharray="4 3"/>`;
+      fill="none" stroke="${C_GRID}" stroke-width="1" stroke-dasharray="4 3"/>`;
 
     /* ── return arrow (dashed Bézier below the opening) ────────── */
     const ctrlY   = cy + 30;
     const labelY  = cy + 44;
     const retPath = `<path d="M${f(xE)},${f(yE)} C${f(xE)},${f(ctrlY)} ${f(x0)},${f(ctrlY)} ${f(x0)},${f(y0)}"
-      fill="none" stroke="#C4BFB5" stroke-width="0.8" stroke-dasharray="3 3"
+      fill="none" stroke="${C_GRID2}" stroke-width="0.8" stroke-dasharray="3 3"
       marker-end="url(#am${uid})"/>`;
     const retLabel = `<text x="${cx}" y="${labelY}" text-anchor="middle"
-      font-size="8" fill="#A09A90" font-family="-apple-system,BlinkMacSystemFont,sans-serif"
+      font-size="8" fill="${C_DIM}" font-family="-apple-system,BlinkMacSystemFont,sans-serif"
       >↑ weight reset</text>`;
 
     /* ── centre weight / state text ────────────────────────────── */
@@ -229,7 +240,7 @@ function buildSVG(ex, schemes) {
             ? 'BW'
             : (raw > 0 ? (raw % 1 === 0 ? raw + 'kg' : raw.toFixed(1) + 'kg') : '—');
         centreSvg = `<text x="${cx}" y="${centreY + 8}" text-anchor="middle"
-          font-size="20" font-weight="800" fill="#18181B"
+          font-size="20" font-weight="800" fill="${C_TEXT}"
           font-family="-apple-system,BlinkMacSystemFont,sans-serif">${wtStr}</text>`;
     }
 
@@ -246,11 +257,11 @@ function buildSVG(ex, schemes) {
 
         let fill, stroke, sw, opacity, textFill;
         if (isDone) {
-            fill = tcolor;  stroke = tcolor; sw = 1.5; opacity = 1;   textFill = '#6B7280';
+            fill = tcolor;  stroke = tcolor; sw = 1.5; opacity = 1;   textFill = C_MUTED;
         } else if (isCurr) {
             fill = AMBER_BG; stroke = AMBER; sw = 2;   opacity = 1;   textFill = AMBER;
         } else {
-            fill = '#F9F8F5'; stroke = '#E8E5DF'; sw = 1; opacity = 0.6; textFill = '#A09A90';
+            fill = C_SURFACE2; stroke = C_GRID; sw = 1; opacity = 0.6; textFill = C_DIM;
         }
 
         const circle = `<circle cx="${f(nx)}" cy="${f(ny)}" r="${nr}"

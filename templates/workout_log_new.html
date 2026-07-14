@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}Log Workout{% endblock %}
+{% block body_class %}pandora{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -85,7 +86,7 @@
     font-size: 1.2rem; cursor: pointer; padding: 2px 6px; line-height: 1;
     -webkit-tap-highlight-color: transparent;
 }
-.log-item-rm:active { color: #991B1B; }
+.log-item-rm:active { color: var(--red, #991B1B); }
 
 /* ── Muscle group accordion (reused from workout.html) ─────────────────── */
 .mg-group { margin-bottom: 10px; }

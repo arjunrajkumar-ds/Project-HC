@@ -1,0 +1,183 @@
+{% extends 'base.html' %}
+{% block title %}Exercise Bank{% endblock %}
+{% block body_class %}{% if not current_profile or current_profile.id != 2 %}pandora{% endif %}{% endblock %}
+
+{% block extra_css %}
+<style>
+.eb-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.eb-sub  { font-size: 0.8rem; color: var(--dim); margin-bottom: 14px; }
+.eb-back { font-size: 0.78rem; font-weight: 700; color: var(--accent); text-decoration: none; flex-shrink: 0; }
+
+.eb-banner { border-radius: 8px; padding: 9px 12px; margin-bottom: 14px; font-size: 0.82rem; font-weight: 600; }
+.eb-banner.ok  { background: var(--accent-light); color: var(--accent-text); }
+.eb-banner.err { background: var(--push-bg); color: var(--push-fg); }
+
+.eb-tier { margin-bottom: 24px; }
+.eb-tier-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.eb-tier-label { font-size: 0.95rem; font-weight: 800; color: var(--text); }
+.eb-tier-range { font-size: 0.72rem; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; }
+
+.eb-table { width: 100%; border-collapse: collapse; table-layout: fixed;
+            background: var(--surface); border: 0.5px solid var(--border); border-radius: 12px; overflow: hidden; }
+.eb-table th, .eb-table td { text-align: left; padding: 9px 10px; font-size: 0.8rem; vertical-align: top;
+            border-bottom: 0.5px solid var(--border); word-wrap: break-word; }
+.eb-table tr:last-child td { border-bottom: none; }
+.eb-table th { font-size: 0.64rem; font-weight: 800; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; background: var(--surface-2); }
+.eb-name   { font-weight: 600; color: var(--text); }
+.eb-flag   { display: inline-block; font-size: 0.58rem; font-weight: 800; color: var(--dim); text-transform: uppercase;
+             letter-spacing: .04em; border: 0.5px solid var(--border); border-radius: 4px; padding: 0 4px; margin-left: 5px; vertical-align: middle; }
+.eb-muscle { color: var(--muted); }
+.eb-day    { color: var(--dim); font-size: 0.74rem; }
+.eb-scheme { color: var(--text); white-space: nowrap; }
+.eb-cur    { color: var(--muted); }
+.eb-cur.none { color: var(--dim); }
+.eb-act    { text-align: right; white-space: nowrap; }
+.eb-iconbtn { background: none; border: none; cursor: pointer; color: var(--dim); font-size: 0.9rem;
+              padding: 2px 4px; -webkit-tap-highlight-color: transparent; }
+.eb-iconbtn:hover { color: var(--text); }
+.eb-iconbtn.del:hover { color: var(--red, #C97064); }
+
+.eb-table col.c-ex { width: 30%; } .eb-table col.c-mus { width: 17%; }
+.eb-table col.c-day { width: 10%; } .eb-table col.c-sch { width: 15%; }
+.eb-table col.c-cur { width: 16%; } .eb-table col.c-act { width: 12%; }
+
+/* compact form controls (override base) */
+.eb-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; padding: 4px 2px; }
+.eb-field { display: flex; flex-direction: column; gap: 3px; }
+.eb-field label { font-size: 0.6rem; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; }
+.eb-form input, .eb-form select {
+    min-height: 34px; padding: 6px 8px; font-size: 0.82rem; width: auto; border-radius: 8px;
+}
+.eb-form input.w-name { width: 190px; } .eb-form input.w-mus { width: 130px; }
+.eb-form input.w-num  { width: 52px; } .eb-form select.w-sel { width: 88px; }
+.eb-form .btn { min-height: 34px; padding: 6px 14px; font-size: 0.82rem; }
+.eb-editrow > td { background: var(--surface-2); }
+.eb-add { border: 0.5px solid var(--border); border-radius: 12px; background: var(--surface); padding: 8px 12px; margin-bottom: 22px; }
+.eb-add > summary { cursor: pointer; font-size: 0.82rem; font-weight: 700; color: var(--accent); list-style: none; padding: 4px 0; }
+.eb-add > summary::-webkit-details-marker { display: none; }
+.eb-hint { width: 100%; font-size: 0.68rem; color: var(--dim); margin-top: 2px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="eb-head">
+    <h1 style="margin-bottom:0;">Exercise Bank</h1>
+    <a href="/analytics" class="eb-back">‹ Stats</a>
+</div>
+<p class="eb-sub">{{ bank.total }} defined exercises · set scheme is sets × reps</p>
+
+{% if msg %}<div class="eb-banner {{ 'ok' if status == 'ok' else 'err' }}">{{ msg }}</div>{% endif %}
+
+<datalist id="muscle-groups">
+    <option value="Chest"><option value="Back"><option value="Upper Back"><option value="Posterior Chain">
+    <option value="Legs"><option value="Shoulders"><option value="Biceps"><option value="Triceps">
+    <option value="Core"><option value="Mobility"><option value="Cardio">
+</datalist>
+
+{# ── Add exercise ─────────────────────────────────────────────────── #}
+<details class="eb-add">
+    <summary>＋ Add exercise</summary>
+    <form method="POST" action="/exercise-bank/add" class="eb-form">
+        <div class="eb-field"><label>Name</label><input type="text" name="name" class="w-name" placeholder="e.g. Cable Fly" required></div>
+        <div class="eb-field"><label>Tier</label>
+            <select name="tier" class="w-sel">
+                <option value="1">Tier 1</option><option value="2">Tier 2</option>
+                <option value="3" selected>Tier 3</option><option value="4">Tier 4</option>
+            </select></div>
+        <div class="eb-field"><label>Muscle</label><input type="text" name="muscle_group" class="w-mus" list="muscle-groups" required></div>
+        <div class="eb-field"><label>Day</label>
+            <select name="day_type" class="w-sel">
+                <option value="any" selected>any</option><option value="push">push</option>
+                <option value="pull">pull</option><option value="legs">legs</option><option value="core">core</option>
+            </select></div>
+        <div class="eb-field"><label>Sets</label>
+            <span style="display:flex;gap:4px;align-items:center;">
+                <input type="number" name="sets_min" class="w-num" min="1" max="20" placeholder="min">
+                <span style="color:var(--dim)">–</span>
+                <input type="number" name="sets_max" class="w-num" min="1" max="20" placeholder="max">
+            </span></div>
+        <div class="eb-field"><label>Reps</label>
+            <span style="display:flex;gap:4px;align-items:center;">
+                <input type="number" name="reps_min" class="w-num" min="1" max="50" placeholder="min">
+                <span style="color:var(--dim)">–</span>
+                <input type="number" name="reps_max" class="w-num" min="1" max="50" placeholder="max">
+            </span></div>
+        <button type="submit" class="btn btn-primary">Add</button>
+        <p class="eb-hint">Leave sets/reps blank to use the tier's default ladder. Tier 4 (cardio / finishers) has no progression scheme.</p>
+    </form>
+</details>
+
+{% for tier_num in [1, 2, 3, 4] %}
+{% if bank.tiers[tier_num] %}
+<section class="eb-tier">
+    <div class="eb-tier-head">
+        <span class="eb-tier-label">{{ bank.meta[tier_num].label }}</span>
+        <span class="eb-tier-range">{{ bank.meta[tier_num].range }} · {{ bank.counts[tier_num] }}</span>
+    </div>
+    <table class="eb-table">
+        <colgroup>
+            <col class="c-ex"><col class="c-mus"><col class="c-day"><col class="c-sch"><col class="c-cur"><col class="c-act">
+        </colgroup>
+        <thead>
+            <tr><th>Exercise</th><th>Muscle</th><th>Day</th><th>Scheme</th><th>Current</th><th></th></tr>
+        </thead>
+        <tbody>
+            {% for ex in bank.tiers[tier_num] %}
+            <tr>
+                <td><span class="eb-name">{{ ex.name }}</span>{% for f in ex.flags %}<span class="eb-flag">{{ f }}</span>{% endfor %}</td>
+                <td class="eb-muscle">{{ ex.muscle_group }}</td>
+                <td class="eb-day">{{ ex.day_type }}</td>
+                <td class="eb-scheme">{{ ex.scheme }}</td>
+                <td class="eb-cur {% if ex.current == '—' %}none{% endif %}">{{ ex.current }}</td>
+                <td class="eb-act">
+                    <button type="button" class="eb-iconbtn" title="Edit" onclick="ebToggle('e{{ ex.id }}')">✎</button>
+                    <form method="POST" action="/exercise-bank/{{ ex.id }}/delete" style="display:inline"
+                          onsubmit="return confirm('Delete {{ ex.name }}? This can\'t be undone.');">
+                        <button type="submit" class="eb-iconbtn del" title="Delete">✕</button>
+                    </form>
+                </td>
+            </tr>
+            <tr class="eb-editrow" id="e{{ ex.id }}" style="display:none">
+                <td colspan="6">
+                    <form method="POST" action="/exercise-bank/{{ ex.id }}/update" class="eb-form">
+                        <div class="eb-field"><label>Tier</label>
+                            <select name="tier" class="w-sel">
+                                {% for t in [1,2,3,4] %}<option value="{{ t }}" {{ 'selected' if ex.tier == t }}>Tier {{ t }}</option>{% endfor %}
+                            </select></div>
+                        <div class="eb-field"><label>Muscle</label>
+                            <input type="text" name="muscle_group" class="w-mus" list="muscle-groups" value="{{ ex.muscle_group }}" required></div>
+                        <div class="eb-field"><label>Day</label>
+                            <select name="day_type" class="w-sel">
+                                {% for d in ['any','push','pull','legs','core'] %}<option value="{{ d }}" {{ 'selected' if ex.day_type == d }}>{{ d }}</option>{% endfor %}
+                            </select></div>
+                        <div class="eb-field"><label>Sets</label>
+                            <span style="display:flex;gap:4px;align-items:center;">
+                                <input type="number" name="sets_min" class="w-num" min="1" max="20" value="{{ ex.sets_min if ex.sets_min is not none }}" placeholder="min">
+                                <span style="color:var(--dim)">–</span>
+                                <input type="number" name="sets_max" class="w-num" min="1" max="20" value="{{ ex.sets_max if ex.sets_max is not none }}" placeholder="max">
+                            </span></div>
+                        <div class="eb-field"><label>Reps</label>
+                            <span style="display:flex;gap:4px;align-items:center;">
+                                <input type="number" name="reps_min" class="w-num" min="1" max="50" value="{{ ex.reps_min if ex.reps_min is not none }}" placeholder="min">
+                                <span style="color:var(--dim)">–</span>
+                                <input type="number" name="reps_max" class="w-num" min="1" max="50" value="{{ ex.reps_max if ex.reps_max is not none }}" placeholder="max">
+                            </span></div>
+                        <button type="submit" class="btn btn-primary">Save</button>
+                        <button type="button" class="btn btn-secondary" onclick="ebToggle('e{{ ex.id }}')">Cancel</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endif %}
+{% endfor %}
+
+<script>
+function ebToggle(id) {
+    const row = document.getElementById(id);
+    if (row) row.style.display = (row.style.display === 'none' || !row.style.display) ? 'table-row' : 'none';
+}
+</script>
+{% endblock %}

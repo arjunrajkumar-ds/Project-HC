@@ -1,0 +1,193 @@
+{% extends 'base.html' %}
+{% block title %}Missions{% endblock %}
+{% block body_class %}pandora{% endblock %}
+
+{% block extra_css %}
+<style>
+.missions-intro { font-family: var(--font-sans); font-size: 12px; color: var(--muted);
+    margin-bottom: 16px; line-height: 1.5; }
+
+.mission-card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 16px; margin-bottom: 14px;
+}
+.mission-card.done { border-color: var(--green); }
+.mission-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.mission-icon { font-size: 20px; line-height: 1; }
+.mission-title { font-family: var(--font-sans); font-size: 15px; font-weight: 600; color: var(--text-strong); flex: 1; }
+.mission-count { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
+.mission-card.done .mission-count { color: var(--green); }
+.mission-blurb { font-family: var(--font-sans); font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+
+/* progress bar */
+.mission-bar-track { height: 5px; background: var(--panel-soft); border-radius: 3px; overflow: hidden; margin-bottom: 14px; }
+.mission-bar-fill { height: 100%; background: var(--accent); transition: width .4s cubic-bezier(.2,.9,.3,1); }
+.mission-card.done .mission-bar-fill { background: var(--green); }
+
+/* stage ladder */
+.stage-list { display: flex; flex-direction: column; gap: 6px; }
+.stage-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 11px; border-radius: var(--radius-sm);
+    background: var(--panel-soft); border: 1px solid var(--border);
+}
+.stage-row.cleared { border-color: rgba(127,176,105,.4); }
+.stage-row.next { border-color: var(--accent); }
+.stage-num {
+    width: 20px; height: 20px; flex-shrink: 0; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono); font-size: 10px;
+    background: transparent; border: 1px solid var(--dimmer); color: var(--dim);
+}
+.stage-row.cleared .stage-num { background: var(--green); border-color: var(--green); color: var(--bg); }
+.stage-row.next .stage-num { border-color: var(--accent); color: var(--accent); }
+.stage-body { flex: 1; min-width: 0; }
+.stage-label { font-family: var(--font-sans); font-size: 13px; color: var(--text); }
+.stage-row.cleared .stage-label { color: var(--muted); }
+.stage-goal-tag {
+    font-family: var(--font-mono); font-size: 8px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--waiting); border: 1px solid var(--waiting); border-radius: var(--radius-sm);
+    padding: 1px 5px; margin-left: 6px; vertical-align: middle;
+}
+.stage-target { font-family: var(--font-mono); font-size: 10px; color: var(--dim); }
+.stage-done-btn {
+    flex-shrink: 0; background: var(--accent); color: var(--bg); border: none;
+    border-radius: var(--radius-sm); cursor: pointer;
+    font-family: var(--font-sans); font-size: 11px; font-weight: 600;
+    min-height: 32px; padding: 0 12px;
+    -webkit-tap-highlight-color: transparent;
+}
+.stage-done-btn:active { opacity: .85; }
+.stage-check { flex-shrink: 0; color: var(--green); font-size: 14px; }
+
+.mission-complete-banner {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin-top: 12px; padding: 8px; border-radius: var(--radius-sm);
+    background: rgba(127,176,105,.12); border: 1px solid var(--green); color: var(--green);
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+}
+.mission-complete-banner[hidden] { display: none; }
+.mission-card.celebrate { animation: mPop .5s cubic-bezier(.2,.9,.3,1.2); }
+@keyframes mPop { 0%{transform:scale(.99);} 55%{transform:scale(1.015);} 100%{transform:scale(1);} }
+@media (prefers-reduced-motion: reduce) { .mission-card.celebrate { animation: none; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="eyebrow">missions{% if current_profile %} · {{ current_profile.name | lower }}{% endif %}</div>
+<h1>Missions.</h1>
+<p class="missions-intro">Milestones to build toward — one stage at a time. Tap “Done” when you can do a stage; clear the last one to earn the mission.</p>
+
+{% for m in missions %}
+<section class="mission-card{% if m.done %} done{% endif %}" id="mc-{{ m.key }}" data-key="{{ m.key }}" data-total="{{ m.total }}">
+    <div class="mission-head">
+        <span class="mission-icon">{{ m.icon }}</span>
+        <span class="mission-title">{{ m.title }}</span>
+        <span class="mission-count"><span data-role="cleared">{{ m.cleared }}</span>/{{ m.total }}</span>
+    </div>
+    <div class="mission-blurb">{{ m.blurb }}</div>
+    <div class="mission-bar-track">
+        <div class="mission-bar-fill" data-role="bar" style="width: {{ (m.cleared / m.total * 100) | round | int }}%"></div>
+    </div>
+    <div class="stage-list">
+        {% for st in m.stages %}
+        {% set is_cleared = loop.index0 < m.cleared %}
+        {% set is_next = loop.index0 == m.cleared %}
+        <div class="stage-row{% if is_cleared %} cleared{% elif is_next %} next{% endif %}"
+             data-stage="{{ loop.index0 }}">
+            <span class="stage-num">{% if is_cleared %}✓{% else %}{{ loop.index }}{% endif %}</span>
+            <div class="stage-body">
+                <span class="stage-label">{{ st.label }}{% if st.goal %}<span class="stage-goal-tag">goal</span>{% endif %}</span>
+                <div class="stage-target">{{ st.target }}</div>
+            </div>
+            {% if is_cleared %}
+                <span class="stage-check" data-role="control">✓</span>
+            {% elif is_next %}
+                <button type="button" class="stage-done-btn" data-role="control">Done ✓</button>
+            {% else %}
+                <span data-role="control"></span>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    <div class="mission-complete-banner" data-role="banner"{% if not m.done %} hidden{% endif %}>
+        <span>✦</span><span>Mission complete</span>
+    </div>
+</section>
+{% endfor %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+async function clearStage(key, stage) {
+    const card = document.getElementById('mc-' + key);
+    if (!card) return;
+    try {
+        const res = await fetch('/missions/clear', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+            body: JSON.stringify({ key: key, stage: stage }),
+        });
+        if (!res.ok) throw new Error('failed');
+        const data = await res.json();
+        rebuild(card, data.cleared, data.total, data.done);
+    } catch (e) { /* leave UI as-is on error */ }
+}
+
+function makeControl(card, index, cleared) {
+    // returns the element that belongs in a stage row's control slot
+    if (index < cleared) {
+        const s = document.createElement('span');
+        s.className = 'stage-check';
+        s.dataset.role = 'control';
+        s.textContent = '\u2713';
+        return s;
+    }
+    if (index === cleared) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'stage-done-btn';
+        b.dataset.role = 'control';
+        b.textContent = 'Done \u2713';
+        b.addEventListener('click', () => clearStage(card.dataset.key, index));
+        return b;
+    }
+    const empty = document.createElement('span');
+    empty.dataset.role = 'control';
+    return empty;
+}
+
+function rebuild(card, cleared, total, done) {
+    card.querySelector('[data-role="cleared"]').textContent = cleared;
+    card.querySelector('[data-role="bar"]').style.width = Math.round(cleared / total * 100) + '%';
+    card.querySelectorAll('.stage-row').forEach((row, i) => {
+        row.classList.toggle('cleared', i < cleared);
+        row.classList.toggle('next', i === cleared);
+        const num = row.querySelector('.stage-num');
+        num.textContent = i < cleared ? '\u2713' : (i + 1);
+        const oldCtrl = row.querySelector('[data-role="control"]');
+        if (oldCtrl) oldCtrl.replaceWith(makeControl(card, i, cleared));
+    });
+    if (done) {
+        card.classList.add('done');
+        const banner = card.querySelector('[data-role="banner"]');
+        if (banner) banner.hidden = false;
+        card.classList.remove('celebrate');
+        void card.offsetWidth;
+        card.classList.add('celebrate');
+    }
+}
+
+// Bind the initial "Done" buttons rendered by the server (avoids inline onclick).
+document.querySelectorAll('.mission-card').forEach(card => {
+    const btn = card.querySelector('.stage-done-btn');
+    if (btn) {
+        const row = btn.closest('.stage-row');
+        const idx = parseInt(row.dataset.stage, 10);
+        btn.addEventListener('click', () => clearStage(card.dataset.key, idx));
+    }
+});
+</script>
+{% endblock %}

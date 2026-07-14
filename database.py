@@ -4,17 +4,24 @@ import os
 import re as _re_db
 from datetime import date
 
-_QTY_RE         = _re_db.compile(r'^(\d*\.?\d+)\s*x\s+(.+)', _re_db.IGNORECASE)
-_GRAM_PREFIX_RE = _re_db.compile(r'^(\d+(?:\.\d+)?)(g|ml|kg|l|oz|lb)\s+(.+)', _re_db.IGNORECASE)
+# Multiplier may appear as a prefix ("2x eggs") or a suffix ("eggs x3").
+_QTY_PREFIX_RE  = _re_db.compile(r'^(\d*\.?\d+)\s*x\s+(.+)$', _re_db.IGNORECASE)
+_QTY_SUFFIX_RE  = _re_db.compile(r'^(.+?)\s+x\s*(\d*\.?\d+)$', _re_db.IGNORECASE)
+_GRAM_PREFIX_RE = _re_db.compile(r'^(\d+(?:\.\d+)?)\s*(g|ml|kg|l|oz|lb)\s+(.+)$', _re_db.IGNORECASE)
 _UNIT_TO_G      = {'g': 1, 'ml': 1, 'kg': 1000, 'l': 1000, 'oz': 28.35, 'lb': 453.6}
 
 
 def _parse_qty_name(name):
-    """Parse '<num>x <food>' → (multiplier, base_name). Returns (1.0, name) if no match."""
-    m = _QTY_RE.match(name.strip())
+    """Parse a quantity multiplier from either '<num>x <food>' or '<food> x<num>'.
+    Returns (multiplier, base_name). Returns (1.0, name) if no multiplier is present."""
+    s = name.strip()
+    m = _QTY_PREFIX_RE.match(s)
     if m:
         return float(m.group(1)), m.group(2).strip()
-    return 1.0, name.strip()
+    m = _QTY_SUFFIX_RE.match(s)
+    if m:
+        return float(m.group(2)), m.group(1).strip()
+    return 1.0, s
 
 
 def _parse_gram_prefix(name):
@@ -24,6 +31,189 @@ def _parse_gram_prefix(name):
         grams = float(m.group(1)) * _UNIT_TO_G.get(m.group(2).lower(), 1)
         return grams, m.group(3).strip()
     return None, name.strip()
+
+
+# ── Plural handling ──────────────────────────────────────────────────────────
+# Foods are matched on a canonical "key": lowercased, whitespace-collapsed, with the
+# head noun singularised so that "egg"/"eggs", "berry"/"berries" resolve to one food.
+# The key is only ever used for matching — the human-entered display name is preserved.
+# Correctness of the singular form matters less than determinism: the same rule runs on
+# both stored names and lookups, so any consistent transform makes the pair collide.
+
+# Irregular / awkward plurals worth getting right (plural → singular, lowercase).
+_PLURAL_OVERRIDES = {
+    'leaves': 'leaf', 'loaves': 'loaf', 'halves': 'half', 'calves': 'calf',
+    'potatoes': 'potato', 'tomatoes': 'tomato', 'mangoes': 'mango', 'mangos': 'mango',
+    'avocados': 'avocado', 'burritos': 'burrito', 'tacos': 'taco',
+    'chillies': 'chilli', 'chilies': 'chili', 'berries': 'berry',
+    'wraps': 'wrap', 'oats': 'oats',
+}
+
+# Words that look plural but are singular/mass nouns — never strip these.
+_NO_SINGULAR = {
+    'oats', 'hummus', 'asparagus', 'couscous', 'molasses', 'watercress',
+    'swiss', 'bass', 'gas', 'lentils',
+}
+
+
+def _singularize(token):
+    """Best-effort singular of a single lowercase token (for matching only)."""
+    low = token.lower()
+    if low in _PLURAL_OVERRIDES:
+        return _PLURAL_OVERRIDES[low]
+    if low in _NO_SINGULAR or len(low) <= 3:
+        return low
+    if low.endswith('ss') or low.endswith('us') or low.endswith('is'):
+        return low                      # glass, hummus, basis — leave alone
+    if low.endswith('ies'):
+        return low[:-3] + 'y'           # berries → berry
+    if low.endswith(('ches', 'shes', 'xes', 'zes', 'ses')):
+        return low[:-2]                 # boxes → box, dishes → dish
+    if low.endswith('s'):
+        return low[:-1]                 # eggs → egg
+    return low
+
+
+def _food_key(name):
+    """Canonical matching key for a food's base name (quantity prefixes already removed)."""
+    n = ' '.join(name.strip().lower().split())
+    if not n:
+        return n
+    parts = n.split(' ')
+    parts[-1] = _singularize(parts[-1])
+    return ' '.join(parts)
+
+
+# ── Display casing ───────────────────────────────────────────────────────────
+# Food names are stored in a consistent Title Case, with sensible exceptions so we
+# don't mangle quantity units, acronyms, or brand names.
+_TITLE_SMALL   = {'and', 'or', 'of', 'with', 'in', 'a', 'an', 'the', 'to', 'per', 'on', 'for', 'n'}
+_TITLE_UNIT_RE = _re_db.compile(r'^\d*\.?\d+\s*(g|ml|kg|l|oz|lb|x)$', _re_db.IGNORECASE)
+
+
+def _cap_word(word):
+    """Capitalise the first letter of each hyphen-separated segment, leaving the rest
+    untouched (so 'toby's' → "Toby's", not "Toby'S"; 'high-protein' → 'High-Protein')."""
+    def cap_seg(seg):
+        for i, ch in enumerate(seg):
+            if ch.isalpha():
+                return seg[:i] + ch.upper() + seg[i + 1:]
+        return seg
+    return '-'.join(cap_seg(part) for part in word.split('-'))
+
+
+def _display_name(name):
+    """Normalise a food name to consistent Title Case for storage/display.
+
+    Keeps quantity units lowercase ('200g', '2x'), preserves short all-caps acronyms
+    ('BD'), leaves tokens containing digits as typed (brands like "4'n'20"), and
+    lowercases small connecting words.
+    """
+    s = ' '.join((name or '').strip().split())
+    if not s:
+        return s
+    tokens = s.split(' ')
+    out = []
+    for idx, tok in enumerate(tokens):
+        low = tok.lower()
+        if _TITLE_UNIT_RE.match(tok):
+            out.append(low)                                   # 200G→200g, 2X→2x
+        elif tok.isupper() and 1 < len(tok) <= 3 and any(c.isalpha() for c in tok):
+            out.append(tok)                                   # keep acronyms (BD, PB)
+        elif any(c.isdigit() for c in tok):
+            out.append(tok)                                   # brandy tokens (4'n'20, B12)
+        elif low in _TITLE_SMALL and idx != 0:
+            out.append(low)                                   # small words, not first
+        else:
+            out.append(_cap_word(tok))
+    return ' '.join(out)
+
+
+def _parse_entry_name(raw_name):
+    """Decompose a raw food entry into its scaling components.
+
+    Returns a dict:
+        display    : the cleaned name to store/show (quantity prefixes stripped)
+        base_name  : food name with quantity/gram prefixes removed
+        key        : canonical match key for base_name (plural-aware)
+        multiplier : count multiplier from 'Nx'/'xN' (default 1.0)
+        gram_qty   : absolute grams from a '<num><unit>' prefix, else None
+    """
+    raw = ' '.join((raw_name or '').strip().split())
+    multiplier, after_mult = _parse_qty_name(raw)
+    gram_qty, base_name = _parse_gram_prefix(after_mult)
+    if gram_qty is None:
+        base_name = after_mult
+    return {
+        'display': raw,
+        'base_name': base_name,
+        'key': _food_key(base_name),
+        'multiplier': multiplier,
+        'gram_qty': gram_qty,
+    }
+
+
+def _lookup_food_item(conn, key):
+    """Return the best food_items row matching a canonical key, or None.
+    Prefers defined foods (calories > 0) and the richest definition."""
+    return conn.execute(
+        """SELECT * FROM food_items WHERE name_key = ?
+           ORDER BY (calories > 0) DESC, calories DESC, id ASC LIMIT 1""",
+        (key,)
+    ).fetchone()
+
+
+def _resolve_food(conn, raw_name, quantity=None):
+    """Single source of truth for turning a raw food entry into stored macros.
+
+    Parses quantity/gram/multiplier, looks the food up by canonical (plural-aware)
+    key, and scales its per-100g (or per-unit) macros. `quantity` is the optional
+    explicit amount from a quantity field (grams for g-type foods, count for units).
+
+    Returns a dict with display name, matched item, computed factor, and macros.
+    """
+    parsed = _parse_entry_name(raw_name)
+    item   = _lookup_food_item(conn, parsed['key'])
+
+    try:
+        quantity = float(quantity) if quantity not in (None, '') else None
+    except (TypeError, ValueError):
+        quantity = None
+
+    macros  = {'calories': 0.0, 'protein_g': 0.0, 'carbs_g': 0.0, 'fat_g': 0.0}
+    factor  = parsed['multiplier']
+
+    if item and item['calories'] > 0:
+        if item['unit_type'] == 'unit':
+            # Count-based food: each unit is one whole serving.
+            count = quantity if (quantity and quantity > 0) else 1.0
+            factor = parsed['multiplier'] * count
+        else:
+            # Weight-based food: macros are per 100g/ml.
+            if parsed['gram_qty'] is not None:
+                grams = parsed['gram_qty']
+            elif quantity and quantity > 0:
+                grams = quantity
+            else:
+                grams = 100.0
+            factor = parsed['multiplier'] * (grams / 100.0)
+
+        macros = {
+            'calories':  round(item['calories']  * factor, 1),
+            'protein_g': round(item['protein_g'] * factor, 1),
+            'carbs_g':   round(item['carbs_g']   * factor, 1),
+            'fat_g':     round(item['fat_g']     * factor, 1),
+        }
+
+    return {
+        'display':   parsed['display'],
+        'base_name': parsed['base_name'],
+        'key':       parsed['key'],
+        'item':      item,
+        'matched':   bool(item and item['calories'] > 0),
+        'factor':    factor,
+        **macros,
+    }
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'tracker.db')
 
@@ -49,6 +239,66 @@ def _generate_schemes(bounds):
     return result
 
 
+# ── Fatigue / cooldown model ────────────────────────────────────────────────
+# Fatigue is a 0–100 gauge per muscle group: 0 = fully recovered/ready, 100 = fried.
+# Logging an exercise deposits fatigue (scaled by tier and per-muscle engagement);
+# it then bleeds off linearly over each muscle's recovery window.
+
+FATIGUE_TIER_BASE = {1: 80.0, 2: 55.0, 3: 40.0, 4: 0.0}  # primary-muscle deposit / hard session
+
+FATIGUE_DEFAULT_RECOVERY = {   # days to bleed from 100 → 0
+    'Legs': 3.0, 'Back': 3.0, 'Chest': 2.5, 'Shoulders': 2.0,
+    'Biceps': 1.5, 'Triceps': 1.5, 'Core': 1.5,
+}
+
+FATIGUE_LEARN_RATE         = 0.15  # gentle nudge: max ±15% shift to recovery_days per correction
+FATIGUE_RECOVERY_MIN_FACTOR = 0.5  # clamp learned recovery to 0.5×–2× the default
+FATIGUE_RECOVERY_MAX_FACTOR = 2.0
+
+# Weighted exercise → muscle map. (muscle, engagement); engagement 1.0 = prime mover.
+EXERCISE_MUSCLE_MAP = {
+    # Tier 1 — heavy compounds
+    'Barbell Squat':        [('Legs', 1.0), ('Core', 0.4)],
+    'BB Hip Thrust':        [('Legs', 1.0), ('Core', 0.3)],
+    'BB RDL':               [('Legs', 1.0), ('Back', 0.5), ('Core', 0.4)],
+    'DB Lunges':            [('Legs', 1.0), ('Core', 0.3)],
+    'Barbell Bench Press':  [('Chest', 1.0), ('Triceps', 0.5), ('Shoulders', 0.4)],
+    'Weighted Dips':        [('Chest', 1.0), ('Triceps', 0.6), ('Shoulders', 0.3)],
+    'Pendlay Row':          [('Back', 1.0), ('Biceps', 0.4), ('Core', 0.3)],
+    'Meadow Row':           [('Back', 1.0), ('Biceps', 0.4)],
+    'Deadlift':             [('Back', 1.0), ('Legs', 0.6), ('Core', 0.5)],
+    'Trap Bar Deadlift':    [('Back', 1.0), ('Legs', 0.6), ('Core', 0.5)],
+    'Barbell OHP':          [('Shoulders', 1.0), ('Triceps', 0.5), ('Core', 0.3)],
+    'Ab Wheel':             [('Core', 1.0)],
+    # Tier 2 — supporting compounds
+    'Bulgarian Split Squat':   [('Legs', 1.0), ('Core', 0.3)],
+    'Hamstring Curl':          [('Legs', 1.0)],
+    'BB Incline Bench':        [('Chest', 1.0), ('Triceps', 0.5), ('Shoulders', 0.4)],
+    'DB Bench Press':          [('Chest', 1.0), ('Triceps', 0.5), ('Shoulders', 0.4)],
+    'DB Pullover':             [('Chest', 0.8), ('Back', 0.5)],
+    'Lat Pulldown':            [('Back', 1.0), ('Biceps', 0.5)],
+    'DB Row':                  [('Back', 1.0), ('Biceps', 0.4)],
+    'Weighted Back Extension': [('Back', 1.0), ('Legs', 0.4), ('Core', 0.4)],
+    'DB Shoulder Press':       [('Shoulders', 1.0), ('Triceps', 0.5)],
+    'Weighted Decline Crunch': [('Core', 1.0)],
+    'Weighted Chinups':            [('Back', 1.0), ('Biceps', 0.5)],
+    'Weighted Pullup (Wide Grip)': [('Back', 1.0), ('Biceps', 0.4)],
+    # Tier 3 — isolation / aesthetics
+    'DB Lateral Raises':       [('Shoulders', 1.0)],
+    'Banded Kettlebell Raise': [('Shoulders', 1.0)],
+    'Cable Rear Delt Fly':     [('Shoulders', 1.0)],
+    'DB Rear Delt Fly':        [('Shoulders', 1.0)],
+    'DB Curls':                [('Biceps', 1.0)],
+    'EZ Bar Curl':             [('Biceps', 1.0)],
+    'DB Hammer Curl':          [('Biceps', 1.0)],
+    'EZ-bar Skullcrusher':     [('Triceps', 1.0)],
+    'DB Skullcrushers':        [('Triceps', 1.0)],
+    'Pec Deck':                [('Chest', 1.0)],
+    'Banded Reverse Curls':    [('Biceps', 1.0)],
+    'Tricep Extensions':       [('Triceps', 1.0)],
+}
+
+
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -64,10 +314,18 @@ def init_db():
         CREATE TABLE IF NOT EXISTS exercises (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             name        TEXT NOT NULL UNIQUE,
-            tier        INTEGER NOT NULL CHECK(tier IN (1, 2, 3)),
+            tier        INTEGER NOT NULL CHECK(tier IN (1, 2, 3, 4)),
             muscle_group TEXT NOT NULL,
             day_type    TEXT NOT NULL CHECK(day_type IN ('push','pull','legs','core','any')),
-            notes       TEXT
+            notes       TEXT,
+            is_barbell     INTEGER NOT NULL DEFAULT 0,
+            reps_only      INTEGER NOT NULL DEFAULT 0,
+            is_timed       INTEGER NOT NULL DEFAULT 0,
+            cardio_metrics TEXT NOT NULL DEFAULT '{}',
+            reps_min       INTEGER,
+            reps_max       INTEGER,
+            sets_min       INTEGER,
+            sets_max       INTEGER
         );
 
         CREATE TABLE IF NOT EXISTS sessions (
@@ -96,6 +354,16 @@ def init_db():
         );
     """)
 
+    # ── Exercise-library seeding guard ────────────────────────────────────
+    # The exercise seed + one-time metadata fixes below must run only ONCE so
+    # that user edits (add / remove / amend via the Exercise Bank) are durable
+    # and never clobbered on startup. Gated by PRAGMA user_version: fresh DBs
+    # (version 0) seed then stamp to _LIBRARY_VERSION; existing DBs run the
+    # idempotent block once on upgrade, then are stamped and never touched
+    # again. Schema (CREATE / ALTER / INDEX) below stays UNGATED and always runs.
+    _LIBRARY_VERSION = 1
+    _lib_seed = conn.execute('PRAGMA user_version').fetchone()[0] < _LIBRARY_VERSION
+
     # Canonical exercise list — single source of truth
     exercises = [
         # Tier 1 — Heavy Compounds
@@ -110,17 +378,17 @@ def init_db():
         ('Deadlift',                1, 'Back',      'any',  0),
         ('Barbell OHP',             1, 'Shoulders', 'any',  0),
         ('Ab Wheel',                1, 'Core',      'any',  1),
+        ('BB Incline Bench',        1, 'Chest',     'push', 0),
+        ('Weighted Back Extension', 1, 'Back',      'pull', 0),
+        ('Weighted Decline Crunch', 1, 'Core',      'core', 0),
         # Tier 2 — Supporting Compounds
         ('Bulgarian Split Squat',   2, 'Legs',      'legs', 0),
         ('Hamstring Curl',          2, 'Legs',      'legs', 0),
-        ('BB Incline Bench',         2, 'Chest',     'push', 0),
         ('DB Bench Press',          2, 'Chest',     'push', 0),
         ('DB Pullover',             2, 'Chest',     'push', 0),
         ('Lat Pulldown',            2, 'Back',      'pull', 0),
         ('DB Row',                  2, 'Back',      'pull', 0),
-        ('Weighted Back Extension', 2, 'Back',      'pull', 0),
         ('DB Shoulder Press',       2, 'Shoulders', 'push', 0),
-        ('Weighted Decline Crunch', 2, 'Core',      'core', 0),
         # Tier 3 — Aesthetics
         ('DB Lateral Raises',           3, 'Shoulders', 'any',  0),
         ('Banded Kettlebell Raise',      3, 'Shoulders', 'any',  0),
@@ -133,32 +401,33 @@ def init_db():
         ('DB Skullcrushers',            3, 'Triceps',   'any',  0),
     ]
 
-    c.executemany("""
-        INSERT OR IGNORE INTO exercises (name, tier, muscle_group, day_type, reps_only)
-        VALUES (?, ?, ?, ?, ?)
-    """, exercises)
+    if _lib_seed:
+        c.executemany("""
+            INSERT OR IGNORE INTO exercises (name, tier, muscle_group, day_type, reps_only)
+            VALUES (?, ?, ?, ?, ?)
+        """, exercises)
 
-    # Migrate: fix DB Shoulder Press day_type (was incorrectly seeded as 'legs')
-    conn.execute("UPDATE exercises SET day_type='push' WHERE name='DB Shoulder Press' AND day_type='legs'")
+        # Migrate: fix DB Shoulder Press day_type (was incorrectly seeded as 'legs')
+        conn.execute("UPDATE exercises SET day_type='push' WHERE name='DB Shoulder Press' AND day_type='legs'")
 
-    # Migrate: remove duplicate 'DB Overhead Press' (same as DB Shoulder Press)
-    conn.execute("DELETE FROM exercises WHERE name='DB Overhead Press' AND tier=2")
+        # Migrate: remove duplicate 'DB Overhead Press' (same as DB Shoulder Press)
+        conn.execute("DELETE FROM exercises WHERE name='DB Overhead Press' AND tier=2")
 
-    # Migrate: remove 'Weighted Pullup' from T2
-    conn.execute("DELETE FROM exercises WHERE name='Weighted Pullup' AND tier=2")
+        # Migrate: remove 'Weighted Pullup' from T2
+        conn.execute("DELETE FROM exercises WHERE name='Weighted Pullup' AND tier=2")
 
-    # Migrate: rename legacy 'Lateral Raises' to 'Banded Kettlebell Raise'
-    conn.execute("UPDATE exercises SET name='Banded Kettlebell Raise' WHERE name='Lateral Raises' AND tier=3")
+        # Migrate: rename legacy 'Lateral Raises' to 'Banded Kettlebell Raise'
+        conn.execute("UPDATE exercises SET name='Banded Kettlebell Raise' WHERE name='Lateral Raises' AND tier=3")
 
-    # Migrate: rename 'Cable/DB Curls' to 'DB Curls'
-    conn.execute("UPDATE exercises SET name='DB Curls' WHERE name='Cable/DB Curls' AND tier=3")
+        # Migrate: rename 'Cable/DB Curls' to 'DB Curls'
+        conn.execute("UPDATE exercises SET name='DB Curls' WHERE name='Cable/DB Curls' AND tier=3")
 
-    # Migrate: remove 'Tricep Pushdowns'
-    conn.execute("DELETE FROM exercises WHERE name='Tricep Pushdowns' AND tier=3")
+        # Migrate: remove 'Tricep Pushdowns'
+        conn.execute("DELETE FROM exercises WHERE name='Tricep Pushdowns' AND tier=3")
 
-    # Migrate: split 'Arms' into 'Biceps' / 'Triceps'
-    conn.execute("UPDATE exercises SET muscle_group='Biceps'  WHERE muscle_group='Arms' AND name IN ('DB Curls','EZ Bar Curl','DB Hammer Curl','Cable/DB Curls')")
-    conn.execute("UPDATE exercises SET muscle_group='Triceps' WHERE muscle_group='Arms'")
+        # Migrate: split 'Arms' into 'Biceps' / 'Triceps'
+        conn.execute("UPDATE exercises SET muscle_group='Biceps'  WHERE muscle_group='Arms' AND name IN ('DB Curls','EZ Bar Curl','DB Hammer Curl','Cable/DB Curls')")
+        conn.execute("UPDATE exercises SET muscle_group='Triceps' WHERE muscle_group='Arms'")
 
     # Migrate: add is_barbell column and set for barbell T1 exercises
     _ex_cols = {r[1] for r in conn.execute('PRAGMA table_info(exercises)')}
@@ -185,7 +454,8 @@ def init_db():
             exercise_id  INTEGER PRIMARY KEY
                          REFERENCES exercises(id) ON DELETE CASCADE,
             weight_kg    REAL    NOT NULL,
-            stage        INTEGER NOT NULL DEFAULT 0
+            stage        INTEGER NOT NULL DEFAULT 0,
+            scheme_id    INTEGER NOT NULL DEFAULT 1
         )
     """)
 
@@ -301,6 +571,16 @@ def init_db():
         )
     """)
 
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS mission_progress (
+            profile_id  INTEGER NOT NULL,
+            mission_key TEXT    NOT NULL,
+            cleared     INTEGER NOT NULL DEFAULT 0,
+            updated_at  TEXT,
+            PRIMARY KEY (profile_id, mission_key)
+        )
+    """)
+
     # ── Food tracking ─────────────────────────────────────────────────
     conn.execute("""
         CREATE TABLE IF NOT EXISTS food_reconciliations (
@@ -316,6 +596,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS food_items (
             id        INTEGER PRIMARY KEY AUTOINCREMENT,
             name      TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            name_key  TEXT,
             calories  REAL NOT NULL DEFAULT 0,
             protein_g REAL NOT NULL DEFAULT 0,
             carbs_g   REAL NOT NULL DEFAULT 0,
@@ -367,59 +648,21 @@ def init_db():
     if 'logged_at' not in _fl_cols:
         conn.execute('ALTER TABLE food_log ADD COLUMN logged_at TEXT')
 
-    # Migrate food_items: add unit_type column to existing DBs
+    # Migrate food_items: add unit_type / name_key columns to existing DBs
     _fi_cols = {r[1] for r in conn.execute('PRAGMA table_info(food_items)')}
     if 'unit_type' not in _fi_cols:
         conn.execute("ALTER TABLE food_items ADD COLUMN unit_type TEXT NOT NULL DEFAULT 'g'")
+    if 'name_key' not in _fi_cols:
+        conn.execute("ALTER TABLE food_items ADD COLUMN name_key TEXT")
 
-    # Migrate: strip quantity prefix from food_item names where calories are already per-100g.
-    # Only rename items where the stored calories make sense as a per-100g value (i.e. the
-    # quantity in the name is exactly 100g/100ml, so the calories need no rescaling).
-    _GM_RE = _re_db.compile(r'^(\d+(?:\.\d+)?)\s*(g|ml)\s+(.+)', _re_db.IGNORECASE)
-    for _fi in conn.execute('SELECT id, name, calories FROM food_items').fetchall():
-        _gm = _GM_RE.match(_fi['name'])
-        if not _gm:
-            continue
-        _qty_val  = float(_gm.group(1))
-        _base_nm  = _gm.group(3).strip()
-        # Only do the lossless rename when qty==100 (calories already express per-100g/ml)
-        if abs(_qty_val - 100) < 0.01:
-            _exists = conn.execute(
-                'SELECT id FROM food_items WHERE name=? COLLATE NOCASE', (_base_nm,)
-            ).fetchone()
-            if not _exists:
-                conn.execute('UPDATE food_items SET name=? WHERE id=?', (_base_nm, _fi['id']))
-
-    # Migrate: ensure base food entries exist for <num>x-named items; clean up wrongly-named artifacts
-    conn.execute("""
-        INSERT OR IGNORE INTO food_items (name, calories, protein_g, carbs_g, fat_g, unit_type)
-        VALUES ('black forest cake', 1022, 12, 130, 50, 'unit')
-    """)
-    _qty_fi = conn.execute("SELECT id, name FROM food_items WHERE name LIKE '%x %'").fetchall()
-    for _fi in _qty_fi:
-        _mult, _base = _parse_qty_name(_fi['name'])
-        if _mult != 1.0:
-            conn.execute('DELETE FROM food_items WHERE id=?', (_fi['id'],))
-    # Fix any food_log entries where calories were wrongly stored as full-unit amount
-    _qty_fl = conn.execute("SELECT id, name FROM food_log WHERE name LIKE '%x %'").fetchall()
-    for _lr in _qty_fl:
-        _mult, _base = _parse_qty_name(_lr['name'])
-        if _mult == 1.0:
-            continue
-        _item = conn.execute(
-            'SELECT * FROM food_items WHERE name=? COLLATE NOCASE', (_base,)
-        ).fetchone()
-        if _item and _item['calories'] > 0:
-            conn.execute("""
-                UPDATE food_log SET calories=?, protein_g=?, carbs_g=?, fat_g=?
-                WHERE id=?
-            """, (
-                round(_item['calories']  * _mult, 1),
-                round(_item['protein_g'] * _mult, 1),
-                round(_item['carbs_g']   * _mult, 1),
-                round(_item['fat_g']     * _mult, 1),
-                _lr['id']
-            ))
+    # Keep the canonical (plural-aware) match key in sync for every food. Cheap to
+    # recompute on each init, and it self-heals after any rename or rule change.
+    for _fi in conn.execute('SELECT id, name FROM food_items').fetchall():
+        conn.execute(
+            'UPDATE food_items SET name_key = ? WHERE id = ?',
+            (_food_key(_fi['name']), _fi['id'])
+        )
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_food_items_name_key ON food_items(name_key)')
 
     # Migrate macro_goals: drop CHECK(id=1) constraint so multiple profiles can have goals.
     # Old schema uses column 'id'; new schema uses 'profile_id'.
@@ -479,22 +722,21 @@ def init_db():
             conn.execute(f'ALTER TABLE exercises ADD COLUMN {_col} INTEGER')
 
     # ── Gayathri's beginner exercises ─────────────────────────────────────
-    conn.executemany("""
-        INSERT OR IGNORE INTO exercises (name, tier, muscle_group, day_type, reps_only, is_timed)
-        VALUES (?,?,?,?,?,?)
-    """, [
-        ('Incline Pushups',       3, 'Chest', 'any',  0, 0),
-        ('Incline Reverse Plank', 3, 'Core',  'any',  0, 1),
-        ('Neck Rolls',            3, 'Core',  'any',  0, 1),
-        ('Box Squats',            3, 'Legs',  'any',  0, 0),
-        ('Hip Flexor Stretch',    3, 'Legs',  'any',  0, 1),
-        ('Machine Chest Press',   2, 'Chest', 'push', 0, 0),
-        ('Cable Row',             2, 'Back',  'pull', 0, 0),
-        ('Leg Extensions',        3, 'Legs',  'legs', 0, 0),
-        ('Bicep Curls',           3, 'Arms',  'any',  0, 0),
-        ('Body Dips',             3, 'Arms',  'any',  0, 0),
-        ('Squats',                3, 'Legs',  'any',  0, 0),
-    ])
+    if _lib_seed:
+        conn.executemany("""
+            INSERT OR IGNORE INTO exercises (name, tier, muscle_group, day_type, reps_only, is_timed)
+            VALUES (?,?,?,?,?,?)
+        """, [
+            ('Incline Pushups',       3, 'Chest', 'any',  0, 0),
+            ('Incline Reverse Plank', 3, 'Core',  'any',  0, 1),
+            ('Neck Rolls',            3, 'Core',  'any',  0, 1),
+            ('Box Squats',            3, 'Legs',  'any',  0, 0),
+            ('Hip Flexor Stretch',    3, 'Legs',  'any',  0, 1),
+            ('Leg Extensions',        3, 'Legs',  'legs', 0, 0),
+            ('Bicep Curls',           3, 'Arms',  'any',  0, 0),
+            ('Body Dips',             3, 'Arms',  'any',  0, 0),
+            ('Squats',                3, 'Legs',  'any',  0, 0),
+        ])
 
     # ── Schemes table ─────────────────────────────────────────────────────
     conn.execute("""
@@ -593,16 +835,22 @@ def init_db():
             conn.execute('PRAGMA foreign_keys = ON')
 
     # Fix metadata for any exercises that pre-exist from an older seeding
-    conn.execute("UPDATE exercises SET tier=1, muscle_group='Chest' WHERE name='Weighted Dips'")
-    conn.execute("UPDATE exercises SET muscle_group='Back'  WHERE name IN ('Pendlay Row','Deadlift')")
-    conn.execute("UPDATE exercises SET muscle_group='Legs'  WHERE name='Barbell Squat'")
-    conn.execute("UPDATE exercises SET reps_only=1          WHERE name='Ab Wheel'")
-    conn.execute("UPDATE exercises SET muscle_group='Chest' WHERE name='DB Pullover'")
-    conn.execute("UPDATE exercises SET muscle_group='Arms'  WHERE name IN ('Cable/DB Curls','Tricep Pushdowns')")
+    if _lib_seed:
+        conn.execute("UPDATE exercises SET tier=1, muscle_group='Chest' WHERE name='Weighted Dips'")
+        conn.execute("UPDATE exercises SET muscle_group='Back'  WHERE name IN ('Pendlay Row','Deadlift')")
+        conn.execute("UPDATE exercises SET muscle_group='Legs'  WHERE name='Barbell Squat'")
+        conn.execute("UPDATE exercises SET reps_only=1          WHERE name='Ab Wheel'")
+        conn.execute("UPDATE exercises SET muscle_group='Chest' WHERE name='DB Pullover'")
+        conn.execute("UPDATE exercises SET muscle_group='Arms'  WHERE name IN ('Cable/DB Curls','Tricep Pushdowns')")
 
-    # Per-exercise bounds
-    conn.execute("UPDATE exercises SET reps_min=6, reps_max=10, sets_min=2, sets_max=5 WHERE name='Ab Wheel'")
-    conn.execute("UPDATE exercises SET reps_min=6, reps_max=10, sets_min=2, sets_max=4 WHERE name='DB Lunges'")
+        # Per-exercise bounds
+        conn.execute("UPDATE exercises SET reps_min=6, reps_max=10, sets_min=2, sets_max=5 WHERE name='Ab Wheel'")
+        conn.execute("UPDATE exercises SET reps_min=6, reps_max=10, sets_min=2, sets_max=4 WHERE name='DB Lunges'")
+        conn.execute("UPDATE exercises SET reps_min=3, reps_max=7,  sets_min=3, sets_max=5 WHERE name='Weighted Dips'")
+        conn.execute(
+            "UPDATE exercises SET reps_min=6, reps_max=12, sets_min=3, sets_max=4 "
+            "WHERE name IN ('DB Curls','EZ Bar Curl','DB Hammer Curl')"
+        )
 
     # Generate exercise-specific scheme rows for any exercise with custom bounds
     for _ex in conn.execute(
@@ -689,15 +937,21 @@ def init_db():
                     is_barbell     INTEGER NOT NULL DEFAULT 0,
                     reps_only      INTEGER NOT NULL DEFAULT 0,
                     is_timed       INTEGER NOT NULL DEFAULT 0,
-                    cardio_metrics TEXT NOT NULL DEFAULT '{}'
+                    cardio_metrics TEXT NOT NULL DEFAULT '{}',
+                    reps_min       INTEGER,
+                    reps_max       INTEGER,
+                    sets_min       INTEGER,
+                    sets_max       INTEGER
                 )
             """)
             conn.execute("""
                 INSERT INTO exercises_new
                     (id, name, tier, muscle_group, day_type, notes,
-                     is_barbell, reps_only, is_timed, cardio_metrics)
+                     is_barbell, reps_only, is_timed, cardio_metrics,
+                     reps_min, reps_max, sets_min, sets_max)
                 SELECT id, name, tier, muscle_group, day_type, notes,
-                       is_barbell, reps_only, is_timed, cardio_metrics
+                       is_barbell, reps_only, is_timed, cardio_metrics,
+                       reps_min, reps_max, sets_min, sets_max
                 FROM exercises
             """)
             conn.execute('DROP TABLE exercises')
@@ -710,31 +964,62 @@ def init_db():
             conn.execute('PRAGMA foreign_keys = ON')
 
     # Seed Tier 4 exercises (idempotent)
-    conn.executemany("""
-        INSERT OR IGNORE INTO exercises
-            (name, tier, muscle_group, day_type, reps_only, is_timed, cardio_metrics)
-        VALUES (?,?,?,?,?,?,?)
-    """, [
-        ('Fa Jin',    4, 'Mobility', 'any', 0, 1, '{}'),
-        ('Swimming',  4, 'Cardio',   'any', 0, 0, '{"distance":"m"}'),
-        ('Running',   4, 'Cardio',   'any', 0, 0, '{"distance":"km","time":true}'),
-        ('Rowing',    4, 'Cardio',   'any', 0, 0, '{"distance":"m","time":true}'),
-        ('Muay Thai', 4, 'Cardio',   'any', 0, 0, '{"time":true}'),
-        ('Cycling',   4, 'Cardio',   'any', 0, 0, '{"time":true,"resistance":true}'),
-    ])
-    # Keep metric specs in sync if these rows pre-existed without one
-    for _nm, _spec in [
-        ('Fa Jin', '{}'), ('Swimming', '{"distance":"m"}'),
-        ('Running', '{"distance":"km","time":true}'),
-        ('Rowing', '{"distance":"m","time":true}'),
-        ('Muay Thai', '{"time":true}'),
-        ('Cycling', '{"time":true,"resistance":true}'),
-    ]:
-        conn.execute(
-            "UPDATE exercises SET tier=4, cardio_metrics=? "
-            "WHERE name=? AND (cardio_metrics IS NULL OR cardio_metrics='' OR cardio_metrics='{}' OR tier=4)",
-            (_spec, _nm)
-        )
+    if _lib_seed:
+        conn.executemany("""
+            INSERT OR IGNORE INTO exercises
+                (name, tier, muscle_group, day_type, reps_only, is_timed, cardio_metrics)
+            VALUES (?,?,?,?,?,?,?)
+        """, [
+            ('Banded Face Pulls',     4, 'Mobility', 'any', 0, 0, '{"sets":20}'),
+            ('Pec Deck',              4, 'Chest',    'any', 0, 0, '{"sets":20,"weight":true}'),
+            ('Banded Reverse Curls',  4, 'Biceps',   'any', 0, 0, '{"sets":20}'),
+            ('Tricep Extensions',     4, 'Triceps',  'any', 0, 0, '{"sets":20}'),
+            ('Swimming',  4, 'Cardio',   'any', 0, 0, '{"distance":"m"}'),
+            ('Running',   4, 'Cardio',   'any', 0, 0, '{"distance":"km","time":true}'),
+            ('Rowing',    4, 'Cardio',   'any', 0, 0, '{"distance":"m","time":true}'),
+            ('Muay Thai', 4, 'Cardio',   'any', 0, 0, '{"time":true}'),
+            ('Cycling',   4, 'Cardio',   'any', 0, 0, '{"time":true,"resistance":true}'),
+            ('Stairmaster', 4, 'Cardio', 'any', 0, 0, '{"time":true,"speed":true}'),
+        ])
+        # Remove legacy 'Fa Jin' exercise — the term is now the category label, not an exercise.
+        # Tolerate session_cardio not existing yet on a brand-new DB (created further below).
+        try:
+            conn.execute(
+                "DELETE FROM exercises WHERE name='Fa Jin' AND id NOT IN "
+                "(SELECT exercise_id FROM session_lifts UNION SELECT exercise_id FROM session_cardio)"
+            )
+        except sqlite3.OperationalError:
+            conn.execute(
+                "DELETE FROM exercises WHERE name='Fa Jin' AND id NOT IN "
+                "(SELECT exercise_id FROM session_lifts)"
+            )
+        # Migrate any Fa Jin accessories that were briefly seeded at Tier 3 → Tier 4 with correct metric spec
+        for _nm, _mg, _spec in [
+            ('Pec Deck',             'Chest',   '{"sets":20,"weight":true}'),
+            ('Banded Reverse Curls', 'Biceps',  '{"sets":20}'),
+            ('Tricep Extensions',    'Triceps', '{"sets":20}'),
+        ]:
+            conn.execute(
+                "UPDATE exercises SET tier=4, muscle_group=?, day_type='any', cardio_metrics=? WHERE name=?",
+                (_mg, _spec, _nm)
+            )
+        # Keep metric specs in sync
+        for _nm, _spec in [
+            ('Banded Face Pulls', '{"sets":20}'),
+            ('Pec Deck', '{"sets":20,"weight":true}'),
+            ('Banded Reverse Curls', '{"sets":20}'),
+            ('Tricep Extensions', '{"sets":20}'),
+            ('Swimming', '{"distance":"m"}'),
+            ('Running', '{"distance":"km","time":true}'),
+            ('Rowing', '{"distance":"m","time":true}'),
+            ('Muay Thai', '{"time":true}'),
+            ('Cycling', '{"time":true,"resistance":true}'),
+            ('Stairmaster', '{"time":true,"speed":true}'),
+        ]:
+            conn.execute(
+                "UPDATE exercises SET tier=4, is_timed=0, cardio_metrics=? WHERE name=? AND tier=4",
+                (_spec, _nm)
+            )
 
     # Tier 4 log rows (cardio / warmup entries per session)
     conn.execute("""
@@ -749,6 +1034,111 @@ def init_db():
             created_at  TEXT
         )
     """)
+    # Migrate: 'sets' count for one-touch "sets of N" warmups (e.g. face pulls)
+    _sc_cols = {r[1] for r in conn.execute('PRAGMA table_info(session_cardio)')}
+    if 'sets' not in _sc_cols:
+        conn.execute('ALTER TABLE session_cardio ADD COLUMN sets INTEGER')
+    if 'weight_kg' not in _sc_cols:
+        conn.execute('ALTER TABLE session_cardio ADD COLUMN weight_kg REAL')
+    if 'speed' not in _sc_cols:
+        conn.execute('ALTER TABLE session_cardio ADD COLUMN speed REAL')
+
+    # In-progress gym session drafts (autosave), one per profile+date.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS session_drafts (
+            profile_id INTEGER NOT NULL,
+            date       TEXT NOT NULL,
+            payload    TEXT NOT NULL,
+            updated_at TEXT,
+            PRIMARY KEY (profile_id, date)
+        )
+    """)
+
+    # ── Fatigue / cooldown model ──────────────────────────────────────────────
+    c.executescript("""
+        CREATE TABLE IF NOT EXISTS exercise_muscles (
+            exercise_id  INTEGER NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
+            muscle_group TEXT NOT NULL,
+            engagement   REAL NOT NULL DEFAULT 1.0,
+            PRIMARY KEY (exercise_id, muscle_group)
+        );
+
+        CREATE TABLE IF NOT EXISTS muscle_recovery (
+            profile_id    INTEGER NOT NULL,
+            muscle_group  TEXT NOT NULL,
+            recovery_days REAL NOT NULL,
+            PRIMARY KEY (profile_id, muscle_group)
+        );
+
+        CREATE TABLE IF NOT EXISTS fatigue_adjustments (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile_id   INTEGER NOT NULL,
+            muscle_group TEXT NOT NULL,
+            date         TEXT NOT NULL,
+            kind         TEXT NOT NULL CHECK(kind IN ('reset','add')),
+            value        REAL NOT NULL DEFAULT 0,
+            created_at   TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS priority_lifts (
+            profile_id  INTEGER NOT NULL,
+            slot        INTEGER NOT NULL CHECK(slot IN (1, 2)),
+            exercise_id INTEGER NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
+            start_date  TEXT NOT NULL,
+            weeks       INTEGER NOT NULL DEFAULT 4,
+            PRIMARY KEY (profile_id, slot)
+        );
+    """)
+
+    # ── Muscle-group corrections ──────────────────────────────────────────────
+    # 'Bicep Curls' was mis-tagged as Triceps. Hip/neck mobility work was tagged
+    # as loaded muscle groups, which would generate phantom fatigue — move it to
+    # 'Mobility' so it deposits none.
+    if _lib_seed:
+        conn.execute("UPDATE exercises SET muscle_group='Biceps'   WHERE name='Bicep Curls'")
+        conn.execute("UPDATE exercises SET muscle_group='Mobility' WHERE name IN ('Hip Flexor Stretch','Neck Rolls')")
+    # Drop any stale auto-mappings for corrected exercises so they reseed correctly.
+    conn.execute("""
+        DELETE FROM exercise_muscles WHERE exercise_id IN (
+            SELECT id FROM exercises
+            WHERE name IN ('Bicep Curls', 'Hip Flexor Stretch', 'Neck Rolls')
+        )
+    """)
+
+    # Seed the weighted exercise → muscle map (idempotent). Primary mover ~1.0,
+    # secondary/stabiliser movers carry a fraction of the load.
+    for ex_name, weights in EXERCISE_MUSCLE_MAP.items():
+        row = conn.execute("SELECT id FROM exercises WHERE name = ?", (ex_name,)).fetchone()
+        if not row:
+            continue
+        for muscle, eng in weights:
+            conn.execute(
+                "INSERT OR IGNORE INTO exercise_muscles (exercise_id, muscle_group, engagement) "
+                "VALUES (?, ?, ?)", (row['id'], muscle, eng)
+            )
+
+    # Fallback: any exercise without a mapping inherits its single muscle_group @ 1.0,
+    # normalising stray groups onto the tracked set and skipping non-muscular work.
+    conn.execute("""
+        INSERT OR IGNORE INTO exercise_muscles (exercise_id, muscle_group, engagement)
+        SELECT e.id,
+               CASE e.muscle_group
+                    WHEN 'Posterior Chain' THEN 'Back'
+                    WHEN 'Upper Back'      THEN 'Back'
+                    ELSE e.muscle_group
+               END,
+               1.0
+        FROM exercises e
+        WHERE e.muscle_group NOT IN ('Cardio', 'Mobility')
+          AND NOT EXISTS (
+            SELECT 1 FROM exercise_muscles em WHERE em.exercise_id = e.id
+        )
+    """)
+
+    # Stamp the library version so the guarded seed/fixes never re-run and
+    # user edits stay durable.
+    if _lib_seed:
+        conn.execute(f'PRAGMA user_version = {_LIBRARY_VERSION}')
 
     conn.commit()
     _init_swim_v2(conn)
@@ -1178,11 +1568,44 @@ def get_t1_last_weights():
     return out
 
 
+def save_session_draft(profile_id, date_str, payload):
+    """Upsert the in-progress session draft for a profile+date (autosave)."""
+    from datetime import datetime as _dt
+    conn = get_db()
+    conn.execute("""
+        INSERT INTO session_drafts (profile_id, date, payload, updated_at)
+        VALUES (?,?,?,?)
+        ON CONFLICT(profile_id, date) DO UPDATE SET
+            payload = excluded.payload, updated_at = excluded.updated_at
+    """, (profile_id, date_str, payload, _dt.utcnow().isoformat() + 'Z'))
+    conn.commit()
+    conn.close()
+
+
+def get_session_draft(profile_id, date_str):
+    conn = get_db()
+    row = conn.execute(
+        'SELECT payload FROM session_drafts WHERE profile_id=? AND date=?',
+        (profile_id, date_str)
+    ).fetchone()
+    conn.close()
+    return row['payload'] if row else None
+
+
+def clear_session_draft(profile_id, date_str):
+    conn = get_db()
+    conn.execute('DELETE FROM session_drafts WHERE profile_id=? AND date=?',
+                 (profile_id, date_str))
+    conn.commit()
+    conn.close()
+
+
 def get_session_cardio(session_id):
     """Tier 4 entries logged in a session, for the detail view."""
     conn = get_db()
     rows = conn.execute("""
-        SELECT sc.distance_m, sc.duration_s, sc.resistance, sc.done,
+        SELECT sc.distance_m, sc.duration_s, sc.resistance, sc.done, sc.sets,
+               sc.weight_kg, sc.speed,
                e.name, e.muscle_group, e.cardio_metrics
         FROM session_cardio sc
         JOIN exercises e ON e.id = sc.exercise_id
@@ -1200,9 +1623,39 @@ def get_session_cardio(session_id):
         out.append({
             'name': r['name'], 'muscle_group': r['muscle_group'], 'metrics': metrics,
             'distance_m': r['distance_m'], 'duration_s': r['duration_s'],
-            'resistance': r['resistance'], 'done': r['done'],
+            'resistance': r['resistance'], 'done': r['done'], 'sets': r['sets'],
+            'weight_kg': r['weight_kg'], 'speed': r['speed'],
         })
     return out
+
+
+def get_cardio_choices():
+    """Tier 4 cardio exercises (muscle_group='Cardio') with their metric spec, for the
+    standalone cardio logger."""
+    return [e for e in get_tier4_exercises() if e['muscle_group'] == 'Cardio']
+
+
+def log_cardio_session(profile_id, date_str, exercise_id,
+                       distance_m=None, duration_s=None, resistance=None,
+                       speed=None):
+    """Create a standalone cardio session (its own activity type) with one entry."""
+    from datetime import datetime as _dt
+    now = _dt.utcnow().isoformat() + 'Z'
+    conn = get_db()
+    session_id = conn.execute(
+        "INSERT INTO sessions (date, type, profile_id, started_at, ended_at) "
+        "VALUES (?, 'cardio', ?, ?, ?)",
+        (date_str, profile_id, now, now)
+    ).lastrowid
+    conn.execute(
+        'INSERT INTO session_cardio '
+        '(session_id, exercise_id, distance_m, duration_s, resistance, speed, done, created_at) '
+        'VALUES (?,?,?,?,?,?,1,?)',
+        (session_id, exercise_id, distance_m, duration_s, resistance, speed, now)
+    )
+    conn.commit()
+    conn.close()
+    return session_id
 
 
 # ── Reformer Pilates helpers ──────────────────────────────────────────────────
@@ -1565,6 +2018,315 @@ def get_exercise_decay(exercise_id, days=21):
     }
 
 
+# ── Fatigue / cooldown calculation ────────────────────────────────────
+
+def _recovery_days(conn, profile_id):
+    """Per-muscle recovery window in days, learned values overriding defaults."""
+    rec = dict(FATIGUE_DEFAULT_RECOVERY)
+    for r in conn.execute(
+        "SELECT muscle_group, recovery_days FROM muscle_recovery WHERE profile_id = ?",
+        (profile_id,)
+    ).fetchall():
+        rec[r['muscle_group']] = r['recovery_days']
+    return rec
+
+
+def _muscle_deposits_by_date(conn, profile_id, start_iso):
+    """{date_iso: {muscle: total_deposit}} from logged gym sessions since start_iso.
+
+    Each (date, exercise) deposits tier_base × engagement into every muscle it works.
+    """
+    em = {}
+    for r in conn.execute(
+        "SELECT exercise_id, muscle_group, engagement FROM exercise_muscles"
+    ).fetchall():
+        em.setdefault(r['exercise_id'], []).append((r['muscle_group'], r['engagement']))
+
+    rows = conn.execute("""
+        SELECT s.date AS date, sl.exercise_id AS exercise_id, e.tier AS tier
+        FROM session_lifts sl
+        JOIN sessions  s ON s.id = sl.session_id AND s.type = 'gym'
+        JOIN exercises e ON e.id = sl.exercise_id
+        WHERE s.date >= ? AND s.profile_id = ?
+        GROUP BY s.date, sl.exercise_id
+    """, (start_iso, profile_id)).fetchall()
+
+    deposits = {}
+    for r in rows:
+        base = FATIGUE_TIER_BASE.get(r['tier'], 30.0)
+        if base <= 0:
+            continue
+        for muscle, eng in em.get(r['exercise_id'], []):
+            day = deposits.setdefault(r['date'], {})
+            day[muscle] = day.get(muscle, 0.0) + base * eng
+    return deposits
+
+
+def get_fatigue_state(profile_id, history_days=4, project_days=2):
+    """Per-muscle fatigue simulated day-by-day over a rolling window.
+
+    Returns dates, labels, today_index, a per-muscle series (0–100), and an
+    `up_next` ranking of exercises by how recovered their target muscles are.
+    """
+    from datetime import timedelta
+    conn = get_db()
+    today = date.today()
+    # Look back far enough that older stimuli have fully decayed before the window starts.
+    sim_start = today - timedelta(days=history_days + 7)
+    rec = _recovery_days(conn, profile_id)
+    muscles = list(FATIGUE_DEFAULT_RECOVERY.keys())
+
+    deposits = _muscle_deposits_by_date(conn, profile_id, sim_start.isoformat())
+
+    adjustments = {}
+    for r in conn.execute("""
+        SELECT date, muscle_group, kind, value FROM fatigue_adjustments
+        WHERE profile_id = ? AND date >= ? ORDER BY date, id
+    """, (profile_id, sim_start.isoformat())).fetchall():
+        adjustments.setdefault(r['date'], []).append(r)
+
+    # Exercise → muscle weights for the up-next ranking
+    ex_rows = conn.execute("""
+        SELECT e.id, e.name, e.tier, em.muscle_group, em.engagement
+        FROM exercises e
+        JOIN exercise_muscles em ON em.exercise_id = e.id
+        WHERE e.tier IN (1, 2, 3)
+    """).fetchall()
+    conn.close()
+
+    total = (today - sim_start).days + 1 + project_days
+    sim_dates = [(sim_start + timedelta(days=i)).isoformat() for i in range(total)]
+
+    fat = {m: 0.0 for m in muscles}
+    daily = {m: [] for m in muscles}
+    for d in sim_dates:
+        for m in muscles:
+            fat[m] = max(0.0, fat[m] - 100.0 / rec[m])
+        for m, dep in deposits.get(d, {}).items():
+            if m in fat:
+                fat[m] = min(100.0, fat[m] + dep)
+        for a in adjustments.get(d, []):
+            m = a['muscle_group']
+            if m not in fat:
+                continue
+            fat[m] = 0.0 if a['kind'] == 'reset' else min(100.0, fat[m] + a['value'])
+        for m in muscles:
+            daily[m].append(round(fat[m]))
+
+    # Trim to the visible window: last `history_days` days + today + `project_days`
+    today_pos = (today - sim_start).days
+    lo = today_pos - history_days
+    hi = today_pos + project_days + 1
+    window = list(range(lo, hi))
+    today_index = history_days
+
+    _short = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    labels, vis_dates = [], []
+    for i in window:
+        dd = sim_start + timedelta(days=i)
+        labels.append({'short': _short[dd.weekday()], 'num': dd.day})
+        vis_dates.append(dd.isoformat())
+
+    fatigue_now = {m: daily[m][today_pos] for m in muscles}
+    muscle_out = [{
+        'muscle': m,
+        'recovery_days': round(rec[m], 2),
+        'current': fatigue_now[m],
+        'series': [daily[m][i] for i in window],
+        'hits': [bool(m in deposits.get(d, {})) for d in vis_dates],
+    } for m in muscles]
+
+    by_ex = {}
+    for r in ex_rows:
+        by_ex.setdefault((r['id'], r['name'], r['tier']), []).append(
+            (r['muscle_group'], r['engagement']))
+    up_next = []
+    for (eid, name, tier), ws in by_ex.items():
+        den = sum(e for _, e in ws)
+        wf = sum(e * fatigue_now.get(m, 0) for m, e in ws) / den if den else 0
+        primary = max(ws, key=lambda x: x[1])[0]
+        up_next.append({'id': eid, 'name': name, 'tier': tier,
+                        'primary': primary, 'fatigue': round(wf)})
+    up_next.sort(key=lambda x: (x['fatigue'], x['tier']))
+
+    return {
+        'dates': vis_dates,
+        'labels': labels,
+        'today_index': today_index,
+        'muscles': muscle_out,
+        'up_next': up_next,
+    }
+
+
+def adjust_fatigue(profile_id, muscle_group, kind, value=0.0):
+    """Log a manual correction and gently nudge that muscle's recovery rate.
+
+    kind='reset' → muscle feels fresh (fatigue → 0); 'add' → still sore (+value).
+    A reset while the model predicted fatigue implies faster recovery (shrink the
+    window); an add implies slower recovery (grow it). Capped to ±15% per nudge
+    and clamped to 0.5×–2× the default window.
+    """
+    from datetime import datetime as _dt
+    if kind not in ('reset', 'add'):
+        raise ValueError('kind must be reset or add')
+
+    predicted = next((m['current'] for m in get_fatigue_state(profile_id)['muscles']
+                      if m['muscle'] == muscle_group), 0)
+
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO fatigue_adjustments (profile_id, muscle_group, date, kind, value, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (profile_id, muscle_group, date.today().isoformat(), kind, value,
+         _dt.utcnow().isoformat() + 'Z')
+    )
+
+    default = FATIGUE_DEFAULT_RECOVERY.get(muscle_group, 2.0)
+    rec = _recovery_days(conn, profile_id)
+    R = rec.get(muscle_group, default)
+    if kind == 'reset':
+        R_new = R * (1 - FATIGUE_LEARN_RATE * (predicted / 100.0))
+    else:
+        R_new = R * (1 + FATIGUE_LEARN_RATE * (min(value, 100.0) / 100.0))
+    R_new = max(default * FATIGUE_RECOVERY_MIN_FACTOR,
+                min(default * FATIGUE_RECOVERY_MAX_FACTOR, R_new))
+
+    conn.execute("""
+        INSERT INTO muscle_recovery (profile_id, muscle_group, recovery_days)
+        VALUES (?, ?, ?)
+        ON CONFLICT(profile_id, muscle_group)
+        DO UPDATE SET recovery_days = excluded.recovery_days
+    """, (profile_id, muscle_group, R_new))
+    conn.commit()
+    conn.close()
+    return R_new
+
+
+def get_exercise_muscle_map():
+    """{exercise_id: [[muscle_group, engagement], ...]} for client-side fatigue preview."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT exercise_id, muscle_group, engagement FROM exercise_muscles"
+    ).fetchall()
+    conn.close()
+    out = {}
+    for r in rows:
+        out.setdefault(r['exercise_id'], []).append([r['muscle_group'], r['engagement']])
+    return out
+
+
+# ── Priority lifts (focus block) ──────────────────────────────────────
+
+def _lift_month_points(conn, exercise_id, profile_id, month_start_iso):
+    """Progress series for one lift over the current month: the best set per session
+    day, expressed as estimated 1RM (Epley) for weighted lifts, or top reps for
+    bodyweight lifts. Returns (points, unit) with points=[{date, day, value}]."""
+    rows = conn.execute("""
+        SELECT s.date AS d, sl.reps AS reps, sl.weight_kg AS w
+        FROM session_lifts sl
+        JOIN sessions s ON s.id = sl.session_id AND s.type = 'gym'
+        WHERE sl.exercise_id = ? AND s.profile_id = ? AND s.date >= ?
+        ORDER BY s.date
+    """, (exercise_id, profile_id, month_start_iso)).fetchall()
+
+    by_date, any_weight = {}, False
+    for r in rows:
+        w, reps = (r['w'] or 0), (r['reps'] or 0)
+        if w > 0:
+            any_weight = True
+        e1  = w * (1 + reps / 30.0) if w > 0 else 0      # Epley estimated 1RM
+        cur = by_date.setdefault(r['d'], {'e1': 0.0, 'reps': 0})
+        cur['e1']   = max(cur['e1'], e1)
+        cur['reps'] = max(cur['reps'], reps)
+
+    unit   = 'kg' if any_weight else 'reps'
+    points = []
+    for d in sorted(by_date):
+        value = round(by_date[d]['e1'], 1) if unit == 'kg' else by_date[d]['reps']
+        points.append({'date': d, 'day': int(d[8:10]), 'value': value})
+    return points, unit
+
+
+def get_priority_lifts(profile_id):
+    """Up to two focus lifts framed as a rolling monthly goal (resets on the 1st).
+    Each returns its progress series for the current calendar month."""
+    conn  = get_db()
+    today = date.today()
+    month_start = today.replace(day=1)
+    next_month  = (date(today.year + 1, 1, 1) if today.month == 12
+                   else date(today.year, today.month + 1, 1))
+    days_total  = (next_month - month_start).days
+    days_left   = (next_month - today).days
+    month_label = today.strftime('%B')
+
+    rows = conn.execute("""
+        SELECT p.slot, p.exercise_id, e.name, e.muscle_group, e.tier
+        FROM priority_lifts p
+        JOIN exercises e ON e.id = p.exercise_id
+        WHERE p.profile_id = ?
+        ORDER BY p.slot
+    """, (profile_id,)).fetchall()
+
+    out = []
+    for r in rows:
+        points, unit = _lift_month_points(conn, r['exercise_id'], profile_id,
+                                          month_start.isoformat())
+        pm = conn.execute(
+            "SELECT muscle_group FROM exercise_muscles WHERE exercise_id = ? "
+            "ORDER BY engagement DESC LIMIT 1", (r['exercise_id'],)
+        ).fetchone()
+        last = conn.execute("""
+            SELECT MAX(s.date) AS d
+            FROM session_lifts sl
+            JOIN sessions s ON s.id = sl.session_id AND s.type = 'gym'
+            WHERE sl.exercise_id = ? AND s.profile_id = ?
+        """, (r['exercise_id'], profile_id)).fetchone()['d']
+        vals = [p['value'] for p in points]
+        out.append({
+            'slot':                r['slot'],
+            'exercise_id':         r['exercise_id'],
+            'name':                r['name'],
+            'tier':                r['tier'],
+            'primary':             pm['muscle_group'] if pm else r['muscle_group'],
+            'month_label':         month_label,
+            'day_of_month':        today.day,
+            'days_total':          days_total,
+            'days_left':           days_left,
+            'sessions_this_month': len(points),
+            'history':             points,
+            'unit':                unit,
+            'first':               vals[0]  if vals else None,
+            'best':                max(vals) if vals else None,
+            'latest':              vals[-1] if vals else None,
+            'last_performed':      last,
+        })
+    conn.close()
+    return out
+
+
+def set_priority_lift(profile_id, slot, exercise_id, weeks=4):
+    """Pin (or replace) a focus lift in a slot, resetting the block to start today."""
+    conn = get_db()
+    conn.execute("""
+        INSERT INTO priority_lifts (profile_id, slot, exercise_id, start_date, weeks)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(profile_id, slot) DO UPDATE SET
+            exercise_id = excluded.exercise_id,
+            start_date  = excluded.start_date,
+            weeks       = excluded.weeks
+    """, (profile_id, int(slot), int(exercise_id), date.today().isoformat(), int(weeks)))
+    conn.commit()
+    conn.close()
+
+
+def clear_priority_lift(profile_id, slot):
+    conn = get_db()
+    conn.execute("DELETE FROM priority_lifts WHERE profile_id = ? AND slot = ?",
+                 (profile_id, int(slot)))
+    conn.commit()
+    conn.close()
+
+
 # ── History & detail helpers ──────────────────────────────────────────
 
 def _compute_duration_min(started_at, ended_at):
@@ -1647,12 +2409,22 @@ def get_sessions_with_headlines(profile_id=1):
                 'is_pr':     r['exercise_id'] in session_prs.get(sid, set()),
             })
 
+    # First cardio activity name per session (for cardio-session headlines)
+    cardio_label = {}
+    for r in conn.execute("""
+        SELECT sc.session_id, e.name
+        FROM session_cardio sc JOIN exercises e ON e.id = sc.exercise_id
+        ORDER BY sc.id
+    """).fetchall():
+        cardio_label.setdefault(r['session_id'], r['name'])
+
     conn.close()
 
     result = []
     for s in sessions:
         d = dict(s)
         d['headline_lifts'] = session_top.get(s['id'], [])
+        d['cardio_label']   = cardio_label.get(s['id'])
         d['duration_min']   = _compute_duration_min(
             d.get('started_at'), d.get('ended_at')
         )
@@ -1809,36 +2581,23 @@ def set_macro_goals(calories, protein_g, carbs_g, fat_g, profile_id=1):
 
 
 def sync_food_log_from_library(date_str, profile_id=1):
-    """Backfill any 0-calorie food_log entries for this date/profile where food_items now has values.
-    Handles <num>x <food> naming convention by parsing the multiplier and looking up the base food."""
+    """Backfill any 0-calorie food_log entries for this date/profile where food_items now
+    has values. Quantity prefixes ('2x eggs', '100g rice') and plurals are resolved
+    through the shared _resolve_food() so backfill matches live logging exactly."""
     conn = get_db()
     rows = conn.execute(
         "SELECT id, name FROM food_log WHERE date=? AND profile_id=? AND calories=0",
         (date_str, profile_id)
     ).fetchall()
     for row in rows:
-        multiplier, base_name = _parse_qty_name(row['name'])
-        factor = multiplier
-        if multiplier == 1.0:
-            gram_qty, gram_base = _parse_gram_prefix(row['name'])
-            if gram_qty is not None:
-                base_name = gram_base
-                factor    = gram_qty / 100.0
-        item = conn.execute(
-            'SELECT * FROM food_items WHERE name=? COLLATE NOCASE', (base_name,)
-        ).fetchone()
-        if item and item['calories'] > 0:
-            if item['unit_type'] == 'unit':
-                factor = multiplier
+        resolved = _resolve_food(conn, row['name'])
+        if resolved['matched']:
             conn.execute("""
                 UPDATE food_log SET calories=?, protein_g=?, carbs_g=?, fat_g=?
                 WHERE id=?
             """, (
-                round(item['calories']  * factor, 1),
-                round(item['protein_g'] * factor, 1),
-                round(item['carbs_g']   * factor, 1),
-                round(item['fat_g']     * factor, 1),
-                row['id']
+                resolved['calories'], resolved['protein_g'],
+                resolved['carbs_g'],  resolved['fat_g'], row['id']
             ))
     conn.commit()
     conn.close()
@@ -1859,26 +2618,82 @@ def get_food_log(date_str, profile_id=1):
     return rows
 
 
-def add_food_entry(date_str, name, calories, protein_g, carbs_g, fat_g, profile_id=1,
-                   meal_type='snack', logged_at=None):
+def log_food_entry(date_str, raw_name, profile_id=1, meal_type='snack',
+                   quantity=None, explicit_macros=None, logged_at=None):
+    """Single entry point for logging a food. Resolves quantity prefixes and plurals,
+    scales macros from the library (unless explicit_macros override them), inserts one
+    food_log row, and registers unknown foods as pending stubs in the library.
+
+    `explicit_macros` is an optional dict (calories/protein_g/carbs_g/fat_g) used when
+    the caller already has macros (e.g. the browser computed them or the user typed
+    custom values). Returns the inserted food_log row as a dict.
+    """
     if logged_at is None:
         from datetime import datetime as _dt
         logged_at = _dt.now().strftime('%H:%M')
+
+    conn     = get_db()
+    resolved = _resolve_food(conn, raw_name, quantity)
+    display  = _display_name(resolved['display'])
+
+    if explicit_macros and (float(explicit_macros.get('calories') or 0) > 0
+                            or float(explicit_macros.get('protein_g') or 0) > 0):
+        cal  = round(float(explicit_macros.get('calories')  or 0), 1)
+        pro  = round(float(explicit_macros.get('protein_g') or 0), 1)
+        carb = round(float(explicit_macros.get('carbs_g')   or 0), 1)
+        fat  = round(float(explicit_macros.get('fat_g')     or 0), 1)
+    else:
+        cal, pro, carb, fat = (resolved['calories'], resolved['protein_g'],
+                               resolved['carbs_g'],  resolved['fat_g'])
+
+    entry_id = conn.execute(
+        'INSERT INTO food_log (date,name,calories,protein_g,carbs_g,fat_g,profile_id,meal_type,logged_at) '
+        'VALUES (?,?,?,?,?,?,?,?,?)',
+        (date_str, display, cal, pro, carb, fat, profile_id, meal_type, logged_at)
+    ).lastrowid
+
+    # Unknown food with no macros → register a pending 0-cal stub under its canonical
+    # base name (never the quantity/gram-prefixed form) so it surfaces in the Food DB.
+    if not resolved['matched'] and cal == 0 and resolved['base_name']:
+        conn.execute("""
+            INSERT INTO food_items (name, name_key, calories, protein_g, carbs_g, fat_g, unit_type)
+            VALUES (?, ?, 0, 0, 0, 0, 'g')
+            ON CONFLICT(name) DO NOTHING
+        """, (_display_name(resolved['base_name']), resolved['key']))
+
+    conn.commit()
+    row = conn.execute('SELECT * FROM food_log WHERE id=?', (entry_id,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+def add_food_entry(date_str, name, calories, protein_g, carbs_g, fat_g, profile_id=1,
+                   meal_type='snack', logged_at=None):
+    """Insert a pre-computed food_log row (used for composite meals with known macros).
+    Updates the library only for plain food names — never quantity/gram-prefixed ones —
+    so '2x eggs'-style entries don't pollute food_items."""
+    if logged_at is None:
+        from datetime import datetime as _dt
+        logged_at = _dt.now().strftime('%H:%M')
+    name = _display_name(name)
     conn = get_db()
     conn.execute(
         'INSERT INTO food_log (date,name,calories,protein_g,carbs_g,fat_g,profile_id,meal_type,logged_at) '
         'VALUES (?,?,?,?,?,?,?,?,?)',
         (date_str, name, calories, protein_g, carbs_g, fat_g, profile_id, meal_type, logged_at)
     )
-    # Keep food library up-to-date — don't overwrite a defined food with zeros
-    conn.execute("""
-        INSERT INTO food_items (name,calories,protein_g,carbs_g,fat_g) VALUES (?,?,?,?,?)
-        ON CONFLICT(name) DO UPDATE SET
-            calories  = CASE WHEN excluded.calories  > 0 THEN excluded.calories  ELSE food_items.calories  END,
-            protein_g = CASE WHEN excluded.protein_g > 0 THEN excluded.protein_g ELSE food_items.protein_g END,
-            carbs_g   = CASE WHEN excluded.carbs_g   > 0 THEN excluded.carbs_g   ELSE food_items.carbs_g   END,
-            fat_g     = CASE WHEN excluded.fat_g     > 0 THEN excluded.fat_g     ELSE food_items.fat_g     END
-    """, (name, calories, protein_g, carbs_g, fat_g))
+    parsed = _parse_entry_name(name)
+    is_prefixed = (parsed['multiplier'] != 1.0 or parsed['gram_qty'] is not None)
+    if not is_prefixed:
+        # Keep library up-to-date — don't overwrite a defined food with zeros
+        conn.execute("""
+            INSERT INTO food_items (name,name_key,calories,protein_g,carbs_g,fat_g) VALUES (?,?,?,?,?,?)
+            ON CONFLICT(name) DO UPDATE SET
+                calories  = CASE WHEN excluded.calories  > 0 THEN excluded.calories  ELSE food_items.calories  END,
+                protein_g = CASE WHEN excluded.protein_g > 0 THEN excluded.protein_g ELSE food_items.protein_g END,
+                carbs_g   = CASE WHEN excluded.carbs_g   > 0 THEN excluded.carbs_g   ELSE food_items.carbs_g   END,
+                fat_g     = CASE WHEN excluded.fat_g     > 0 THEN excluded.fat_g     ELSE food_items.fat_g     END
+        """, (name, parsed['key'], calories, protein_g, carbs_g, fat_g))
     conn.commit()
     conn.close()
 
@@ -1891,8 +2706,9 @@ def delete_food_entry(entry_id):
 
 
 def get_pending_foods(profile_id=1):
-    """Food names logged with 0 calories that still need defining.
-    For <num>x <food> entries, surfaces the base food name instead."""
+    """Food names logged with 0 calories that still need defining. Surfaces the base
+    food name (quantity prefixes stripped) and de-duplicates plural variants so
+    'egg' and 'eggs' collapse to a single pending entry."""
     conn = get_db()
     rows = conn.execute("""
         SELECT DISTINCT fl.name
@@ -1903,9 +2719,9 @@ def get_pending_foods(profile_id=1):
     conn.close()
     seen, result = set(), []
     for r in rows:
-        multiplier, base = _parse_qty_name(r['name'])
-        pending_name = base if multiplier != 1.0 else r['name']
-        key = pending_name.lower()
+        parsed       = _parse_entry_name(r['name'])
+        pending_name = parsed['base_name'] or r['name']
+        key          = parsed['key']
         if key not in seen:
             seen.add(key)
             result.append(pending_name)
@@ -1914,21 +2730,33 @@ def get_pending_foods(profile_id=1):
 
 
 def define_food_item(name, calories, protein_g, carbs_g, fat_g, unit_type='g'):
+    """Create or update a library food, then backfill any 0-cal log rows that resolve
+    to it (including quantity-prefixed and plural variants)."""
+    name = _display_name(name)
     conn = get_db()
+    key  = _food_key(name)
     conn.execute("""
-        INSERT INTO food_items (name, calories, protein_g, carbs_g, fat_g, unit_type) VALUES (?,?,?,?,?,?)
+        INSERT INTO food_items (name, name_key, calories, protein_g, carbs_g, fat_g, unit_type)
+        VALUES (?,?,?,?,?,?,?)
         ON CONFLICT(name) DO UPDATE SET
+            name_key=excluded.name_key,
             calories=excluded.calories, protein_g=excluded.protein_g,
             carbs_g=excluded.carbs_g,   fat_g=excluded.fat_g,
             unit_type=excluded.unit_type
-    """, (name, calories, protein_g, carbs_g, fat_g, unit_type))
-    # Backfill existing food_log entries logged with 0 calories for this food
+    """, (name, key, calories, protein_g, carbs_g, fat_g, unit_type))
+    # Backfill existing 0-cal log rows that resolve to this food (any date/profile).
     if calories > 0:
-        conn.execute("""
-            UPDATE food_log SET
-                calories=?, protein_g=?, carbs_g=?, fat_g=?
-            WHERE name=? COLLATE NOCASE AND calories=0
-        """, (calories, protein_g, carbs_g, fat_g, name))
+        pending = conn.execute(
+            "SELECT id, name FROM food_log WHERE calories = 0"
+        ).fetchall()
+        for row in pending:
+            resolved = _resolve_food(conn, row['name'])
+            if resolved['matched'] and resolved['key'] == key:
+                conn.execute("""
+                    UPDATE food_log SET calories=?, protein_g=?, carbs_g=?, fat_g=?
+                    WHERE id=?
+                """, (resolved['calories'], resolved['protein_g'],
+                      resolved['carbs_g'], resolved['fat_g'], row['id']))
     conn.commit()
     conn.close()
 
@@ -1982,13 +2810,15 @@ def get_food_components():
 
 def save_food_components(food_name, components):
     """Persist component list, ensure ingredients exist in food_items, recalculate parent macros."""
+    food_name  = _display_name(food_name)
+    components = [(_display_name(ing), qty) for ing, qty in components]
     conn = get_db()
     # Mark parent food as unit type (recipe foods are logged as whole servings)
     conn.execute("""
-        INSERT INTO food_items (name, calories, protein_g, carbs_g, fat_g, unit_type)
-        VALUES (?, 0, 0, 0, 0, 'unit')
-        ON CONFLICT(name) DO UPDATE SET unit_type = 'unit'
-    """, (food_name,))
+        INSERT INTO food_items (name, name_key, calories, protein_g, carbs_g, fat_g, unit_type)
+        VALUES (?, ?, 0, 0, 0, 0, 'unit')
+        ON CONFLICT(name) DO UPDATE SET unit_type = 'unit', name_key = excluded.name_key
+    """, (food_name, _food_key(food_name)))
     conn.execute('DELETE FROM food_components WHERE food_name = ? COLLATE NOCASE', (food_name,))
     total_cal = total_pro = total_carb = total_fat = 0.0
     for ing_name, qty in components:
@@ -1998,15 +2828,14 @@ def save_food_components(food_name, components):
             'INSERT INTO food_components (food_name, ingredient_name, quantity) VALUES (?,?,?)',
             (food_name, ing_name, qty)
         )
-        # Ensure ingredient exists in food_items; if unknown, insert as pending (0 cal)
+        # Ensure ingredient exists in food_items; if unknown, insert as pending (0 cal).
+        # Look up by canonical key so plural variants reuse the same definition.
         conn.execute("""
-            INSERT INTO food_items (name, calories, protein_g, carbs_g, fat_g, unit_type)
-            VALUES (?, 0, 0, 0, 0, 'g')
+            INSERT INTO food_items (name, name_key, calories, protein_g, carbs_g, fat_g, unit_type)
+            VALUES (?, ?, 0, 0, 0, 0, 'g')
             ON CONFLICT(name) DO NOTHING
-        """, (ing_name,))
-        item = conn.execute(
-            'SELECT * FROM food_items WHERE name = ? COLLATE NOCASE', (ing_name,)
-        ).fetchone()
+        """, (ing_name, _food_key(ing_name)))
+        item = _lookup_food_item(conn, _food_key(ing_name))
         if item and item['calories'] > 0:
             factor = qty if item['unit_type'] == 'unit' else qty / 100.0
             total_cal  += item['calories']  * factor
@@ -2018,10 +2847,17 @@ def save_food_components(food_name, components):
             UPDATE food_items SET calories=?, protein_g=?, carbs_g=?, fat_g=?
             WHERE name=? COLLATE NOCASE
         """, (round(total_cal, 1), round(total_pro, 1), round(total_carb, 1), round(total_fat, 1), food_name))
-        conn.execute("""
-            UPDATE food_log SET calories=?, protein_g=?, carbs_g=?, fat_g=?
-            WHERE name=? COLLATE NOCASE AND calories=0
-        """, (round(total_cal, 1), round(total_pro, 1), round(total_carb, 1), round(total_fat, 1), food_name))
+        # Backfill any 0-cal log rows that resolve to this recipe — including fractional
+        # portions like '0.2x Chili' — via the shared resolver.
+        recipe_key = _food_key(food_name)
+        for row in conn.execute("SELECT id, name FROM food_log WHERE calories = 0").fetchall():
+            resolved = _resolve_food(conn, row['name'])
+            if resolved['matched'] and resolved['key'] == recipe_key:
+                conn.execute("""
+                    UPDATE food_log SET calories=?, protein_g=?, carbs_g=?, fat_g=?
+                    WHERE id=?
+                """, (resolved['calories'], resolved['protein_g'],
+                      resolved['carbs_g'], resolved['fat_g'], row['id']))
     conn.commit()
     conn.close()
 
@@ -2056,6 +2892,29 @@ def get_food_library():
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def get_recent_foods(profile_id=1, limit=8):
+    """Most-recently-logged distinct foods for quick re-logging. Returns clean base
+    names (quantity prefixes stripped), de-duplicated by canonical key, newest first."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT name FROM food_log WHERE profile_id=? ORDER BY id DESC LIMIT 200",
+        (profile_id,)
+    ).fetchall()
+    conn.close()
+    seen, result = set(), []
+    for r in rows:
+        parsed = _parse_entry_name(r['name'])
+        base   = parsed['base_name'] or r['name']
+        key    = parsed['key']
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        result.append(base)
+        if len(result) >= limit:
+            break
+    return result
 
 
 def get_food_history(profile_id=1):
@@ -2114,6 +2973,40 @@ def get_body_weight_history(profile_id=1, days=30):
     """, (profile_id, days)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+# ── Missions (Gayathri gamified milestones) ─────────────────────────────────
+
+def get_mission_progress(profile_id):
+    """Return {mission_key: cleared_stage_count} for a profile."""
+    conn = get_db()
+    rows = conn.execute(
+        'SELECT mission_key, cleared FROM mission_progress WHERE profile_id=?',
+        (profile_id,)).fetchall()
+    conn.close()
+    return {r['mission_key']: r['cleared'] for r in rows}
+
+
+def clear_mission_stage(profile_id, mission_key, stage_index):
+    """Forward-only: record that stages 0..stage_index are cleared.
+    stage_index is 0-based; stored 'cleared' = number of stages done = stage_index + 1.
+    Never decreases."""
+    from datetime import datetime as _dt
+    cleared = stage_index + 1
+    conn = get_db()
+    conn.execute("""
+        INSERT INTO mission_progress (profile_id, mission_key, cleared, updated_at)
+        VALUES (?,?,?,?)
+        ON CONFLICT(profile_id, mission_key)
+        DO UPDATE SET cleared = MAX(cleared, excluded.cleared), updated_at = excluded.updated_at
+    """, (profile_id, mission_key, cleared, _dt.utcnow().isoformat() + 'Z'))
+    conn.commit()
+    row = conn.execute('SELECT cleared FROM mission_progress WHERE profile_id=? AND mission_key=?',
+                       (profile_id, mission_key)).fetchone()
+    conn.close()
+    return row['cleared'] if row else cleared
+
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2348,19 +3241,19 @@ def _init_swim_v2(conn):
             _SWIM_ACHIEVEMENTS_SEED
         )
 
-    # ══ Reformer Pilates ══════════════════════════════════════════════════════
-    # Allow 'pilates' as a tracked session type. The original sessions table has
-    # CHECK(type IN ('gym','swim')); rebuild it once to add 'pilates'.
+    # ══ Session types ═════════════════════════════════════════════════════════
+    # Allow 'pilates' and 'cardio' as tracked session types. The original sessions
+    # table has CHECK(type IN ('gym','swim')); rebuild it once to widen the CHECK.
     _sess_sql = conn.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='sessions'"
     ).fetchone()
-    if _sess_sql and "'pilates'" not in _sess_sql[0]:
+    if _sess_sql and ("'pilates'" not in _sess_sql[0] or "'cardio'" not in _sess_sql[0]):
         conn.executescript("""
             PRAGMA foreign_keys=OFF;
             CREATE TABLE sessions_new (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
                 date       TEXT NOT NULL,
-                type       TEXT NOT NULL CHECK(type IN ('gym','swim','pilates')),
+                type       TEXT NOT NULL CHECK(type IN ('gym','swim','pilates','cardio')),
                 day_type   TEXT CHECK(day_type IN ('push','pull','legs','core')),
                 notes      TEXT,
                 started_at TEXT,
@@ -2516,3 +3409,294 @@ def _init_swim_v2(conn):
             'VALUES (?,?,?,?,?,?,?)', _PILATES_SEED)
 
     conn.commit()
+
+
+# ── Muscle-group swimlane (home screen) ────────────────────────────────
+# Collapses the granular exercise muscle_group values onto the five display
+# lanes shown on the dashboard. Anything not mapped (Core, Cardio, Mobility)
+# is intentionally excluded from the swimlane.
+_SWIMLANE_GROUPS = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms']
+_SWIMLANE_MAP = {
+    'Chest': 'Chest',
+    'Back': 'Back', 'Upper Back': 'Back', 'Posterior Chain': 'Back',
+    'Legs': 'Legs',
+    'Shoulders': 'Shoulders',
+    'Biceps': 'Arms', 'Triceps': 'Arms', 'Arms': 'Arms',
+}
+
+
+def get_muscle_swimlane(profile_id, days=7):
+    """7-day rolling activity per display muscle group, split by exercise tier.
+
+    Returns a JSON-ready dict:
+        {
+          "days":   [{short, num, iso, is_today}, ...],   # oldest -> today
+          "groups": ["Chest", "Back", "Legs", "Shoulders", "Arms"],
+          "cells":  { group: [ [ {tier, name, sets}, ... ] x days ] },
+          "summary": {"sessions": int, "exercises": int, "top_group": str|None}
+        }
+    Tier is the exercise's fixed movement classification (1 heavy compound
+    through 4 finisher/accessory).
+    """
+    from datetime import timedelta
+    conn = get_db()
+    today = date.today()
+    start = today - timedelta(days=days - 1)
+
+    rows = conn.execute("""
+        SELECT s.date, e.muscle_group, e.tier, e.name, COUNT(*) AS sets
+        FROM session_lifts sl
+        JOIN sessions  s ON s.id = sl.session_id AND s.type = 'gym'
+        JOIN exercises e ON e.id = sl.exercise_id
+        WHERE s.profile_id = ? AND s.date BETWEEN ? AND ?
+        GROUP BY s.date, e.id
+        ORDER BY s.date, e.tier, e.name
+    """, (profile_id, start.isoformat(), today.isoformat())).fetchall()
+    conn.close()
+
+    day_list  = [start + timedelta(days=i) for i in range(days)]
+    day_index = {d.isoformat(): i for i, d in enumerate(day_list)}
+
+    cells         = {g: [[] for _ in range(days)] for g in _SWIMLANE_GROUPS}
+    active_dates  = set()
+    exercise_cnt  = 0
+    group_sets    = {g: 0 for g in _SWIMLANE_GROUPS}
+
+    for r in rows:
+        group = _SWIMLANE_MAP.get(r['muscle_group'])
+        if group is None:
+            continue
+        di = day_index.get(r['date'])
+        if di is None:
+            continue
+        cells[group][di].append({
+            'tier': r['tier'],
+            'name': r['name'],
+            'sets': r['sets'],
+        })
+        active_dates.add(r['date'])
+        exercise_cnt += 1
+        group_sets[group] += r['sets']
+
+    top_group = max(group_sets, key=group_sets.get) if any(group_sets.values()) else None
+
+    return {
+        'days': [
+            {'short': d.strftime('%a'), 'num': d.day,
+             'iso': d.isoformat(), 'is_today': d == today}
+            for d in day_list
+        ],
+        'groups':  _SWIMLANE_GROUPS,
+        'cells':   cells,
+        'summary': {
+            'sessions':  len(active_dates),
+            'exercises': exercise_cnt,
+            'top_group': top_group,
+        },
+    }
+
+
+# ── Exercise Bank (Stats page) ─────────────────────────────────────────
+# Read-only, tier-grouped view of every defined exercise with its set scheme.
+_BANK_META = {
+    1: {'label': 'Tier 1 — Heavy compounds',         'range': '3–5 sets × 3–5 reps'},
+    2: {'label': 'Tier 2 — Supporting compounds',    'range': '3–4 sets × 6–8 reps'},
+    3: {'label': 'Tier 3 — Aesthetics / isolation',  'range': '3–4 sets × 8–12 reps'},
+    4: {'label': 'Tier 4 — Finishers / cardio',      'range': 'No progression scheme'},
+}
+_BANK_TIER_DEFAULT = {1: '3–5 × 3–5', 2: '3–4 × 6–8', 3: '3–4 × 8–12'}
+
+
+def get_exercise_bank():
+    """Every defined exercise grouped by tier, with set scheme + current working set.
+
+    Returns {'meta', 'tiers': {1..4: [rows]}, 'counts', 'total'}. Each row carries
+    name, muscle_group, day_type, scheme (sets × reps band), current (working set @
+    load), and flags (reps-only / timed). Scheme uses the exercise's custom bounds
+    when set, else the tier default; Tier 4 has no progression scheme.
+    """
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT e.id, e.name, e.tier, e.muscle_group, e.day_type, e.reps_only, e.is_timed,
+               e.reps_min, e.reps_max, e.sets_min, e.sets_max,
+               p.weight_kg, sc.sets AS cur_sets, sc.reps AS cur_reps
+        FROM exercises e
+        LEFT JOIN progression p ON p.exercise_id = e.id
+        LEFT JOIN schemes     sc ON sc.id = p.scheme_id
+        ORDER BY e.tier, e.muscle_group, e.name
+    """).fetchall()
+    conn.close()
+
+    tiers = {1: [], 2: [], 3: [], 4: []}
+    for r in rows:
+        t = r['tier']
+        if r['sets_min'] is not None:
+            scheme = f"{r['sets_min']}–{r['sets_max']} × {r['reps_min']}–{r['reps_max']}"
+        else:
+            scheme = _BANK_TIER_DEFAULT.get(t, '—')
+
+        if r['cur_sets']:
+            w = r['weight_kg']
+            if w is None:
+                load = ''
+            elif w == 0:
+                load = ' @ BW'
+            else:
+                load = f" @ {w:g} kg"
+            current = f"{r['cur_sets']}×{r['cur_reps']}{load}"
+        else:
+            current = '—'
+
+        flags = []
+        if r['reps_only']:
+            flags.append('reps-only')
+        if r['is_timed']:
+            flags.append('timed')
+
+        tiers.setdefault(t, []).append({
+            'id':           r['id'],
+            'tier':         t,
+            'name':         r['name'],
+            'muscle_group': r['muscle_group'],
+            'day_type':     r['day_type'],
+            'scheme':       scheme,
+            'current':      current,
+            'flags':        flags,
+            'reps_min':     r['reps_min'],
+            'reps_max':     r['reps_max'],
+            'sets_min':     r['sets_min'],
+            'sets_max':     r['sets_max'],
+        })
+
+    return {
+        'meta':   _BANK_META,
+        'tiers':  tiers,
+        'counts': {t: len(v) for t, v in tiers.items()},
+        'total':  len(rows),
+    }
+
+
+# ── Exercise Bank — mutations (add / amend / remove) ───────────────────
+_BANK_VALID_TIERS = {1, 2, 3, 4}
+_BANK_VALID_DAYS  = {'push', 'pull', 'legs', 'core', 'any'}
+
+
+def _bank_validate(tier, muscle_group, day_type, bounds):
+    """Return (clean_bounds|None, error|None). bounds is (rmin,rmax,smin,smax) or all-None."""
+    if tier not in _BANK_VALID_TIERS:
+        return None, 'Tier must be 1–4.'
+    if not (muscle_group or '').strip():
+        return None, 'Muscle group is required.'
+    if day_type not in _BANK_VALID_DAYS:
+        return None, 'Day must be one of push, pull, legs, core, any.'
+    rmin, rmax, smin, smax = bounds
+    provided = [v for v in bounds if v not in (None, '')]
+    if not provided:
+        return (None, None, None, None), None          # no custom bounds → tier default
+    if len(provided) != 4:
+        return None, 'Set all four scheme bounds, or leave them all blank.'
+    try:
+        rmin, rmax, smin, smax = int(rmin), int(rmax), int(smin), int(smax)
+    except (TypeError, ValueError):
+        return None, 'Scheme bounds must be whole numbers.'
+    if not (1 <= rmin <= rmax <= 50 and 1 <= smin <= smax <= 20):
+        return None, 'Scheme bounds out of range (reps 1–50, sets 1–20, min ≤ max).'
+    if tier == 4:
+        return (None, None, None, None), None           # tier 4 has no progression ladder
+    return (rmin, rmax, smin, smax), None
+
+
+def _regen_exercise_schemes(conn, ex_id):
+    """Rebuild an exercise's progression ladder after a tier/bounds change.
+
+    Regenerates exercise-specific schemes from custom bounds (tiers 1–3), repoints
+    any existing progression row to the first applicable scheme, and clears stale
+    stage/attempt bookkeeping so it restarts cleanly on the new scheme.
+    """
+    ex = conn.execute(
+        'SELECT tier, reps_min, reps_max, sets_min, sets_max FROM exercises WHERE id=?', (ex_id,)
+    ).fetchone()
+    if not ex:
+        return
+    tier = ex['tier']
+    conn.execute('DELETE FROM schemes WHERE exercise_id=?', (ex_id,))
+    if ex['reps_min'] is not None and tier in (1, 2, 3):
+        order, rows = 1, []
+        for s in range(ex['sets_min'], ex['sets_max'] + 1):
+            for r in range(ex['reps_min'], ex['reps_max'] + 1):
+                rows.append((tier, ex_id, r, s, order)); order += 1
+        conn.executemany(
+            'INSERT INTO schemes (tier, exercise_id, reps, sets, progression_order) VALUES (?,?,?,?,?)',
+            rows
+        )
+    if conn.execute('SELECT 1 FROM progression WHERE exercise_id=?', (ex_id,)).fetchone() and tier in (1, 2, 3):
+        first = _first_scheme(conn, tier, ex_id)
+        if first:
+            conn.execute('UPDATE progression SET scheme_id=?, stage=0 WHERE exercise_id=?', (first['id'], ex_id))
+    conn.execute('DELETE FROM stage_completions WHERE exercise_id=?', (ex_id,))
+    conn.execute('DELETE FROM exercise_attempts  WHERE exercise_id=?', (ex_id,))
+
+
+def bank_add_exercise(name, tier, muscle_group, day_type, bounds=(None, None, None, None)):
+    """Create a new exercise. Returns (ok, error)."""
+    name = (name or '').strip()
+    if not name:
+        return False, 'Name is required.'
+    clean, err = _bank_validate(tier, muscle_group, day_type, bounds)
+    if err:
+        return False, err
+    conn = get_db()
+    try:
+        cur = conn.execute(
+            'INSERT INTO exercises (name, tier, muscle_group, day_type, reps_min, reps_max, sets_min, sets_max) '
+            'VALUES (?,?,?,?,?,?,?,?)',
+            (name, tier, muscle_group.strip(), day_type, *clean)
+        )
+        _regen_exercise_schemes(conn, cur.lastrowid)
+        conn.commit()
+        return True, None
+    except sqlite3.IntegrityError:
+        return False, f'An exercise named “{name}” already exists.'
+    finally:
+        conn.close()
+
+
+def bank_update_exercise(ex_id, tier, muscle_group, day_type, bounds=(None, None, None, None)):
+    """Amend an exercise's tier / muscle group / day / scheme bounds. Returns (ok, error)."""
+    clean, err = _bank_validate(tier, muscle_group, day_type, bounds)
+    if err:
+        return False, err
+    conn = get_db()
+    try:
+        if not conn.execute('SELECT 1 FROM exercises WHERE id=?', (ex_id,)).fetchone():
+            return False, 'Exercise not found.'
+        conn.execute(
+            'UPDATE exercises SET tier=?, muscle_group=?, day_type=?, '
+            'reps_min=?, reps_max=?, sets_min=?, sets_max=? WHERE id=?',
+            (tier, muscle_group.strip(), day_type, *clean, ex_id)
+        )
+        _regen_exercise_schemes(conn, ex_id)
+        conn.commit()
+        return True, None
+    finally:
+        conn.close()
+
+
+def bank_delete_exercise(ex_id):
+    """Delete an exercise. Refuses if it has logged history. Returns (ok, error)."""
+    conn = get_db()
+    try:
+        row = conn.execute('SELECT name FROM exercises WHERE id=?', (ex_id,)).fetchone()
+        if not row:
+            return False, 'Exercise not found.'
+        hist = conn.execute('SELECT COUNT(*) FROM session_lifts WHERE exercise_id=?', (ex_id,)).fetchone()[0]
+        hist += conn.execute('SELECT COUNT(*) FROM session_cardio WHERE exercise_id=?', (ex_id,)).fetchone()[0]
+        if hist:
+            return False, f'“{row["name"]}” has {hist} logged set(s); remove or reassign its history first.'
+        # schemes.exercise_id has no ON DELETE CASCADE — clear it explicitly; the rest cascade.
+        conn.execute('DELETE FROM schemes WHERE exercise_id=?', (ex_id,))
+        conn.execute('DELETE FROM exercises WHERE id=?', (ex_id,))
+        conn.commit()
+        return True, None
+    finally:
+        conn.close()

@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}{{ session.date | fmt_date }}{% endblock %}
+{% block body_class %}{% if not current_profile or current_profile.id != 2 %}pandora{% endif %}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -48,12 +49,12 @@
 .pip.current { opacity: 1; }
 
 /* tier colour per pip state */
-.t1 .pip.done    { background: #5B21B6; }
-.t1 .pip.current { background: #5B21B6; outline: 1px solid #5B21B6; }
-.t2 .pip.done    { background: #1D4ED8; }
-.t2 .pip.current { background: #1D4ED8; outline: 1px solid #1D4ED8; }
-.t3 .pip.done    { background: #065F46; }
-.t3 .pip.current { background: #065F46; outline: 1px solid #065F46; }
+.t1 .pip.done    { background: var(--t1-fg); }
+.t1 .pip.current { background: var(--t1-fg); outline: 1px solid var(--t1-fg); }
+.t2 .pip.done    { background: var(--t2-fg); }
+.t2 .pip.current { background: var(--t2-fg); outline: 1px solid var(--t2-fg); }
+.t3 .pip.done    { background: var(--t3-fg); }
+.t3 .pip.current { background: var(--t3-fg); outline: 1px solid var(--t3-fg); }
 
 .pip-weight { font-size: 0.72rem; font-weight: 700; color: var(--text); white-space: nowrap; flex-shrink: 0; }
 .pip-weight .unit { font-size: 0.6rem; font-weight: 400; color: var(--dim); }
@@ -80,7 +81,7 @@
 /* ── inline editor ── */
 .edit-row { display: flex; align-items: center; gap: 4px; flex: 1; }
 .edit-inp {
-    background: #FFFFFF; border: 1px solid var(--accent);
+    background: var(--surface); border: 1px solid var(--accent);
     border-radius: 6px; color: var(--text); font-family: inherit;
     font-size: 16px; padding: 3px 5px; width: 40px; text-align: center;
     min-height: 30px; -webkit-appearance: none; appearance: none;
@@ -89,7 +90,7 @@
 .edit-sep    { font-size: 0.63rem; color: var(--dim); }
 .edit-save   {
     background: var(--accent); border: none; border-radius: 6px;
-    color: #fff; font-family: inherit; font-size: 0.68rem; font-weight: 700;
+    color: var(--bg); font-family: inherit; font-size: 0.68rem; font-weight: 700;
     padding: 3px 8px; min-height: 28px; cursor: pointer; margin-left: 2px;
 }
 .edit-cancel {
@@ -119,8 +120,8 @@
 }
 .swim-scheme { display: flex; align-items: baseline; justify-content: center; gap: 10px; margin-bottom: 8px; }
 .swim-sets { font-size: 2.4rem; font-weight: 800; color: var(--swim-fg); line-height: 1; }
-.swim-x    { font-size: 1.3rem; color: #0E7490; }
-.swim-rep  { font-size: 1.8rem; font-weight: 700; color: #0891B2; }
+.swim-x    { font-size: 1.3rem; color: var(--swim-fg); }
+.swim-rep  { font-size: 1.8rem; font-weight: 700; color: var(--swim-fg); }
 .swim-total { font-size: 1.4rem; font-weight: 700; color: var(--swim-fg); }
 
 /* ── warmup / cardio cards ── */
@@ -148,18 +149,11 @@
     {% if session.type == 'swim' %}
         <div class="detail-meta-pip" style="background:var(--swim-fg)"></div>Swim
         {% if swim_dist %}&nbsp;·&nbsp;{{ swim_dist.total }} m{% endif %}
+    {% elif session.type == 'cardio' %}
+        <div class="detail-meta-pip" style="background:var(--core-fg)"></div>Cardio
+        {% if cardio %}&nbsp;·&nbsp;{{ cardio[0].name }}{% endif %}
     {% else %}
-        {% if session.day_type == 'push' %}
-            <div class="detail-meta-pip" style="background:var(--push-fg)"></div>Push
-        {% elif session.day_type == 'pull' %}
-            <div class="detail-meta-pip" style="background:var(--pull-fg)"></div>Pull
-        {% elif session.day_type == 'legs' %}
-            <div class="detail-meta-pip" style="background:var(--legs-fg)"></div>Legs
-        {% elif session.day_type == 'core' %}
-            <div class="detail-meta-pip" style="background:var(--core-fg)"></div>Core
-        {% else %}
-            <div class="detail-meta-pip" style="background:#6B7280"></div>Gym
-        {% endif %}
+        <div class="detail-meta-pip" style="background:var(--muted)"></div>Gym
         {% set ns = namespace(vol=0) %}
         {% for ex in lifts %}{% for s in ex.sets %}{% set ns.vol = ns.vol + s.reps * s.weight_kg %}{% endfor %}{% endfor %}
         {% if ns.vol > 0 %}&nbsp;·&nbsp;{{ '{:,.0f}'.format(ns.vol) }} kg{% endif %}
@@ -253,16 +247,19 @@
 
 {# ── Warmup & cardio (Tier 4) ── #}
 {% if cardio %}
-<div class="section-title" style="margin-top:4px;">Warmup &amp; Cardio</div>
+<div class="section-title" style="margin-top:4px;">{% if session.type == 'cardio' %}Cardio{% else %}Warmup &amp; Cardio{% endif %}</div>
 <div class="cardio-list">
 {% for c in cardio %}
   <div class="cardio-card">
     <div class="cardio-name"><span class="tier-badge t4">T4</span>{{ c.name }}</div>
     <div class="cardio-stat">
+      {% if c.sets and c.metrics.sets %}{{ c.sets }} × {{ c.metrics.sets }}{% endif %}
+      {% if c.weight_kg %}{% if c.sets %}&nbsp;·&nbsp;{% endif %}{{ '%g'|format(c.weight_kg) }}&thinsp;kg{% endif %}
       {% if c.distance_m %}{% if c.distance_m >= 1000 %}{{ '%g'|format(c.distance_m/1000) }}&thinsp;km{% else %}{{ c.distance_m|int }}&thinsp;m{% endif %}{% endif %}
       {% if c.duration_s %}{% if c.distance_m %}&nbsp;·&nbsp;{% endif %}{{ (c.duration_s//60) }}:{{ '%02d'|format(c.duration_s%60) }}{% endif %}
       {% if c.resistance %}{% if c.distance_m or c.duration_s %}&nbsp;·&nbsp;{% endif %}L{{ '%g'|format(c.resistance) }}{% endif %}
-      {% if not c.distance_m and not c.duration_s and not c.resistance and c.done %}✓ Done{% endif %}
+      {% if c.speed %}{% if c.distance_m or c.duration_s or c.resistance %}&nbsp;·&nbsp;{% endif %}{{ '%g'|format(c.speed) }}&thinsp;spd{% endif %}
+      {% if not c.sets and not c.weight_kg and not c.distance_m and not c.duration_s and not c.resistance and not c.speed and c.done %}✓ Done{% endif %}
     </div>
   </div>
 {% endfor %}

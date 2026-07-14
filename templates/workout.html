@@ -1,109 +1,164 @@
 {% extends 'base.html' %}
 {% block title %}Workouts{% endblock %}
+{% block body_class %}pandora{% endblock %}
 
 {% block extra_css %}
+{% if False %}
+{# ── (retired) Gayathri light-theme workout styling — now uses the dark Pandora block below ─────────── #}
 <style>
-/* ── Tab bar ──────────────────────────────────────────────────────────── */
+.wk-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 20px; }
+.wk-tab { background: var(--surface); border: 2px solid var(--border); border-radius: 12px; color: var(--muted); cursor: pointer; font-family: inherit; font-size: 0.88rem; font-weight: 700; min-height: 44px; padding: 10px 8px; text-align: center; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 6px; -webkit-tap-highlight-color: transparent; }
+.wk-tab.active { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.wk-tab:active { opacity: .75; }
+.train-title { font-size: 1.55rem; font-weight: 800; color: var(--text); margin-bottom: 20px; }
+.workout-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: 14px; padding: 18px; margin-bottom: 14px; }
+.workout-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.workout-card-name { font-size: 1.1rem; font-weight: 800; color: var(--text); flex: 1; }
+.location-badge { font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; padding: 3px 9px; border-radius: 5px; }
+.location-badge.home { background: var(--legs-bg); color: var(--legs-fg); }
+.location-badge.gym  { background: var(--t1-bg); color: var(--t1-fg); }
+.exercise-list { list-style: none; margin-bottom: 16px; }
+.exercise-item { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.exercise-item:last-child { border-bottom: none; }
+.exercise-item-name { flex: 1; font-size: 0.9rem; font-weight: 600; color: var(--text); }
+.exercise-item-spec { font-size: 0.8rem; color: var(--muted); font-weight: 700; flex-shrink: 0; }
+.timed-tag { font-size: 0.6rem; font-weight: 800; background: var(--core-bg); color: var(--core-fg); padding: 2px 6px; border-radius: 4px; flex-shrink: 0; }
+.warmup-note { font-size: 0.82rem; color: var(--muted); margin-bottom: 12px; padding: 8px 12px; background: var(--surface-2); border-radius: 8px; border-left: 3px solid var(--dim); }
+.btn-log-workout { background: var(--accent); border: none; border-radius: 10px; color: #fff; cursor: pointer; font-family: inherit; font-size: 0.95rem; font-weight: 700; min-height: 48px; width: 100%; padding: 12px; margin-top: 4px; -webkit-tap-highlight-color: transparent; }
+.btn-log-workout:active { opacity: .85; }
+.success-banner { background: #1a3a1a; border: 1px solid #6bff8a; border-radius: 10px; color: #6bff8a; padding: 12px 16px; margin-bottom: 16px; font-size: 0.9rem; font-weight: 700; text-align: center; }
+.mg-exercise-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.mg-exercise-item { display: flex; align-items: center; background: var(--surface); border: 0.5px solid var(--border); border-radius: 10px; padding: 12px 14px; gap: 10px; flex-direction: column; align-items: stretch; cursor: pointer; }
+.mg-exercise-name { flex: 1; font-size: 0.9rem; font-weight: 600; color: var(--text); }
+.mg-exercise-spec { font-size: 0.8rem; color: var(--muted); font-weight: 700; flex-shrink: 0; }
+.mg-tag { font-size: 0.67rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 2px 7px; border-radius: 4px; flex-shrink: 0; }
+.ex-row { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: none; padding: 0; font-family: inherit; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.ex-chevron { color: var(--dim); font-size: 1rem; flex-shrink: 0; transition: transform 0.15s; }
+.ex-chevron.open { transform: rotate(90deg); }
+.ex-picker { display: none; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.ex-picker.open { display: block; }
+.picker-row { display: flex; gap: 14px; }
+.picker-col { flex: 1; }
+.picker-label { font-size: 0.85rem; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+.stepper { display: flex; align-items: center; background: var(--surface-2); border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+.stepper-btn { background: none; border: none; color: var(--text); flex: 1; font-size: 1.1rem; font-weight: 700; cursor: pointer; min-height: 38px; font-family: inherit; -webkit-tap-highlight-color: transparent; }
+.stepper-btn:active { background: var(--border); }
+.stepper-val { flex: 1; text-align: center; font-size: 0.95rem; font-weight: 700; color: var(--text); border-left: 1px solid var(--border); border-right: 1px solid var(--border); line-height: 38px; }
+.picker-range-hint { font-size: 0.72rem; color: var(--dim); margin-top: 10px; text-align: right; }
+.mg-group { margin-bottom: 10px; }
+.mg-group-btn { display: flex; align-items: center; justify-content: space-between; width: 100%; background: var(--surface); border: 0.5px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: inherit; font-size: 1rem; font-weight: 700; color: var(--text); cursor: pointer; text-align: left; -webkit-tap-highlight-color: transparent; }
+.mg-group .mg-exercise-list { display: none; padding: 8px 0 4px; gap: 8px; }
+.mg-group.open .mg-group-btn { border-radius: 10px 10px 0 0; border-bottom-color: transparent; }
+.mg-group.open .mg-exercise-list { display: flex; border: 0.5px solid var(--border); border-top: none; border-radius: 0 0 10px 10px; padding: 8px 10px 10px; flex-direction: column; }
+.mg-group.open .mg-group-btn .ex-chevron { transform: rotate(90deg); }
+</style>
+{% else %}
+<style>
+/* ── Header ───────────────────────────────────────────────────────────── */
+.train-title { font-family: var(--font-sans); font-size: 20px; font-weight: 500;
+    letter-spacing: -0.01em; color: var(--text-strong); margin-bottom: 14px; }
+
+/* ── Tab pills ────────────────────────────────────────────────────────── */
 .wk-tabs {
     display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
-    margin-bottom: 20px;
+    margin-bottom: 14px;
 }
 .wk-tab {
-    background: var(--surface); border: 2px solid var(--border);
-    border-radius: 12px; color: var(--muted); cursor: pointer;
-    font-family: inherit; font-size: 0.88rem; font-weight: 700;
-    min-height: 44px; padding: 10px 8px; text-align: center;
+    background: transparent; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--dim); cursor: pointer;
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: .05em; text-transform: uppercase;
+    padding: 9px 4px; text-align: center;
     text-decoration: none; display: flex; align-items: center;
     justify-content: center; gap: 6px;
     -webkit-tap-highlight-color: transparent;
 }
-.wk-tab.active { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.wk-tab.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .wk-tab:active { opacity: .75; }
 
-/* ── Routine cards ────────────────────────────────────────────────────── */
+/* ── Routine panels ───────────────────────────────────────────────────── */
 .workout-card {
-    background: var(--surface);
-    border: 0.5px solid var(--border);
-    border-radius: 14px;
-    padding: 18px;
-    margin-bottom: 14px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    margin-bottom: 12px;
 }
 .workout-card-header {
-    display: flex; align-items: center; gap: 10px;
-    margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 10px;
 }
 .workout-card-name {
-    font-size: 1.1rem; font-weight: 800; color: var(--text); flex: 1;
+    font-family: var(--font-sans); font-size: 15px; font-weight: 600; color: var(--text-strong); flex: 1;
 }
 .location-badge {
-    font-size: 0.65rem; font-weight: 800;
-    text-transform: uppercase; letter-spacing: .06em;
-    padding: 3px 9px; border-radius: 5px;
+    font-family: var(--font-mono); font-size: 9px; font-weight: 400;
+    text-transform: uppercase; letter-spacing: .04em;
+    padding: 2px 7px; border-radius: var(--radius-sm);
+    background: transparent;
 }
-.location-badge.home { background: var(--legs-bg); color: var(--legs-fg); }
-.location-badge.gym  { background: var(--t1-bg); color: var(--t1-fg); }
+.location-badge.home { color: var(--green); border: 1px solid var(--green); }
+.location-badge.gym  { color: var(--blue);  border: 1px solid var(--blue); }
 
-.exercise-list { list-style: none; margin-bottom: 16px; }
+.exercise-list { list-style: none; }
 .exercise-item {
     display: flex; align-items: center; gap: 8px;
-    padding: 9px 0;
+    padding: 8px 0;
     border-bottom: 1px solid var(--border);
 }
 .exercise-item:last-child { border-bottom: none; }
-.exercise-item-name { flex: 1; font-size: 0.9rem; font-weight: 600; color: var(--text); }
-.exercise-item-spec { font-size: 0.8rem; color: var(--muted); font-weight: 700; flex-shrink: 0; }
+.exercise-item-name { flex: 1; font-family: var(--font-sans); font-size: 12px; color: var(--text); }
+.exercise-item-spec { font-family: var(--font-mono); font-size: 12px; color: var(--dim); flex-shrink: 0; }
 .timed-tag {
-    font-size: 0.6rem; font-weight: 800;
-    background: var(--core-bg); color: var(--core-fg);
-    padding: 2px 6px; border-radius: 4px; flex-shrink: 0;
+    font-family: var(--font-mono); font-size: 9px;
+    color: var(--waiting); border: 1px solid var(--waiting);
+    padding: 1px 5px; border-radius: var(--radius-sm); flex-shrink: 0; text-transform: uppercase;
 }
 
 .warmup-note {
-    font-size: 0.82rem; color: var(--muted);
-    margin-bottom: 12px;
-    padding: 8px 12px;
-    background: var(--surface-2);
-    border-radius: 8px;
-    border-left: 3px solid var(--dim);
+    font-family: var(--font-sans); font-size: 12px; color: var(--dim);
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    background: var(--panel-soft);
+    border-radius: var(--radius-sm);
+    border-left: 2px solid var(--border-bright);
 }
 
 .btn-log-workout {
-    background: var(--accent); border: none; border-radius: 10px;
-    color: #fff; cursor: pointer; font-family: inherit;
-    font-size: 0.95rem; font-weight: 700;
-    min-height: 48px; width: 100%; padding: 12px;
+    background: var(--accent); border: none; border-radius: var(--radius-sm);
+    color: var(--bg); cursor: pointer; font-family: var(--font-sans);
+    font-size: 13px; font-weight: 600;
+    width: 100%; padding: 11px; margin-top: 12px;
     -webkit-tap-highlight-color: transparent;
 }
 .btn-log-workout:active { opacity: .85; }
 
 .success-banner {
-    background: #1a3a1a; border: 1px solid #6bff8a;
-    border-radius: 10px; color: #6bff8a;
-    padding: 12px 16px; margin-bottom: 16px;
-    font-size: 0.9rem; font-weight: 700; text-align: center;
+    background: var(--green-soft, rgba(127,176,105,.12)); border: 1px solid var(--green);
+    border-radius: var(--radius-sm); color: var(--green);
+    padding: 11px 14px; margin-bottom: 14px;
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; text-align: center;
 }
 
 /* ── Exercises by muscle group ────────────────────────────────────────── */
 .mg-exercise-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .mg-exercise-item {
     display: flex; align-items: center;
-    background: var(--surface); border: 0.5px solid var(--border); border-radius: 10px;
+    background: var(--panel-soft); border: 1px solid var(--border); border-radius: var(--radius-sm);
     padding: 12px 14px; gap: 10px;
 }
-.mg-exercise-name { flex: 1; font-size: 0.9rem; font-weight: 600; color: var(--text); }
-.mg-exercise-spec { font-size: 0.8rem; color: var(--muted); font-weight: 700; flex-shrink: 0; }
+.mg-exercise-name { flex: 1; font-family: var(--font-sans); font-size: 12px; color: var(--text); }
+.mg-exercise-spec { font-family: var(--font-mono); font-size: 12px; color: var(--dim); flex-shrink: 0; }
 
 .mg-tag {
-    font-size: 0.67rem; font-weight: 700; text-transform: uppercase;
-    letter-spacing: .04em; padding: 2px 7px; border-radius: 4px; flex-shrink: 0;
+    font-family: var(--font-mono); font-size: 9px; text-transform: uppercase;
+    letter-spacing: .04em; padding: 2px 7px; border-radius: var(--radius-sm); flex-shrink: 0;
 }
 .mg-tag.chest    { background: var(--push-bg); color: var(--push-fg); }
 .mg-tag.back     { background: var(--pull-bg); color: var(--pull-fg); }
 .mg-tag.legs     { background: var(--legs-bg); color: var(--legs-fg); }
 .mg-tag.core     { background: var(--core-bg); color: var(--core-fg); }
-.mg-tag.mobility { background: var(--surface-2); color: var(--dim); border: 1px solid var(--border); }
+.mg-tag.mobility { background: var(--panel-soft); color: var(--dim); border: 1px solid var(--border); }
 .mg-tag.cardio   { background: var(--t1-bg); color: var(--t1-fg); }
-
 
 /* ── Exercise picker ──────────────────────────────────────────────────── */
 .mg-exercise-item { flex-direction: column; align-items: stretch; cursor: pointer; }
@@ -114,48 +169,46 @@
     -webkit-tap-highlight-color: transparent;
 }
 .ex-chevron { color: var(--dim); font-size: 1rem; flex-shrink: 0; transition: transform 0.15s; }
-.ex-chevron.open { transform: rotate(90deg); }
+.ex-chevron.open { transform: rotate(90deg); color: var(--accent); }
 
 .ex-picker {
-    display: none; margin-top: 14px; padding-top: 12px;
+    display: none; margin-top: 12px; padding-top: 12px;
     border-top: 1px solid var(--border);
 }
 .ex-picker.open { display: block; }
 
-.picker-row {
-    display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
-}
-.picker-row:last-child { margin-bottom: 0; }
-.picker-label { flex: 1; font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+.picker-row { display: flex; gap: 14px; }
+.picker-col { flex: 1; }
+.picker-label { font-family: var(--font-sans); font-size: 12px; color: var(--dim); margin-bottom: 6px; }
 .stepper {
     display: flex; align-items: center;
-    background: var(--surface-2); border-radius: 8px; overflow: hidden;
+    background: var(--panel-soft); border-radius: var(--radius-sm); overflow: hidden;
     border: 1px solid var(--border);
 }
 .stepper-btn {
-    background: none; border: none; color: var(--text);
-    font-size: 1.1rem; font-weight: 700; cursor: pointer;
-    min-width: 40px; min-height: 38px; font-family: inherit;
+    background: none; border: none; color: var(--text); flex: 1;
+    font-family: var(--font-mono); font-size: 1rem; cursor: pointer;
+    min-height: 34px; padding: 6px 0;
     -webkit-tap-highlight-color: transparent;
 }
 .stepper-btn:active { background: var(--border); }
 .stepper-val {
-    min-width: 40px; text-align: center;
-    font-size: 0.95rem; font-weight: 700; color: var(--text);
+    flex: 1; text-align: center;
+    font-family: var(--font-mono); font-size: 0.95rem; color: var(--text-strong);
     border-left: 1px solid var(--border); border-right: 1px solid var(--border);
-    line-height: 38px;
+    line-height: 34px;
 }
 .picker-range-hint {
-    font-size: 0.72rem; color: var(--dim); margin-top: 10px; text-align: right;
+    font-family: var(--font-mono); font-size: 10px; color: var(--dimmer); margin-top: 10px; text-align: right;
 }
 
 /* ── Muscle group accordion ───────────────────────────────────────────── */
 .mg-group { margin-bottom: 10px; }
 .mg-group-btn {
     display: flex; align-items: center; justify-content: space-between;
-    width: 100%; background: var(--surface); border: 0.5px solid var(--border);
-    border-radius: 10px; padding: 14px 16px;
-    font-family: inherit; font-size: 1rem; font-weight: 700; color: var(--text);
+    width: 100%; background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 13px 14px;
+    font-family: var(--font-sans); font-size: 14px; font-weight: 600; color: var(--text-strong);
     cursor: pointer; text-align: left;
     -webkit-tap-highlight-color: transparent;
 }
@@ -165,30 +218,315 @@
     padding: 8px 0 4px;
     gap: 8px;
 }
-.mg-group.open .mg-group-btn { border-radius: 10px 10px 0 0; border-bottom-color: transparent; }
+.mg-group.open .mg-group-btn { border-radius: var(--radius-md) var(--radius-md) 0 0; border-bottom-color: transparent; color: var(--accent); }
 .mg-group.open .mg-exercise-list {
     display: flex;
-    border: 0.5px solid var(--border); border-top: none;
-    border-radius: 0 0 10px 10px;
+    border: 1px solid var(--border); border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
     padding: 8px 10px 10px;
     flex-direction: column;
 }
-.mg-group.open .mg-group-btn .ex-chevron { transform: rotate(90deg); }
+.mg-group.open .mg-group-btn .ex-chevron { transform: rotate(90deg); color: var(--accent); }
+
+/* ── Focus / priority lifts ──────────────────────────────────────── */
+.focus-grid { display: flex; flex-direction: column; gap: 12px; margin-bottom: 18px; }
+.focus-card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 14px;
+}
+.focus-eyebrow {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--dim); margin-bottom: 8px;
+}
+.focus-top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+.focus-star { color: var(--accent); font-size: 13px; }
+.focus-name { font-family: var(--font-sans); font-size: 16px; font-weight: 600; color: var(--text-strong); }
+.focus-change {
+    margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--accent);
+    background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 3px 8px; cursor: pointer;
+}
+.focus-meta { font-family: var(--font-sans); font-size: 12px; color: var(--dim); margin: 4px 0 10px; }
+.focus-track { height: 4px; background: var(--panel-soft); border-radius: 2px; overflow: hidden; margin-bottom: 8px; }
+.focus-fill  { height: 100%; background: var(--accent); }
+.focus-statline { display: flex; align-items: baseline; gap: 8px; font-family: var(--font-mono); }
+.focus-latest { font-size: 15px; font-weight: 600; color: var(--text-strong); }
+.focus-delta  { font-size: 11px; color: var(--dim); }
+.focus-delta.up   { color: var(--green); }
+.focus-delta.down { color: var(--red); }
+.focus-best   { margin-left: auto; font-size: 10px; color: var(--dim); }
+.focus-nochart { font-family: var(--font-sans); font-size: 12px; color: var(--dim); }
+.focus-empty {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    background: var(--panel); border: 1px dashed var(--border); border-radius: var(--radius-md);
+    padding: 16px; font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em;
+    color: var(--dim); cursor: pointer; width: 100%;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Focus picker sheet ──────────────────────────────────────────── */
+.adj-backdrop { position: fixed; inset: 0; background: var(--scrim); z-index: 300; display: none; }
+.adj-backdrop.open { display: block; }
+.adj-sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 301;
+    background: var(--panel); border: 1px solid var(--border); border-bottom: none;
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    padding: 20px 18px calc(20px + var(--sab)); transform: translateY(100%);
+    transition: transform .22s ease; max-width: 680px; margin-inline: auto;
+}
+.adj-sheet.open { transform: translateY(0); }
+.adj-title { font-family: var(--font-sans); font-size: 16px; font-weight: 600; color: var(--text-strong); }
+.adj-sub { font-family: var(--font-sans); font-size: 12px; color: var(--dim); margin: 4px 0 16px; line-height: 1.5; }
+.adj-btn { display: block; width: 100%; border-radius: var(--radius-sm); font-family: var(--font-sans); font-size: 14px; font-weight: 600; padding: 13px; margin-bottom: 8px; border: 1px solid var(--border); background: var(--panel-soft); color: var(--text); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.adj-cancel { background: none; border: none; color: var(--dim); font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; width: 100%; padding: 10px; cursor: pointer; }
+.pl-row { display: flex; align-items: center; gap: 10px; background: var(--panel-soft); border-radius: var(--radius-sm); padding: 11px 13px; cursor: pointer; border: 1px solid transparent; margin-bottom: 5px; }
+.pl-row.sel { border-color: var(--accent); background: var(--accent-soft); }
+.pl-name { font-family: var(--font-sans); font-size: 14px; font-weight: 600; color: var(--text); flex: 1; }
+.pl-list { max-height: 42vh; overflow-y: auto; margin-bottom: 8px; }
+
+/* ── Gayathri: coverage strip ─────────────────────────────────────────── */
+.cov-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.cov-tally { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
+.cov-tally #cov-count { color: var(--accent); font-weight: 600; }
+.cov-strip { display: flex; flex-wrap: wrap; gap: 6px; }
+.cov-item {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-pill); padding: 5px 10px 5px 8px;
+    transition: border-color .15s, background .15s;
+}
+.cov-item .cov-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--dimmer); flex-shrink: 0; transition: background .15s;
+}
+.cov-item .cov-label {
+    font-family: var(--font-mono); font-size: 9px; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--dim);
+}
+.cov-item.on { border-color: var(--accent); background: var(--accent-soft); }
+.cov-item.on .cov-dot { background: var(--accent); }
+.cov-item.on .cov-label { color: var(--accent); }
+
+/* ── whole-body-complete celebration ──────────────────────────────────── */
+.cov-complete .cov-tally #cov-count { color: var(--green); }
+.cov-complete .cov-item.on { border-color: var(--green); background: rgba(127,176,105,.12); }
+.cov-complete .cov-item.on .cov-dot { background: var(--green); }
+.cov-complete .cov-item.on .cov-label { color: var(--green); }
+.cov-done-banner {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin-top: 10px; padding: 9px 12px;
+    background: rgba(127,176,105,.12); border: 1px solid var(--green);
+    border-radius: var(--radius-sm); color: var(--green);
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em;
+    text-transform: uppercase;
+}
+.cov-done-banner[hidden] { display: none; }
+.cov-done-star { font-size: 13px; line-height: 1; }
+/* entrance flourish — only added transiently when it *just* completed */
+.cov-done-banner.celebrate { animation: covPop .5s cubic-bezier(.2,.9,.3,1.2); }
+.cov-done-banner.celebrate .cov-done-star { animation: covSpin .7s ease; }
+@keyframes covPop {
+    0%   { transform: scale(.9); opacity: 0; }
+    60%  { transform: scale(1.03); opacity: 1; }
+    100% { transform: scale(1); }
+}
+@keyframes covSpin {
+    0%   { transform: rotate(0) scale(1); }
+    50%  { transform: rotate(180deg) scale(1.5); }
+    100% { transform: rotate(360deg) scale(1); }
+}
+.cov-section.flash-complete { animation: covFlash .6s ease; }
+@keyframes covFlash {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(127,176,105,0); }
+    35%      { box-shadow: 0 0 0 3px rgba(127,176,105,.28); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .cov-done-banner.celebrate,
+    .cov-done-banner.celebrate .cov-done-star,
+    .cov-section.flash-complete { animation: none; }
+}
+
+/* ── Gayathri: show-gym toggle ────────────────────────────────────────── */
+.gym-toggle {
+    display: flex; align-items: center; gap: 9px; margin-bottom: 16px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 10px 13px; cursor: pointer;
+    font-family: var(--font-sans); font-size: 12px; color: var(--muted);
+    -webkit-tap-highlight-color: transparent;
+}
+.gym-toggle input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+
+/* ── Gayathri: tap-to-log rows ────────────────────────────────────────── */
+.tap-list { display: flex; flex-direction: column; gap: 6px; }
+.tap-row {
+    display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 11px 12px;
+}
+.tap-row.just-logged { border-color: var(--accent); }
+.tap-main { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.tap-name { font-family: var(--font-sans); font-size: 13px; color: var(--text-strong); }
+.tap-tally { font-family: var(--font-mono); font-size: 10px; color: var(--dim); letter-spacing: .02em; }
+.tap-tally [data-role="sets"], .tap-tally [data-role="total"] { color: var(--accent); }
+.tap-empty { color: var(--dimmer); }
+.tap-controls { display: flex; align-items: center; gap: 6px; }
+.tap-add {
+    background: var(--accent); color: var(--bg); border: none;
+    border-radius: var(--radius-sm); cursor: pointer;
+    font-family: var(--font-mono); font-size: 12px; font-weight: 600;
+    min-width: 52px; min-height: 38px; padding: 0 10px;
+    -webkit-tap-highlight-color: transparent; transition: transform .08s;
+}
+.tap-add:active { transform: scale(.94); }
+.tap-custom-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--dim);
+    border-radius: var(--radius-sm); cursor: pointer;
+    font-family: var(--font-mono); font-size: 13px; line-height: 1;
+    min-width: 34px; min-height: 38px; padding: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+.tap-custom-btn.open { border-color: var(--accent); color: var(--accent); }
+/* custom-amount row: hidden until opened; spans full width */
+.tap-custom {
+    grid-column: 1 / -1; display: none;
+    align-items: center; gap: 6px; padding-top: 10px; margin-top: 2px;
+    border-top: 1px dashed var(--border);
+}
+.tap-row.custom-open .tap-custom { display: flex; }
+.tap-step {
+    background: var(--panel-soft); border: 1px solid var(--border); color: var(--text);
+    border-radius: var(--radius-sm); cursor: pointer;
+    font-family: var(--font-mono); font-size: 16px; line-height: 1;
+    width: 38px; height: 38px; flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+.tap-amt {
+    flex: 1; min-width: 0; background: var(--panel-soft); border: 1px solid var(--border);
+    color: var(--text); border-radius: var(--radius-sm); text-align: center;
+    font-family: var(--font-mono); font-size: 14px; height: 38px; padding: 0 6px;
+    -webkit-appearance: none; -moz-appearance: textfield;
+}
+.tap-amt::-webkit-outer-spin-button, .tap-amt::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.tap-log {
+    background: var(--accent); color: var(--bg); border: none;
+    border-radius: var(--radius-sm); cursor: pointer;
+    font-family: var(--font-sans); font-size: 12px; font-weight: 600;
+    min-height: 38px; padding: 0 14px; flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+.tap-row-static { grid-template-columns: 1fr; }
 </style>
+{% endif %}
 {% endblock %}
 
 {% block content %}
-<h1>Workouts</h1>
+<div class="train-title">Train.</div>
 
 {% if done %}
 <div class="success-banner">Workout saved!</div>
 {% endif %}
 
-{# ── Tab bar ── #}
-<div class="wk-tabs">
-    <a href="/workout?tab=routines"  class="wk-tab {% if tab == 'routines' %}active{% endif %}">Routines</a>
-    <a href="/workout?tab=exercises" class="wk-tab {% if tab == 'exercises' %}active{% endif %}">Exercises</a>
+{% if current_profile and current_profile.id == 2 %}
+{# ═══════════════════════════════════════════════════════════════════ #}
+{# GAYATHRI — all-day tap-to-log. One set at a time, whole body by night. #}
+{# ═══════════════════════════════════════════════════════════════════ #}
+
+{# ── Body coverage strip ──────────────────────────────────────────── #}
+{% set _cov_done = gayathri_group_order | length > 0 and gayathri_covered | length >= gayathri_group_order | length %}
+<section class="section cov-section{% if _cov_done %} cov-complete{% endif %}" id="cov-section"
+         data-total-groups="{{ gayathri_group_order | length }}">
+    <div class="cov-head">
+        <p class="section-title" style="margin-bottom:0">body coverage · today</p>
+        <span class="cov-tally"><span id="cov-count">{{ gayathri_covered | length }}</span> / {{ gayathri_group_order | length }}</span>
+    </div>
+    <div class="cov-strip" id="cov-strip">
+        {% for g in gayathri_group_order %}
+        <div class="cov-item {% if g in gayathri_covered %}on{% endif %}" data-group="{{ g }}">
+            <span class="cov-dot"></span>
+            <span class="cov-label">{{ g }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="cov-done-banner" id="cov-done-banner"{% if not _cov_done %} hidden{% endif %}>
+        <span class="cov-done-star">✦</span>
+        <span class="cov-done-text">Whole body covered today</span>
+    </div>
+</section>
+
+{# ── Home-only / show-gym toggle ──────────────────────────────────── #}
+<label class="gym-toggle">
+    <input type="checkbox" id="hide-gym-toggle" onchange="filterGym(this.checked)">
+    <span>Show gym-only exercises</span>
+</label>
+
+{# ── Exercise groups — everything visible, tap to log ─────────────── #}
+{% for g in gayathri_group_order %}
+<section class="section g-group" data-group="{{ g }}">
+    <p class="section-title">{{ g | lower }}</p>
+    <div class="tap-list">
+        {% for ex in gayathri_groups[g] %}
+        {% set t = gayathri_tallies.get(ex.name) %}
+        <div class="tap-row" data-location="{{ ex.location }}" data-exercise="{{ ex.name }}"
+             data-timed="{{ '1' if ex.timed else '0' }}" data-step="{{ ex.step }}">
+            <div class="tap-main">
+                <span class="tap-name">{{ ex.name }}</span>
+                <span class="tap-tally" data-role="tally">
+                    {%- if t and t.sets -%}
+                        <span data-role="sets">{{ t.sets }}</span> set{{ '' if t.sets == 1 else 's' }} ·
+                        <span data-role="total">{{ t.total }}</span>{{ 's' if ex.timed else ' reps' }} today
+                    {%- else -%}
+                        <span class="tap-empty">not started</span>
+                    {%- endif -%}
+                </span>
+            </div>
+            <div class="tap-controls">
+                <button type="button" class="tap-custom-btn" data-role="custom"
+                        onclick="toggleCustom(this)" title="Log a custom amount">···</button>
+                <button type="button" class="tap-add" onclick="quickSet(this, {{ ex.step }})">
+                    +{{ ex.step }}{{ 's' if ex.timed else '' }}
+                </button>
+            </div>
+            <div class="tap-custom" data-role="custom-row">
+                <button type="button" class="tap-step" onclick="nudge(this,-1)">−</button>
+                <input type="number" class="tap-amt" value="{{ ex.step }}" min="1" max="600" inputmode="numeric">
+                <button type="button" class="tap-step" onclick="nudge(this, 1)">+</button>
+                <button type="button" class="tap-log" onclick="quickSetCustom(this)">Log</button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endfor %}
+
+{# ── Cardio (reference, not tap-logged) ───────────────────────────── #}
+<section class="section">
+    <p class="section-title">cardio</p>
+    <div class="tap-list">
+        {% for c in cardio %}
+        <div class="tap-row tap-row-static">
+            <div class="tap-main">
+                <span class="tap-name">{{ c.name }}</span>
+                <span class="tap-tally"><span class="tap-empty">{{ c.desc }}</span></span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+{% else %}
+{# ── Focus · priority lifts ───────────────────────────────────────── #}
+<div class="focus-grid" id="focus-grid"></div>
+
+{# ── Focus picker sheet ────────────────────────────────────────────── #}
+<div class="adj-backdrop" id="pl-backdrop" onclick="closePriority()"></div>
+<div class="adj-sheet" id="pl-sheet">
+    <div class="adj-title" id="pl-title">Set focus lift</div>
+    <div class="adj-sub">Pick a compound to focus on this month. It's pinned to the top of your session builder, and its progress is tracked below — the goal resets on the 1st.</div>
+    <div class="pl-list" id="pl-list"></div>
+    <button class="adj-btn" id="pl-clear" onclick="clearPriority()" style="display:none">Remove this focus lift</button>
+    <button class="adj-cancel" onclick="closePriority()">Cancel</button>
 </div>
+{% endif %}
 
 {# ══════════════════════════════════════════════════════ #}
 {# ROUTINES TAB                                          #}
@@ -219,11 +557,15 @@
         {% endfor %}
     </ul>
 
+    {% if current_profile and current_profile.id == 2 %}
     <form method="POST" action="/workout/session/start">
         <input type="hidden" name="routine" value="{{ key }}">
         <input type="hidden" name="date" value="{{ today }}">
         <button type="submit" class="btn-log-workout">Start {{ routine.name }}</button>
     </form>
+    {% else %}
+    <a href="/session/new" class="btn-log-workout" style="display:block;text-align:center;text-decoration:none">Start {{ routine.name }} ❯</a>
+    {% endif %}
 </div>
 {% endfor %}
 
@@ -234,7 +576,7 @@
 {# ══════════════════════════════════════════════════════ #}
 {% if tab == 'exercises' %}
 
-<a href="/workout/log/new" class="btn btn-primary btn-full" style="margin-bottom:20px; text-decoration:none;">Log Workout</a>
+<a href="{% if current_profile and current_profile.id == 2 %}/workout/log/new{% else %}/session/new{% endif %}" class="btn btn-primary btn-full" style="margin-bottom:20px; text-decoration:none;">Log Workout</a>
 
 <label style="display:flex; align-items:center; gap:10px; margin-bottom:20px;
               background:var(--surface); border:0.5px solid var(--border);
@@ -265,19 +607,21 @@
             </button>
             <div class="ex-picker" id="picker-{{ eid }}">
                 <div class="picker-row">
-                    <span class="picker-label">{{ 'Duration (s)' if ex.timed else 'Reps' }}</span>
-                    <div class="stepper">
-                        <button class="stepper-btn" onclick="step('{{ eid }}-reps',-1,{{ ex.reps_range[0] }},{{ ex.reps_range[1] }})">−</button>
-                        <span class="stepper-val" id="val-{{ eid }}-reps">{{ ex.reps }}</span>
-                        <button class="stepper-btn" onclick="step('{{ eid }}-reps', 1,{{ ex.reps_range[0] }},{{ ex.reps_range[1] }})">+</button>
+                    <div class="picker-col">
+                        <div class="picker-label">{{ 'Duration (s)' if ex.timed else 'Reps' }}</div>
+                        <div class="stepper">
+                            <button class="stepper-btn" onclick="step('{{ eid }}-reps',-1,{{ ex.reps_range[0] }},{{ ex.reps_range[1] }})">−</button>
+                            <span class="stepper-val" id="val-{{ eid }}-reps">{{ ex.reps }}</span>
+                            <button class="stepper-btn" onclick="step('{{ eid }}-reps', 1,{{ ex.reps_range[0] }},{{ ex.reps_range[1] }})">+</button>
+                        </div>
                     </div>
-                </div>
-                <div class="picker-row">
-                    <span class="picker-label">Sets</span>
-                    <div class="stepper">
-                        <button class="stepper-btn" onclick="step('{{ eid }}-sets',-1,{{ ex.sets_range[0] }},{{ ex.sets_range[1] }})">−</button>
-                        <span class="stepper-val" id="val-{{ eid }}-sets">{{ ex.sets }}</span>
-                        <button class="stepper-btn" onclick="step('{{ eid }}-sets', 1,{{ ex.sets_range[0] }},{{ ex.sets_range[1] }})">+</button>
+                    <div class="picker-col">
+                        <div class="picker-label">Sets</div>
+                        <div class="stepper">
+                            <button class="stepper-btn" onclick="step('{{ eid }}-sets',-1,{{ ex.sets_range[0] }},{{ ex.sets_range[1] }})">−</button>
+                            <span class="stepper-val" id="val-{{ eid }}-sets">{{ ex.sets }}</span>
+                            <button class="stepper-btn" onclick="step('{{ eid }}-sets', 1,{{ ex.sets_range[0] }},{{ ex.sets_range[1] }})">+</button>
+                        </div>
                     </div>
                 </div>
                 <div class="picker-range-hint">
@@ -310,6 +654,7 @@
 {% endblock %}
 
 {% block extra_js %}
+{% if not current_profile or current_profile.id != 2 %}
 <script>
 function toggleGroup(btn) {
     btn.closest('.mg-group').classList.toggle('open');
@@ -339,4 +684,224 @@ function filterGym(show) {
 }
 document.addEventListener('DOMContentLoaded', () => filterGym(false));
 </script>
+{% endif %}
+
+{% if current_profile and current_profile.id == 2 %}
+{# ── Gayathri: tap-to-log ─────────────────────────────────────────── #}
+<script>
+(function () {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+    // Show/hide gym-only rows (default: home only)
+    window.filterGym = function (show) {
+        document.querySelectorAll('.tap-row[data-location="gym"]').forEach(el => {
+            el.style.display = show ? '' : 'none';
+        });
+        // hide a group section entirely if it has no visible rows
+        document.querySelectorAll('.g-group').forEach(sec => {
+            const rows = sec.querySelectorAll('.tap-row');
+            const anyVisible = Array.from(rows).some(r => r.style.display !== 'none');
+            sec.style.display = anyVisible ? '' : 'none';
+        });
+    };
+
+    // Custom-amount row toggle
+    window.toggleCustom = function (btn) {
+        const row = btn.closest('.tap-row');
+        const open = row.classList.toggle('custom-open');
+        btn.classList.toggle('open', open);
+        if (open) setTimeout(() => row.querySelector('.tap-amt')?.focus(), 30);
+    };
+    window.nudge = function (btn, dir) {
+        const inp = btn.parentElement.querySelector('.tap-amt');
+        let v = parseInt(inp.value, 10) || 0;
+        v = Math.max(1, Math.min(600, v + dir * (parseInt(inp.step, 10) || 1)));
+        inp.value = v;
+    };
+
+    function celebrateWholeBody() {
+        const section = document.getElementById('cov-section');
+        const banner  = document.getElementById('cov-done-banner');
+        if (!banner) return;
+        banner.hidden = false;
+        // restart the animations
+        banner.classList.remove('celebrate');
+        void banner.offsetWidth;
+        banner.classList.add('celebrate');
+        if (section) {
+            section.classList.remove('flash-complete');
+            void section.offsetWidth;
+            section.classList.add('flash-complete');
+        }
+    }
+
+    function applyResult(row, data) {
+        // update this row's tally
+        const tally = row.querySelector('[data-role="tally"]');
+        const timed = row.dataset.timed === '1';
+        const unit  = timed ? 's' : ' reps';
+        const s = data.sets, tot = data.total;
+        tally.innerHTML = s
+            ? `<span data-role="sets">${s}</span> set${s === 1 ? '' : 's'} · ` +
+              `<span data-role="total">${tot}</span>${unit} today`
+            : '<span class="tap-empty">not started</span>';
+        // flash
+        row.classList.add('just-logged');
+        setTimeout(() => row.classList.remove('just-logged'), 550);
+        // update coverage strip
+        const covered = new Set(data.covered || []);
+        document.querySelectorAll('.cov-item').forEach(item => {
+            item.classList.toggle('on', covered.has(item.dataset.group));
+        });
+        const cnt = document.getElementById('cov-count');
+        if (cnt) cnt.textContent = data.covered_count;
+        // whole-body-complete celebration — fire only on the transition into complete
+        const section = document.getElementById('cov-section');
+        const totalGroups = section ? parseInt(section.dataset.totalGroups, 10) : 0;
+        const wasComplete = section ? section.classList.contains('cov-complete') : false;
+        const nowComplete = totalGroups > 0 && data.covered_count >= totalGroups;
+        if (section) section.classList.toggle('cov-complete', nowComplete);
+        if (nowComplete && !wasComplete) celebrateWholeBody();
+    }
+
+    async function postSet(name, amount) {
+        const res = await fetch('/workout/quick-set', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+            body: JSON.stringify({ exercise: name, amount: amount }),
+        });
+        if (!res.ok) throw new Error('log failed');
+        return res.json();
+    }
+
+    window.quickSet = async function (btn, amount) {
+        const row = btn.closest('.tap-row');
+        btn.disabled = true;
+        try {
+            const data = await postSet(row.dataset.exercise, amount);
+            applyResult(row, data);
+        } catch (e) {
+            btn.textContent = 'retry';
+        } finally {
+            setTimeout(() => { btn.disabled = false; }, 250);
+        }
+    };
+
+    window.quickSetCustom = async function (btn) {
+        const row = btn.closest('.tap-row');
+        const inp = row.querySelector('.tap-amt');
+        const amount = Math.max(1, parseInt(inp.value, 10) || 0);
+        btn.disabled = true;
+        try {
+            const data = await postSet(row.dataset.exercise, amount);
+            applyResult(row, data);
+            row.classList.remove('custom-open');
+            row.querySelector('[data-role="custom"]')?.classList.remove('open');
+        } catch (e) {
+            btn.textContent = 'retry';
+        } finally {
+            setTimeout(() => { btn.disabled = false; btn.textContent = 'Log'; }, 250);
+        }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => filterGym(false));
+})();
+</script>
+{% endif %}
+
+{% if not current_profile or current_profile.id != 2 %}
+<script>
+(function () {
+    const PRIORITY   = {{ priority_json | safe }};
+    const T1_CHOICES = {{ t1_choices_json | safe }};
+    const bySlot = {}; PRIORITY.forEach(p => { bySlot[p.slot] = p; });
+    let plSlot = null;
+
+    function esc(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+    function chartBlock(p) {
+        const pts = p.history || [];
+        let pct = 0;
+        if (p.days_total) pct = Math.round(((p.days_total - (p.days_left || 0)) / p.days_total) * 100);
+        pct = Math.max(0, Math.min(100, pct));
+        const bar = `<div class="focus-track"><div class="focus-fill" style="width:${pct}%"></div></div>`;
+
+        if (!pts.length) {
+            return bar + `<div class="focus-nochart">No sessions logged this month yet — log ${esc(p.name)} to start tracking.</div>`;
+        }
+        let delta = '';
+        if (pts.length >= 2 && p.first != null) {
+            const d = Math.round((p.latest - p.first) * 10) / 10;
+            const cls = d > 0 ? 'up' : (d < 0 ? 'down' : '');
+            delta = `<span class="focus-delta ${cls}">${d > 0 ? '+' : ''}${d}${p.unit}</span>`;
+        }
+        const stat = `<div class="focus-statline">
+            <span class="focus-latest">${p.latest}${p.unit}</span>${delta}
+            <span class="focus-best">best ${p.best}${p.unit}</span></div>`;
+        return bar + stat;
+    }
+
+    function renderFocus() {
+        const grid = document.getElementById('focus-grid');
+        if (!grid) return;
+        let html = '';
+        [1, 2].forEach(slot => {
+            const p = bySlot[slot];
+            if (!p) {
+                html += `<button class="focus-empty" onclick="openPriority(${slot})">+ set focus lift</button>`;
+                return;
+            }
+            const sess = p.sessions_this_month;
+            const meta = `${(p.month_label||'').toLowerCase()} · ${sess} session${sess !== 1 ? 's' : ''} · ${p.days_left}d left`;
+            html += `<div class="focus-card">
+                <div class="focus-eyebrow">focus · this month</div>
+                <div class="focus-top"><span class="focus-star">✦</span><span class="focus-name">${esc(p.name)}</span>
+                  <button class="focus-change" onclick="openPriority(${slot})">change</button></div>
+                <div class="focus-meta">${meta}</div>
+                ${chartBlock(p)}
+            </div>`;
+        });
+        grid.innerHTML = html;
+    }
+
+    window.openPriority = function (slot) {
+        plSlot = slot;
+        const cur = bySlot[slot];
+        document.getElementById('pl-title').textContent = cur ? 'Change focus lift' : 'Set focus lift';
+        document.getElementById('pl-clear').style.display = cur ? '' : 'none';
+        const otherId = (bySlot[slot === 1 ? 2 : 1] || {}).exercise_id;
+        document.getElementById('pl-list').innerHTML = T1_CHOICES.map(ex => {
+            const isCur = cur && cur.exercise_id === ex.id;
+            const disabled = otherId === ex.id;
+            return `<div class="pl-row${isCur ? ' sel' : ''}" ${disabled ? 'style="opacity:.4;pointer-events:none"' : ''} onclick="savePriority(${ex.id})">
+                <span class="pl-name">${esc(ex.name)}</span>
+                <span style="font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)">${esc(ex.muscle_group)}</span></div>`;
+        }).join('');
+        document.getElementById('pl-backdrop').classList.add('open');
+        document.getElementById('pl-sheet').classList.add('open');
+    };
+    window.closePriority = function () {
+        document.getElementById('pl-backdrop').classList.remove('open');
+        document.getElementById('pl-sheet').classList.remove('open');
+    };
+    function post(body) {
+        return fetch('/api/priority', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window._csrf },
+            body: JSON.stringify(body)
+        }).then(r => r.json());
+    }
+    window.savePriority = function (exId) {
+        post({ slot: plSlot, exercise_id: exId })
+            .then(() => location.reload()).catch(() => closePriority());
+    };
+    window.clearPriority = function () {
+        post({ slot: plSlot, clear: true })
+            .then(() => location.reload()).catch(() => closePriority());
+    };
+
+    renderFocus();
+})();
+</script>
+{% endif %}
 {% endblock %}

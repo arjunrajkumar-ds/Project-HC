@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}Log Swim{% endblock %}
+{% block body_class %}{% if not current_profile or current_profile.id != 2 %}pandora{% endif %}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -61,13 +62,13 @@
     background: var(--surface); border-radius: 12px;
     padding: 12px 16px; margin-top: 10px;
 }
-.swim-confirm-label { flex: 1; font-size: 0.9rem; font-weight: 600; color: #fff; }
+.swim-confirm-label { flex: 1; font-size: 0.9rem; font-weight: 600; color: var(--text-strong, #fff); }
 .btn-swim-confirm {
     border: none; border-radius: 8px; cursor: pointer; font-family: inherit;
     font-size: 1.1rem; font-weight: 800; min-height: 44px; min-width: 44px;
     -webkit-tap-highlight-color: transparent;
 }
-.btn-swim-confirm.tick  { background: var(--accent); color: #fff; }
+.btn-swim-confirm.tick  { background: var(--accent); color: var(--bg); }
 .btn-swim-confirm.cross { background: var(--surface-2); color: var(--dim);
                            border: 1px solid var(--border); }
 .btn-swim-confirm:active { opacity: .75; }
@@ -78,13 +79,13 @@
     background: var(--surface); border-radius: 12px; padding: 12px 16px;
     margin-bottom: 10px;
 }
-.sw-ach-bar-name   { font-weight: 700; font-size: 0.95rem; color: #fff; }
+.sw-ach-bar-name   { font-weight: 700; font-size: 0.95rem; color: var(--text-strong, #fff); }
 .sw-ach-bar-target { font-size: 0.8rem; color: var(--dim); }
 
 .sw-sets-header {
     display: grid; grid-template-columns: 26px 1fr 1fr 40px;
     gap: 6px; align-items: center;
-    font-size: 0.67rem; font-weight: 600; color: #444;
+    font-size: 0.67rem; font-weight: 600; color: var(--muted);
     text-transform: uppercase; letter-spacing: .05em;
     padding: 0 2px; margin-bottom: 4px;
 }
@@ -123,7 +124,7 @@
 .sw-total-val { font-size: 1.3rem; font-weight: 800; color: var(--swim-fg); }
 .sw-total-unit { font-size: 0.8rem; color: var(--dim); }
 .sw-total-vs   { margin-left: auto; font-size: 0.8rem; font-weight: 600; }
-.sw-vs-ok      { color: #4ade80; }
+.sw-vs-ok      { color: var(--green, #4ade80); }
 .sw-vs-short   { color: var(--dim); }
 
 /* ── Save button ─────────────────────────────────────────────────── */

@@ -188,7 +188,7 @@
     <div class="upnext-card">
         <a href="/workout/log/new" class="btn-start">Log a workout ❯</a>
         <div class="quick-row">
-            <a href="/missions" class="quick-btn">Missions</a>
+            <a href="/workout" class="quick-btn">Routines</a>
             <a href="/food"     class="quick-btn">Food</a>
             <a href="/sessions" class="quick-btn">History</a>
         </div>
@@ -360,9 +360,8 @@ function editWeight() {
 }
 
 (function () {
-    let WH;
-    try { WH = {{ weight_history | tojson }}; } catch (e) { return; }
-    if (!Array.isArray(WH) || WH.length < 2) return;
+    const WH = {{ weight_history | tojson }};
+    if (!WH || WH.length < 2) return;
     const svg = document.getElementById('wt-chart');
     if (!svg) return;
     const cs   = getComputedStyle(document.body);

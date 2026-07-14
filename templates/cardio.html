@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+{% block title %}Log Cardio{% endblock %}
+{% block body_class %}{% if not current_profile or current_profile.id != 2 %}pandora{% endif %}{% endblock %}
+
+{% block extra_css %}
+<style>
+.cardio-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 16px;
+}
+.cardio-field { display: flex; flex-direction: column; gap: 6px; }
+.cardio-field label {
+    font-size: 0.66rem; font-weight: 800; text-transform: uppercase;
+    letter-spacing: .05em; color: var(--dim);
+}
+.cardio-field input, .cardio-field select {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); font-family: inherit; font-size: 0.95rem;
+    padding: 11px 12px; width: 100%; box-sizing: border-box; outline: none;
+}
+.cardio-field input:focus, .cardio-field select:focus { border-color: var(--accent); }
+.cardio-metrics { display: none; flex-direction: column; gap: 14px; }
+.cardio-metrics.show { display: flex; }
+.input-suffix { position: relative; }
+.input-suffix .suffix {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+    font-size: 0.8rem; color: var(--dim); pointer-events: none;
+}
+.btn-log-cardio {
+    background: var(--accent); border: none; border-radius: 12px; color: var(--bg);
+    cursor: pointer; font-family: inherit; font-size: 1rem; font-weight: 800;
+    min-height: 52px; padding: 14px; -webkit-tap-highlight-color: transparent;
+}
+.btn-log-cardio:active { opacity: .85; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+    <a href="/" style="
+        background:var(--surface);border:1px solid var(--border);
+        border-radius:8px;color:var(--muted);font-size:1.1rem;
+        padding:7px 12px;text-decoration:none;flex-shrink:0;
+        -webkit-tap-highlight-color:transparent;">‹</a>
+    <h1 style="margin:0;flex:1">Log Cardio</h1>
+</div>
+
+{% if choices %}
+<form method="POST" action="/cardio" class="cardio-card">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+    <div class="cardio-field">
+        <label for="c-date">Date</label>
+        <input type="date" id="c-date" name="date" value="{{ date_str }}">
+    </div>
+
+    <div class="cardio-field">
+        <label for="c-type">Activity</label>
+        <select id="c-type" name="exercise_id" onchange="cardioToggle()">
+            {% for ex in choices %}
+            <option value="{{ ex.id }}"
+                    data-dist="{{ ex.metrics.distance or '' }}"
+                    data-time="{{ '1' if ex.metrics.time else '' }}"
+                    data-res="{{ '1' if ex.metrics.resistance else '' }}"
+                    data-speed="{{ '1' if ex.metrics.speed else '' }}">{{ ex.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="cardio-metrics" id="c-metrics">
+        <div class="cardio-field" id="f-distance">
+            <label for="c-distance">Distance</label>
+            <div class="input-suffix">
+                <input type="number" id="c-distance" name="distance" min="0" step="0.01"
+                       inputmode="decimal" placeholder="0">
+                <span class="suffix" id="c-dist-unit">m</span>
+            </div>
+        </div>
+        <div class="cardio-field" id="f-duration">
+            <label for="c-duration">Duration</label>
+            <div class="input-suffix">
+                <input type="number" id="c-duration" name="duration" min="0" step="0.5"
+                       inputmode="decimal" placeholder="0">
+                <span class="suffix">min</span>
+            </div>
+        </div>
+        <div class="cardio-field" id="f-resistance">
+            <label for="c-resistance">Resistance / level</label>
+            <input type="number" id="c-resistance" name="resistance" min="0" step="1"
+                   inputmode="decimal" placeholder="0">
+        </div>
+        <div class="cardio-field" id="f-speed">
+            <label for="c-speed">Speed</label>
+            <input type="number" id="c-speed" name="speed" min="0" step="0.5"
+                   inputmode="decimal" placeholder="0">
+        </div>
+    </div>
+
+    <button type="submit" class="btn-log-cardio">Log Cardio</button>
+</form>
+{% else %}
+<p style="font-size:0.85rem;color:var(--dim)">No cardio activities defined.</p>
+{% endif %}
+
+<script>
+function cardioToggle() {
+    const sel = document.getElementById('c-type');
+    const opt = sel.options[sel.selectedIndex];
+    const dist = opt.dataset.dist, time = opt.dataset.time,
+          res  = opt.dataset.res,  speed = opt.dataset.speed;
+    document.getElementById('c-metrics').classList.add('show');
+    document.getElementById('f-distance').style.display   = dist  ? '' : 'none';
+    document.getElementById('f-duration').style.display   = time  ? '' : 'none';
+    document.getElementById('f-resistance').style.display = res   ? '' : 'none';
+    document.getElementById('f-speed').style.display      = speed ? '' : 'none';
+    document.getElementById('c-dist-unit').textContent    = dist || 'm';
+}
+cardioToggle();
+</script>
+{% endblock %}

@@ -213,9 +213,131 @@
         border: 1px solid var(--border);
     }
     </style>
+    <style>
+    /* ═══ PANDORA DARK THEME — scoped to redesigned screens (body.pandora) ═══
+       Applied only when a template opts in via the body_class block.
+       Remaps the existing light-theme token names to Pandora dark values so
+       the bulk of each screen re-skins automatically, and adds the new
+       Pandora tokens/utilities the redesigned components need.                */
+
+    @font-face { font-family:'Inter'; src:url("{{ url_for('static', filename='fonts/Inter-Regular.woff2') }}") format('woff2'); font-weight:400; font-display:swap; }
+    @font-face { font-family:'Inter'; src:url("{{ url_for('static', filename='fonts/Inter-Medium.woff2') }}") format('woff2'); font-weight:500; font-display:swap; }
+    @font-face { font-family:'Inter'; src:url("{{ url_for('static', filename='fonts/Inter-SemiBold.woff2') }}") format('woff2'); font-weight:600; font-display:swap; }
+    @font-face { font-family:'Inter'; src:url("{{ url_for('static', filename='fonts/Inter-Bold.woff2') }}") format('woff2'); font-weight:700; font-display:swap; }
+    @font-face { font-family:'JetBrains Mono'; src:url("{{ url_for('static', filename='fonts/JetBrainsMono-Regular.woff2') }}") format('woff2'); font-weight:400; font-display:swap; }
+    @font-face { font-family:'JetBrains Mono'; src:url("{{ url_for('static', filename='fonts/JetBrainsMono-Medium.woff2') }}") format('woff2'); font-weight:500; font-display:swap; }
+    @font-face { font-family:'JetBrains Mono'; src:url("{{ url_for('static', filename='fonts/JetBrainsMono-SemiBold.woff2') }}") format('woff2'); font-weight:600; font-display:swap; }
+
+    body.pandora {
+        /* ── remap existing token names → Pandora dark ── */
+        --bg:           #0a0b0d;
+        --surface:      #111316;
+        --surface-2:    #1a1d21;
+        --border:       #1f242b;
+        --text:         #d5dae0;
+        --muted:        #8b93a0;
+        --dim:          #6b7480;
+        --accent:       #d4a574;
+        --accent-light: rgba(212,165,116,0.14);
+        --accent-text:  #d4a574;
+
+        /* semantic badge pairs → dark soft-fill + bright ink */
+        --push-bg: rgba(201,112,100,.14); --push-fg: #c97064;
+        --pull-bg: rgba(168,135,184,.14); --pull-fg: #a887b8;
+        --legs-bg: rgba(127,176,105,.14); --legs-fg: #7fb069;
+        --core-bg: rgba(240,180,95,.14);  --core-fg: #f0b45f;
+        --swim-bg: rgba(107,147,184,.14); --swim-fg: #6b93b8;
+        --pilates-bg: rgba(168,135,184,.14); --pilates-fg: #a887b8;
+        --t1-bg: rgba(168,135,184,.14); --t1-fg: #a887b8;
+        --t2-bg: rgba(107,147,184,.14); --t2-fg: #6b93b8;
+        --t3-bg: rgba(127,176,105,.14); --t3-fg: #7fb069;
+
+        /* ── new Pandora tokens ── */
+        --panel:        #111316;
+        --panel-alt:    #16191d;
+        --panel-soft:   #1a1d21;
+        --border-bright:#2a313a;
+        --text-strong:  #edf0f3;
+        --dimmer:       #3f4651;
+        --accent-dim:   #8a6d4f;
+        --accent-soft:  rgba(212,165,116,0.12);
+        --green: #7fb069; --red: #c97064; --blue: #6b93b8;
+        --purple: #a887b8; --waiting: #f0b45f;
+        --scrim: rgba(0,0,0,0.62);
+
+        --font-sans: "Inter", -apple-system, system-ui, "Segoe UI", sans-serif;
+        --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+        --radius-sm: 4px; --radius-md: 6px; --radius-pill: 12px;
+
+        --nav-h: 60px;
+
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+    }
+
+    /* profile name is shown in each screen's header eyebrow → hide the bar */
+    body.pandora .profile-bar { display: none; }
+
+    body.pandora .page { padding: 18px 16px calc(var(--nav-h) + var(--sab) + 24px); }
+    body.pandora .section { margin-bottom: 14px; }
+
+    /* headings → Inter 500, sentence case, tight tracking */
+    body.pandora h1 { font-weight: 500; letter-spacing: -0.02em; color: var(--text-strong); }
+    body.pandora h2 { font-weight: 500; color: var(--text-strong); }
+
+    /* section titles & eyebrows → the signature mono label */
+    body.pandora .section-title,
+    body.pandora .eyebrow {
+        font-family: var(--font-mono); font-weight: 400; font-size: 10px;
+        line-height: 1.2; letter-spacing: 0.14em; text-transform: uppercase;
+        color: var(--dim); margin-bottom: 8px;
+    }
+    body.pandora .mono { font-family: var(--font-mono); }
+    body.pandora .text-strong { color: var(--text-strong); }
+
+    /* form controls → dark */
+    body.pandora input[type="text"], body.pandora input[type="date"],
+    body.pandora input[type="number"], body.pandora select, body.pandora textarea {
+        background: var(--panel-soft); border: 1px solid var(--border);
+        color: var(--text); border-radius: var(--radius-sm);
+    }
+    body.pandora input:focus, body.pandora select:focus, body.pandora textarea:focus {
+        border-color: var(--accent);
+    }
+    body.pandora input::placeholder, body.pandora textarea::placeholder { color: var(--dimmer); }
+
+    /* buttons */
+    body.pandora .btn { border-radius: var(--radius-sm); font-weight: 600; }
+    body.pandora .btn-primary   { background: var(--accent); color: var(--bg); }
+    body.pandora .btn-secondary { background: var(--panel-soft); color: var(--text); border: 1px solid var(--border); }
+
+    /* badges → mono, precise radius */
+    body.pandora .type-badge, body.pandora .tier-badge {
+        font-family: var(--font-mono); font-weight: 600; border-radius: var(--radius-sm);
+    }
+
+    /* ── bottom nav: dark, flat, active = accent + weight (no pill) ── */
+    body.pandora .bottom-nav {
+        background: var(--panel); border-top: 1px solid var(--border);
+        align-items: center; padding-top: 0;
+    }
+    body.pandora .nav-item { color: var(--dim); }
+    body.pandora .nav-item.active { color: var(--accent); }
+    body.pandora .nav-item:active { background: transparent; }
+    body.pandora .nav-icon { font-size: 15px; }
+    body.pandora .nav-label {
+        font-family: var(--font-mono); font-size: 9px; font-weight: 400; letter-spacing: 0.06em;
+    }
+    body.pandora .nav-item.active .nav-label { font-weight: 700; }
+
+    /* darken any bottom-sheet scrim the screens define */
+    body.pandora .adj-backdrop { background: var(--scrim); }
+    </style>
     {% block extra_css %}{% endblock %}
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
     <div class="page">
         {% if current_profile %}
         <div class="profile-bar">
@@ -254,7 +376,7 @@
             <span class="nav-icon">⌂</span>
             <span class="nav-label">Today</span>
         </a>
-        <a href="/session/new" class="nav-item {% if request.path == '/session/new' or request.path.startswith('/sessions') or (request.path.startswith('/session/') and request.path != '/session/new') or request.path.startswith('/swim') or request.path.startswith('/pilates') %}active{% endif %}">
+        <a href="/workout" class="nav-item {% if request.path.startswith('/workout') or request.path == '/session/new' or request.path.startswith('/sessions') or (request.path.startswith('/session/') and request.path != '/session/new') or request.path.startswith('/swim') or request.path.startswith('/pilates') %}active{% endif %}">
             <span class="nav-icon">◉</span>
             <span class="nav-label">Train</span>
         </a>

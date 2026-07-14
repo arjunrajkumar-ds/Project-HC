@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}{% if mode == 'new' %}New Food{% elif mode == 'pending' %}Define {{ name }}{% else %}Edit {{ name }}{% endif %}{% endblock %}
+{% block body_class %}{% if not current_profile or current_profile.id != 2 %}pandora{% endif %}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -24,10 +25,10 @@
     -webkit-tap-highlight-color: transparent;
     transition: background .1s, color .1s, border-color .1s;
 }
-.unit-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.unit-btn.active { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 .btn-save {
     background: var(--accent); border: none; border-radius: 10px;
-    color: #fff; cursor: pointer; font-family: inherit;
+    color: var(--bg); cursor: pointer; font-family: inherit;
     font-size: 1rem; font-weight: 800;
     min-height: 50px; padding: 12px; width: 100%;
     -webkit-tap-highlight-color: transparent;
@@ -53,7 +54,7 @@
     display: flex; align-items: center; justify-content: center;
     border-radius: 6px; -webkit-tap-highlight-color: transparent;
 }
-.btn-rm-row:active { color: #ef4444; }
+.btn-rm-row:active { color: var(--red, #ef4444); }
 .btn-add-ing {
     background: var(--surface-2); border: 1px solid var(--border);
     border-radius: 8px; color: var(--muted); cursor: pointer;
@@ -71,7 +72,7 @@
 .preview-macros { font-size: 0.72rem; color: var(--muted); }
 .btn-save-recipe {
     background: var(--accent); border: none; border-radius: 10px;
-    color: #fff; cursor: pointer; font-family: inherit;
+    color: var(--bg); cursor: pointer; font-family: inherit;
     font-size: 1rem; font-weight: 800;
     min-height: 50px; padding: 12px; width: 100%;
     -webkit-tap-highlight-color: transparent;
@@ -80,13 +81,13 @@
 
 /* ── Delete section ───────────────────────────────────────────────── */
 .btn-delete {
-    background: none; border: 1px solid #ef444455; border-radius: 10px;
-    color: #ef4444; cursor: pointer; font-family: inherit;
+    background: none; border: 1px solid var(--red, #ef4444); border-radius: 10px;
+    color: var(--red, #ef4444); cursor: pointer; font-family: inherit;
     font-size: 0.9rem; font-weight: 700;
     min-height: 44px; padding: 10px; width: 100%;
     -webkit-tap-highlight-color: transparent;
 }
-.btn-delete:active { background: #ef444411; }
+.btn-delete:active { background: var(--accent-soft, #ef444411); }
 
 /* ── Pending badge ────────────────────────────────────────────────── */
 .pending-notice {
@@ -250,7 +251,33 @@ function setUnit(val) {
 }
 
 // ── Recipe ─────────────────────────────────────────────────────────────
+// FOOD_MACROS is keyed by canonical key (plural-aware), matching the server.
 const FOOD_MACROS = {{ macros_json | safe }};
+
+const PLURAL_OVERRIDES = {
+    leaves:'leaf', loaves:'loaf', halves:'half', calves:'calf',
+    potatoes:'potato', tomatoes:'tomato', mangoes:'mango', mangos:'mango',
+    avocados:'avocado', burritos:'burrito', tacos:'taco',
+    chillies:'chilli', chilies:'chili', berries:'berry', wraps:'wrap', oats:'oats',
+};
+const NO_SINGULAR = new Set(['oats','hummus','asparagus','couscous','molasses',
+                             'watercress','swiss','bass','gas','lentils']);
+function singularize(token) {
+    const low = token.toLowerCase();
+    if (low in PLURAL_OVERRIDES) return PLURAL_OVERRIDES[low];
+    if (NO_SINGULAR.has(low) || low.length <= 3) return low;
+    if (/(ss|us|is)$/.test(low)) return low;
+    if (/ies$/.test(low)) return low.slice(0, -3) + 'y';
+    if (/(ches|shes|xes|zes|ses)$/.test(low)) return low.slice(0, -2);
+    if (/s$/.test(low)) return low.slice(0, -1);
+    return low;
+}
+function foodKey(name) {
+    const parts = name.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!parts.length) return '';
+    parts[parts.length - 1] = singularize(parts[parts.length - 1]);
+    return parts.join(' ');
+}
 
 function addIngRow() {
     const row = document.createElement('div');
@@ -266,10 +293,10 @@ function addIngRow() {
 function recipeCalc() {
     let kcal = 0, pro = 0, carb = 0, fat = 0, anyValid = false;
     document.querySelectorAll('#recipe-rows .recipe-row').forEach(row => {
-        const name = row.querySelector('input[type=text]').value.trim().toLowerCase();
+        const name = row.querySelector('input[type=text]').value.trim();
         const qty  = parseFloat(row.querySelector('input[type=number]').value) || 0;
         if (!name || qty <= 0) return;
-        const m = FOOD_MACROS[name];
+        const m = FOOD_MACROS[foodKey(name)];
         if (!m) return;
         const f = m.unit_type === 'unit' ? qty : qty / 100;
         kcal += m.calories  * f;

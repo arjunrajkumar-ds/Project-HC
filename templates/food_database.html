@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}Food Database{% endblock %}
+{% block body_class %}{% if not current_profile or current_profile.id != 2 %}pandora{% endif %}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -8,35 +9,54 @@
     border-radius: 10px; color: var(--text);
     font-family: inherit; font-size: 0.95rem;
     padding: 11px 14px; box-sizing: border-box;
-    margin-bottom: 12px; outline: none;
+    margin-bottom: 10px; outline: none;
 }
 .fdb-search:focus { border-color: var(--accent); }
 
+/* Filter tabs */
+.fdb-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.fdb-tab {
+    flex: 1; background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--muted); cursor: pointer;
+    font-family: inherit; font-size: 0.78rem; font-weight: 700;
+    padding: 8px 6px; text-align: center; white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+}
+.fdb-tab.active { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.fdb-tab-count { font-weight: 800; opacity: .7; margin-left: 3px; }
+
 .fdb-list { display: flex; flex-direction: column; gap: 4px; }
 .fdb-row {
-    display: flex; align-items: center; gap: 10px;
+    display: flex; align-items: center; gap: 8px;
     background: var(--surface); border-radius: 10px;
     padding: 11px 14px; text-decoration: none; color: inherit;
     -webkit-tap-highlight-color: transparent;
 }
 .fdb-row:active { opacity: .7; }
+.fdb-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.fdb-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .fdb-name {
-    flex: 1; font-size: 0.88rem; font-weight: 700; color: var(--text);
+    font-size: 0.88rem; font-weight: 700; color: var(--text);
     min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.fdb-macros {
-    font-size: 0.72rem; color: var(--muted); white-space: nowrap; flex-shrink: 0;
-}
+.fdb-macros { font-size: 0.72rem; color: var(--muted); white-space: nowrap; }
+.fdb-macros .fdb-kcal { color: #3b82f6; font-weight: 700; }
+.fdb-macros .m-p { color: #22c55e; }
+.fdb-macros .m-c { color: #f59e0b; }
+.fdb-macros .m-f { color: #a855f7; }
 .fdb-badge {
-    font-size: 0.6rem; font-weight: 800; letter-spacing: .05em;
+    font-size: 0.58rem; font-weight: 800; letter-spacing: .04em;
     text-transform: uppercase; border-radius: 20px;
     padding: 3px 7px; flex-shrink: 0;
-    background: rgba(99,102,241,.15); color: var(--accent);
 }
+.fdb-badge.recipe  { background: rgba(168,85,247,.15); color: #a855f7; }
+.fdb-badge.define  { background: rgba(245,158,11,.16); color: #d97706; }
 .fdb-unit {
-    font-size: 0.65rem; color: var(--dim); flex-shrink: 0;
+    font-size: 0.72rem; color: var(--dim); flex-shrink: 0; white-space: nowrap;
+    align-self: center;
 }
-.fdb-arrow { font-size: 0.9rem; color: var(--dim); flex-shrink: 0; }
+.fdb-arrow { font-size: 0.9rem; color: var(--dim); flex-shrink: 0; align-self: center; }
+.fdb-empty { font-size: 0.85rem; color: var(--dim); padding: 24px 4px; text-align: center; }
 </style>
 {% endblock %}
 
@@ -51,7 +71,7 @@
     <h1 style="margin:0;flex:1">Food Database</h1>
     <a href="/food/edit/new" style="
         background:var(--accent);border:none;border-radius:8px;
-        color:#fff;font-size:0.8rem;font-weight:800;
+        color:var(--bg);font-size:0.8rem;font-weight:800;
         padding:9px 14px;text-decoration:none;flex-shrink:0;
         -webkit-tap-highlight-color:transparent;
     ">+ Add Food</a>
@@ -59,39 +79,80 @@
 
 {% if food_library %}
 <input type="search" class="fdb-search" id="fdb-search"
-       placeholder="Search {{ food_library | length }} foods…"
-       oninput="filterFoods(this.value)" autocomplete="off">
+       placeholder="Search {{ counts.all }} foods…"
+       oninput="applyFilters()" autocomplete="off">
+
+<div class="fdb-tabs">
+    <button type="button" class="fdb-tab active" data-filter="all" onclick="setTab(this)">
+        All<span class="fdb-tab-count">{{ counts.all }}</span></button>
+    <button type="button" class="fdb-tab" data-filter="recipe" onclick="setTab(this)">
+        Recipes<span class="fdb-tab-count">{{ counts.recipes }}</span></button>
+    <button type="button" class="fdb-tab" data-filter="pending" onclick="setTab(this)">
+        To define<span class="fdb-tab-count">{{ counts.pending }}</span></button>
+</div>
 
 <div class="fdb-list" id="fdb-list">
     {% for item in food_library %}
-    {% set is_pending = item.calories == 0 %}
     <a href="/food/edit/{{ item.name | urlencode }}"
        class="fdb-row"
-       data-name="{{ item.name | lower | e }}">
-        <span class="fdb-name">{{ item.name | strip_food_prefix | e }}</span>
-        {% if is_pending %}
-            <span class="fdb-badge">define</span>
-        {% else %}
-            <span class="fdb-macros">{{ item.calories | int }} kcal · {{ item.protein_g | round(1) }}g P</span>
-            <span class="fdb-unit">{% if item.unit_type == 'unit' %}/unit{% else %}/100g{% endif %}</span>
+       data-name="{{ item.name | lower | e }}"
+       data-pending="{{ '1' if item.is_pending else '0' }}"
+       data-recipe="{{ '1' if item.is_recipe else '0' }}">
+        <div class="fdb-main">
+            <div class="fdb-name-row">
+                <span class="fdb-name">{{ item.name | strip_food_prefix | e }}</span>
+                {% if item.is_recipe %}<span class="fdb-badge recipe">recipe</span>{% endif %}
+                {% if item.is_pending %}<span class="fdb-badge define">define</span>{% endif %}
+            </div>
+            {% if not item.is_pending %}
+            <span class="fdb-macros">
+                <span class="fdb-kcal">{{ item.calories | int }} kcal</span>
+                · <span class="m-p">{{ item.protein_g | round(1) }}P</span>
+                <span class="m-c">{{ item.carbs_g | round(1) }}C</span>
+                <span class="m-f">{{ item.fat_g | round(1) }}F</span>
+            </span>
+            {% endif %}
+        </div>
+        {% if not item.is_pending %}
+        <span class="fdb-unit">{% if item.unit_type == 'unit' %}per unit{% else %}per 100g{% endif %}</span>
         {% endif %}
         <span class="fdb-arrow">›</span>
     </a>
     {% endfor %}
 </div>
+<p class="fdb-empty" id="fdb-empty" style="display:none">No matching foods.</p>
 {% else %}
-<p style="font-size:0.85rem;color:var(--dim);padding:20px 0">
+<p class="fdb-empty">
     No foods yet.
     <a href="/food/edit/new" style="color:var(--accent)">Add the first one →</a>
 </p>
 {% endif %}
 
 <script>
-function filterFoods(q) {
-    const term = q.trim().toLowerCase();
+let activeFilter = 'all';
+
+function setTab(btn) {
+    document.querySelectorAll('.fdb-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    activeFilter = btn.dataset.filter;
+    applyFilters();
+}
+
+function applyFilters() {
+    const term = (document.getElementById('fdb-search').value || '').trim().toLowerCase();
+    let shown = 0;
     document.querySelectorAll('#fdb-list .fdb-row').forEach(row => {
-        row.style.display = (!term || row.dataset.name.includes(term)) ? '' : 'none';
+        const matchTerm   = !term || row.dataset.name.includes(term);
+        const matchFilter =
+            activeFilter === 'all'     ? true :
+            activeFilter === 'recipe'  ? row.dataset.recipe  === '1' :
+            activeFilter === 'pending' ? row.dataset.pending === '1' : true;
+        const visible = matchTerm && matchFilter;
+        row.style.display = visible ? '' : 'none';
+        if (visible) shown++;
     });
+    const empty = document.getElementById('fdb-empty');
+    if (empty) empty.style.display = shown === 0 ? '' : 'none';
 }
 </script>
 {% endblock %}

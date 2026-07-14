@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}Who's tracking?{% endblock %}
+{% block body_class %}pandora{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -23,7 +24,7 @@
 
 .profile-avatar {
     width: 52px; height: 52px; border-radius: 50%;
-    background: var(--accent); color: #fff;
+    background: var(--accent); color: var(--bg);
     display: flex; align-items: center; justify-content: center;
     font-size: 1.5rem; font-weight: 800; flex-shrink: 0;
 }

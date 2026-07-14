@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}Command Centre{% endblock %}
+{% block body_class %}{% if not current_profile or current_profile.id != 2 %}pandora{% endif %}{% endblock %}
 
 {% block extra_css %}
 <style>

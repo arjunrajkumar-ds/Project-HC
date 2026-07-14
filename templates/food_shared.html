@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}Shared Food View{% endblock %}
+{% block body_class %}{% if not current_profile or current_profile.id != 2 %}pandora{% endif %}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -156,7 +157,7 @@
         <div class="rings-section">
             <div class="rings-wrap">
                 <svg viewBox="0 0 140 140" width="110" height="110">
-                    <circle cx="70" cy="70" r="56" fill="none" stroke="#1e3a5f" stroke-width="12"/>
+                    <circle cx="70" cy="70" r="56" fill="none" stroke="var(--surface-2)" stroke-width="12"/>
                     <circle id="{{ pfx }}-ring-cal" cx="70" cy="70" r="56" fill="none"
                         stroke="#3b82f6" stroke-width="12" stroke-linecap="butt"
                         stroke-dasharray="0 351.86"
@@ -167,7 +168,7 @@
                         stroke-dasharray="0 351.86"
                         transform="rotate(-90 70 70)"
                         style="transition:stroke-dasharray .5s ease;display:none"/>
-                    <circle cx="70" cy="70" r="38" fill="none" stroke="#14532d" stroke-width="12"/>
+                    <circle cx="70" cy="70" r="38" fill="none" stroke="var(--surface-2)" stroke-width="12"/>
                     <circle id="{{ pfx }}-ring-pro" cx="70" cy="70" r="38" fill="none"
                         stroke="#22c55e" stroke-width="12" stroke-linecap="butt"
                         stroke-dasharray="0 238.76"
@@ -178,7 +179,7 @@
                         stroke-dasharray="0 238.76"
                         transform="rotate(-90 70 70)"
                         style="transition:stroke-dasharray .5s ease;display:none"/>
-                    <circle id="{{ pfx }}-center-dot" cx="70" cy="70" r="4" fill="#333"/>
+                    <circle id="{{ pfx }}-center-dot" cx="70" cy="70" r="4" fill="var(--dim)"/>
                 </svg>
             </div>
             <div class="stat-panel">
@@ -258,7 +259,7 @@ function renderProfile(pfx, entries, goals) {
     const dot = document.getElementById(pfx + '-center-dot');
     if (calRatio > 1 || proRatio > 1) dot.setAttribute('fill', '#fca5a5');
     else if (calRatio >= 0.99 && proRatio >= 0.99) dot.setAttribute('fill', '#93c5fd');
-    else dot.setAttribute('fill', '#333');
+    else dot.setAttribute('fill', getComputedStyle(document.body).getPropertyValue('--dim').trim() || '#333');
 
     // Stat cards
     const calOver = totals.calories  > goals.calories;

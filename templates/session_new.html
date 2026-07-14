@@ -1,30 +1,90 @@
 {% extends 'base.html' %}
 {% block title %}Log Gym Session{% endblock %}
+{% block body_class %}{% if not current_profile or current_profile.id != 2 %}pandora{% endif %}{% endblock %}
 
 {% block extra_css %}
 <style>
 /* ── Form layout ─────────────────────────────────────────────────── */
 #session-form { display: flex; flex-direction: column; gap: 12px; }
+.draft-banner {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--core-bg); border: 1px solid var(--core-fg); border-radius: 12px;
+    padding: 10px 14px; margin-bottom: 12px; font-size: 0.82rem;
+    font-weight: 600; color: var(--core-fg);
+}
+.draft-discard {
+    margin-left: auto; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--muted); cursor: pointer; font-family: inherit;
+    font-size: 0.75rem; font-weight: 700; padding: 6px 11px;
+    -webkit-tap-highlight-color: transparent;
+}
 
-/* ── Day type selector ───────────────────────────────────────────── */
-.day-type-btns {
-    display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px;
+/* ── Fatigue badges ──────────────────────────────────────────────── */
+.fat-dot {
+    width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+    margin-right: 6px; vertical-align: middle; flex-shrink: 0;
 }
-.btn-day {
-    background: #FFFFFF; border: 2px solid var(--border);
-    border-radius: 10px; cursor: pointer; font-family: inherit;
-    font-size: 0.88rem; font-weight: 700; min-height: 44px;
-    color: var(--dim); -webkit-tap-highlight-color: transparent;
+.fat-num { font-size: 0.68rem; font-weight: 700; margin-left: auto; padding-left: 6px; }
+.fat-num.ready { color: var(--legs-fg); }
+.fat-num.recovering { color: var(--core-fg); }
+.fat-num.fried { color: var(--push-fg); }
+
+/* ── Recommended now ─────────────────────────────────────────────── */
+.rec-now { margin-bottom: 4px; }
+.rec-now-label {
+    font-size: 0.7rem; font-weight: 700; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px;
 }
-.btn-day:active { opacity: .75; }
-.btn-day.active.push { border-color: var(--push-fg); background: var(--push-bg); color: var(--push-fg); }
-.btn-day.active.pull { border-color: var(--pull-fg); background: var(--pull-bg); color: var(--pull-fg); }
-.btn-day.active.legs { border-color: var(--legs-fg); background: var(--legs-bg); color: var(--legs-fg); }
-.btn-day.active.core { border-color: var(--core-fg); background: var(--core-bg); color: var(--core-fg); }
+.rec-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.rec-chip {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    font-family: inherit; font-size: 0.85rem; font-weight: 700; color: var(--text);
+    min-height: 42px; padding: 8px 12px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.rec-chip:active { opacity: .75; }
+.rec-chip.priority { border-color: var(--accent); }
+.rec-chip .rc-star { color: var(--accent); font-size: 0.8rem; }
+.rec-chip .rc-add  { color: var(--dim); font-size: 1rem; }
+
+/* ── Picker search ───────────────────────────────────────────────── */
+.picker-search {
+    width: 100%; background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--text); font-family: inherit;
+    font-size: 16px; padding: 11px 12px; margin-bottom: 8px;
+    -webkit-appearance: none; appearance: none;
+}
+.picker-search:focus { outline: none; border-color: var(--accent); }
+
+/* ── Over-fatigue nudge ──────────────────────────────────────────── */
+.fatigue-warn {
+    display: flex; align-items: flex-start; gap: 8px;
+    background: var(--push-bg); border: 1px solid var(--push-fg); border-radius: 10px;
+    padding: 10px 12px; font-size: 0.8rem; color: var(--push-fg); line-height: 1.4;
+}
+.fatigue-warn .fw-x {
+    margin-left: auto; background: none; border: none; color: var(--push-fg);
+    font-size: 1rem; cursor: pointer; font-family: inherit; flex-shrink: 0;
+}
+
+/* ── Live fatigue preview ────────────────────────────────────────── */
+.fat-preview { margin-top: 10px; }
+.fat-preview-label {
+    font-size: 0.64rem; font-weight: 700; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px;
+}
+.fat-preview-rows { display: flex; flex-direction: column; gap: 5px; }
+.fp-row { display: flex; align-items: center; gap: 8px; font-size: 0.74rem; }
+.fp-name { color: var(--muted); width: 64px; flex-shrink: 0; }
+.fp-track { flex: 1; height: 6px; background: var(--surface-2); border-radius: 4px; overflow: hidden; position: relative; }
+.fp-now  { position: absolute; left: 0; top: 0; bottom: 0; background: var(--border); border-radius: 4px; }
+.fp-proj { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; opacity: .85; }
+.fp-val  { width: 58px; text-align: right; color: var(--muted); font-weight: 700; flex-shrink: 0; }
 
 /* ── Exercise blocks ─────────────────────────────────────────────── */
 .exercise-block {
-    background: #FFFFFF; border-radius: 12px; padding: 14px;
+    background: var(--surface); border-radius: 12px; padding: 14px;
 }
 .tier1-block { border: 1px solid var(--t1-bg); }
 
@@ -43,7 +103,7 @@
     margin-bottom: 4px;
 }
 .btn-tier {
-    background: #FFFFFF; border: 2px solid var(--border);
+    background: var(--surface); border: 2px solid var(--border);
     border-radius: 12px; cursor: pointer; font-family: inherit;
     min-height: 60px; padding: 10px 6px;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -75,7 +135,7 @@
 }
 .t2-rec-empty { font-size: 0.82rem; color: var(--dim); }
 .t2-chip {
-    background: #FFFFFF; border: 2px solid var(--border);
+    background: var(--surface); border: 2px solid var(--border);
     border-radius: 10px; cursor: pointer; font-family: inherit;
     font-size: 0.85rem; font-weight: 700; min-height: 44px;
     padding: 8px 14px; color: var(--muted);
@@ -206,7 +266,7 @@
 }
 .btn-save-session {
     background: var(--accent); border: none; border-radius: 12px;
-    color: #fff; cursor: pointer; font-family: inherit;
+    color: var(--bg); cursor: pointer; font-family: inherit;
     font-size: 1.05rem; font-weight: 800;
     min-height: 56px; padding: 16px; width: 100%; margin-top: 6px;
     -webkit-tap-highlight-color: transparent;
@@ -229,7 +289,7 @@
 .pw-weight-input {
     width: 72px; font-size: 1.2rem; font-weight: 800;
     padding: 6px 8px; text-align: center; min-height: 44px;
-    background: #FFFFFF; border: 1px solid var(--border);
+    background: var(--surface); border: 1px solid var(--border);
     border-radius: 8px; color: var(--text);
 }
 .pw-kg     { font-size: 0.72rem; color: var(--dim); }
@@ -281,14 +341,14 @@
     80%      { transform: translateX(4px); }
 }
 .pw-weight-input.error {
-    border-color: #f87171; animation: shake 0.35s ease;
+    border-color: var(--red, #f87171); animation: shake 0.35s ease;
 }
 
 /* ── Tick confirm button ──────────────────────────────────────────── */
 .pw-tick-col { display: flex; align-items: stretch; margin-left: auto; flex-shrink: 0; }
 .pw-tick {
     background: var(--accent); border: none; border-radius: 8px;
-    color: #fff; cursor: pointer; font-size: 1.2rem; font-weight: 800;
+    color: var(--bg); cursor: pointer; font-size: 1.2rem; font-weight: 800;
     min-width: 44px; padding: 0 10px; align-self: stretch;
     display: flex; align-items: center; justify-content: center;
     -webkit-tap-highlight-color: transparent;
@@ -334,7 +394,7 @@
 .pw-btn-scheme:active { border-color: var(--pull-fg); color: var(--pull-fg); }
 .pw-btn-weight:active { border-color: var(--core-fg); color: var(--core-fg); }
 .pw-giveup            { color: var(--dim); }
-.pw-giveup:active     { border-color: #f87171; color: #f87171; }
+.pw-giveup:active     { border-color: var(--red, #f87171); color: var(--red, #f87171); }
 
 /* inline scheme picker (change-scheme flow) */
 .pw-scheme-panel {
@@ -365,7 +425,7 @@
 .pw-weight-unit { font-size: 0.78rem; color: var(--dim); font-weight: 700; }
 .pw-weight-confirm {
     background: var(--accent); border: 1px solid var(--accent);
-    border-radius: 6px; color: #fff; cursor: pointer;
+    border-radius: 6px; color: var(--bg); cursor: pointer;
     font-family: inherit; font-size: 0.78rem; font-weight: 800;
     padding: 8px 12px; -webkit-tap-highlight-color: transparent; white-space: nowrap;
 }
@@ -373,7 +433,7 @@
 
 /* inline give-up confirm panel */
 .pw-giveup-panel {
-    margin-top: 8px; background: #FEE2E2; border: 1px solid #FECACA;
+    margin-top: 8px; background: var(--push-bg); border: 1px solid var(--push-fg);
     border-radius: 8px; padding: 10px 12px;
     display: flex; flex-direction: column; gap: 8px;
 }
@@ -387,7 +447,7 @@
     font-size: 0.75rem; color: var(--dim); white-space: nowrap;
 }
 .pw-giveup-last-input {
-    width: 64px; background: var(--surface); border: 1px solid #FECACA;
+    width: 64px; background: var(--surface); border: 1px solid var(--push-fg);
     border-radius: 6px; color: var(--text); font-family: inherit;
     font-size: 16px; font-weight: 700; padding: 6px 8px;
     -webkit-appearance: none; -moz-appearance: textfield;
@@ -398,7 +458,7 @@
 .pw-giveup-last-input:focus { outline: none; border-color: var(--push-fg); }
 .pw-giveup-btns { display: flex; gap: 6px; }
 .pw-giveup-confirm {
-    flex: 1; background: var(--push-bg); border: 1px solid #FECACA;
+    flex: 1; background: var(--push-bg); border: 1px solid var(--push-fg);
     border-radius: 6px; color: var(--push-fg); cursor: pointer;
     font-family: inherit; font-size: 0.82rem; font-weight: 800;
     padding: 8px; -webkit-tap-highlight-color: transparent;
@@ -419,15 +479,15 @@
     display: flex; align-items: center; gap: 8px;
 }
 .pw-fail-banner {
-    background: #FEE2E2; border: 1px solid #FECACA; border-radius: 8px;
-    padding: 12px 14px; color: #991B1B; font-weight: 600; font-size: 0.88rem;
+    background: var(--push-bg); border: 1px solid var(--push-fg); border-radius: 8px;
+    padding: 12px 14px; color: var(--push-fg); font-weight: 600; font-size: 0.88rem;
     display: flex; align-items: center; gap: 8px;
 }
 
 /* ── Rest timer bar ──────────────────────────────────────────────── */
 #rest-timer-bar {
     position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%) translateY(20px);
-    background: #FFFFFF; border: 1px solid var(--accent);
+    background: var(--surface); border: 1px solid var(--accent);
     border-radius: 20px; padding: 8px 20px;
     display: flex; align-items: center; gap: 10px;
     font-size: 0.88rem; font-weight: 700; color: var(--accent);
@@ -484,7 +544,7 @@
     border: 1px solid transparent; transition: border-color .2s;
 }
 .ss-slot.ss-confirmed { border-color: var(--t2-fg); }
-.ss-slot.ss-done      { border-color: #4ade80; }
+.ss-slot.ss-done      { border-color: var(--green, #4ade80); }
 .ss-slot.ss-failed    { border-color: var(--push-fg); }
 
 .ss-slot-header {
@@ -551,7 +611,7 @@
 
 .ss-round-btn {
     background: var(--accent); border: none; border-radius: 12px;
-    color: #fff; cursor: pointer; font-family: inherit;
+    color: var(--bg); cursor: pointer; font-family: inherit;
     font-size: 1rem; font-weight: 800; min-height: 52px; width: 100%;
     -webkit-tap-highlight-color: transparent;
 }
@@ -803,12 +863,22 @@
 .warmup-head { display: flex; align-items: center; gap: 8px; }
 .warmup-name { font-weight: 700; font-size: 0.9rem; color: var(--text); flex: 1; }
 .warmup-metrics { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.warmup-sets { align-items: center; gap: 12px; }
+.wm-set-count { font-weight: 800; font-size: 0.95rem; color: var(--text); min-width: 60px; text-align: center; }
+.wm-set-btn {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--muted); cursor: pointer; font-family: inherit; font-size: 0.85rem;
+    font-weight: 800; min-height: 44px; padding: 8px 14px;
+    -webkit-tap-highlight-color: transparent;
+}
+.wm-set-btn.add { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.wm-set-btn:active { opacity: .8; }
 .wm-field { display: flex; flex-direction: column; gap: 3px; }
 .wm-field label { font-size: 0.58rem; font-weight: 700; color: var(--dim);
                   text-transform: uppercase; letter-spacing: .05em; }
 .wm-field input { width: 96px; min-height: 44px; padding: 9px 11px; }
 .wm-done-btn {
-    background: #FFFFFF; border: 2px solid var(--swim-fg); color: var(--swim-fg);
+    background: var(--surface); border: 2px solid var(--swim-fg); color: var(--swim-fg);
     border-radius: 10px; font-weight: 800; font-family: inherit; font-size: 0.88rem;
     min-height: 44px; padding: 9px 18px; cursor: pointer;
     -webkit-tap-highlight-color: transparent;
@@ -824,7 +894,7 @@
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
     -webkit-tap-highlight-color: transparent;
 }
-.step-node.active  { background: var(--accent);    color: #fff; }
+.step-node.active  { background: var(--accent);    color: var(--bg); }
 .step-node.done    { background: var(--legs-bg);   color: var(--legs-fg); }
 .step-node.pending { background: var(--surface-2); color: var(--dim); }
 .step-node.locked  { background: var(--surface-2); color: var(--dim); }
@@ -839,7 +909,7 @@
 .mono { font-variant-numeric: tabular-nums; }
 
 .btn-continue-stage {
-    background: var(--accent); border: none; border-radius: 12px; color: #fff;
+    background: var(--accent); border: none; border-radius: 12px; color: var(--bg);
     cursor: pointer; font-family: inherit; font-size: 1rem; font-weight: 800;
     min-height: 52px; padding: 14px; width: 100%; margin-top: 12px;
     -webkit-tap-highlight-color: transparent;
@@ -855,7 +925,7 @@
 }
 .t1-sugg-row { display: flex; gap: 7px; flex-wrap: wrap; }
 .t1-sugg-chip {
-    background: #FFFFFF; border: 1px solid var(--t1-fg); border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--t1-fg); border-radius: 999px;
     color: var(--t1-fg); font-family: inherit; font-size: 0.78rem; font-weight: 700;
     padding: 6px 12px; cursor: pointer; min-height: 36px;
     -webkit-tap-highlight-color: transparent;
@@ -877,7 +947,7 @@
 .t1-m-lifts { display: flex; flex-direction: column; gap: 6px; padding: 0 0 10px; }
 .t1-lift {
     display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
-    background: #FFFFFF; border: 1px solid var(--border); border-radius: 11px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 11px;
     padding: 10px 11px; font-family: inherit; cursor: pointer;
     -webkit-tap-highlight-color: transparent;
 }
@@ -909,10 +979,10 @@
   {% for ts in today_sessions %}
     <div class="continue-banner">
         <div class="continue-banner-info">
-            <div class="continue-banner-title">Today: {{ ts.day_type or 'Gym' }}</div>
+            <div class="continue-banner-title">Session on {{ session_date }}</div>
             <div class="continue-banner-exs">{{ ts.exercise_names or 'No exercises logged yet' }}</div>
         </div>
-        <a href="{{ url_for('session_new') }}?continue={{ ts.id }}" class="btn-continue">Continue</a>
+        <a href="{{ url_for('session_new') }}?continue={{ ts.id }}&date={{ session_date }}" class="btn-continue">Continue</a>
     </div>
   {% endfor %}
 {% endif %}
@@ -920,9 +990,14 @@
 {# ── Continue-mode active bar ────────────────────────────────────── #}
 {% if continue_session %}
 <div class="continue-mode-bar">
-    <div class="continue-mode-label">Continuing today's {{ continue_session.day_type or 'gym' }} session</div>
+    <div class="continue-mode-label">Continuing session on {{ session_date }}</div>
 </div>
 {% endif %}
+
+<div id="draft-banner" class="draft-banner" style="display:none">
+    <span>Recovered your in-progress session.</span>
+    <button type="button" class="draft-discard" onclick="discardDraft()">Discard &amp; start fresh</button>
+</div>
 
 <form method="POST" action="/session/new" id="session-form">
     {% if continue_session %}
@@ -930,21 +1005,26 @@
     {% endif %}
     <div class="form-group">
         <label for="date">Date</label>
-        <input type="date" id="date" name="date" value="{{ session_date }}" required>
+        <input type="date" id="date" name="date" value="{{ session_date }}" required
+               onchange="if (this.value) window.location = '/session/new?date=' + this.value;">
     </div>
 
-    <input type="hidden" name="day_type" id="day-type-input" value="">
+    {# ── Recommended now (fatigue-driven) ────────────────────────── #}
+    <div class="rec-now" id="rec-now" style="display:none">
+        <div class="rec-now-label">Recommended now · freshest</div>
+        <div class="rec-chips" id="rec-chips"></div>
+    </div>
 
     {# ── Connected stepper ───────────────────────────────────────── #}
     <div class="stepper" id="stepper">
-        <button type="button" class="step-node active"  id="step-warmup" onclick="goStage('warmup')" aria-label="Warmup step">1</button>
+        <button type="button" class="step-node active"  id="step-warmup" onclick="goStage('warmup')" aria-label="Fa Jin step">1</button>
         <span class="step-line" id="line-1"></span>
         <button type="button" class="step-node pending" id="step-t1"     onclick="goStage('t1')"     aria-label="Tier 1 step">2</button>
         <span class="step-line" id="line-2"></span>
         <button type="button" class="step-node locked"  id="step-acc"    onclick="goStage('acc')"    aria-label="Accessories step">3</button>
     </div>
     <div class="step-labels">
-        <span id="lbl-warmup" class="on">Warmup</span>
+        <span id="lbl-warmup" class="on">Fa Jin</span>
         <span id="lbl-t1">Tier 1</span>
         <span id="lbl-acc">Accessories</span>
     </div>
@@ -953,9 +1033,9 @@
     <div class="stage wizard-stage is-active" id="stage-warmup">
         <div class="stage-head">
             <span class="stage-step">Step 1</span>
-            <span class="stage-title">Warmup</span>
+            <span class="stage-title">Fa Jin</span>
         </div>
-        <div class="stage-sub">Cardio, mobility &amp; your own warmups — optional.</div>
+        <div class="stage-sub">Mobility &amp; activation — optional. (Cardio is now on the home screen.)</div>
         <div id="warmup-blocks"></div>
         <div class="t2-all-scroll" id="warmup-picker" style="margin-top:4px"></div>
         <button type="button" class="btn-continue-stage" onclick="goStage('t1')">Continue to Tier 1</button>
@@ -980,19 +1060,27 @@
             <span class="stage-step">Step 3</span>
             <span class="stage-title">Accessories — T2 &amp; T3</span>
         </div>
-        <div class="stage-sub">Supporting &amp; aesthetic work, grouped by muscle.</div>
+        <div class="stage-sub">Supporting &amp; aesthetic work — freshest muscles first.</div>
         <div id="t2-blocks"></div>
         <div id="t3-blocks"></div>
-        <p class="picker-label" style="margin-top:6px">By muscle group</p>
+        <input type="text" class="picker-search" id="acc-search"
+               placeholder="Search any exercise…" oninput="filterAccPicker(this.value)"
+               autocomplete="off">
         <div class="t2-all-scroll" id="acc-picker" style="margin-top:2px"></div>
     </div>
 
     {# ── Receipt + remind ────────────────────────────────────────── #}
+    <div id="fatigue-warn" class="fatigue-warn" style="display:none"></div>
+
     <div class="notes-split">
         <div class="receipt-panel">
             <div class="receipt-title">Session Log</div>
             <div class="receipt-body" id="receipt-body">
                 <span class="receipt-empty">Sets appear here as you log them.</span>
+            </div>
+            <div class="fat-preview" id="fat-preview" style="display:none">
+                <div class="fat-preview-label">Projected fatigue after this session</div>
+                <div class="fat-preview-rows" id="fat-preview-rows"></div>
             </div>
         </div>
         <div class="remind-panel">
@@ -1017,6 +1105,11 @@
 
 <script>
     let nextIdx = 1;
+    // Autosave draft (server-side). DRAFT_RAW is a JSON string or null.
+    const DRAFT_RAW = {{ draft_payload | tojson }};
+    let DRAFT = null;
+    try { DRAFT = DRAFT_RAW ? JSON.parse(DRAFT_RAW) : null; } catch (e) { DRAFT = null; }
+    let _autosaveTimer = null, _autosaveReady = false, _restoring = false;
     const PROGS      = {{ progs_json | safe }};
     const TIER1_LIST = {{ tier1_json | safe }};
     const TIER2_LIST = {{ tier2_json | safe }};
@@ -1024,22 +1117,55 @@
     const TIER4_LIST = {{ tier4_json | safe }};
     const SCHEMES        = {{ schemes_json | safe }};
     const EX_DECAY_DATA  = {}; // exId → fetched decay payload (cached)
+
+    // ── Fatigue / focus data ──────────────────────────────────────
+    const FAT_STATE = {{ fatigue_json | safe }};
+    const EX_MUS    = {{ ex_muscles_json | safe }};
+    const TIER_BASE = {{ tier_base_json | safe }};
+    const PRIORITY  = {{ priority_json | safe }};
+    const PRESELECT = {{ preselect_exid | safe }};
+    const EX_FAT  = {};  FAT_STATE.up_next.forEach(e => { EX_FAT[e.id] = e; });
+    const FAT_NOW = {};  FAT_STATE.muscles.forEach(m => { FAT_NOW[m.muscle] = m.current; });
+    const PRIORITY_IDS = new Set(PRIORITY.map(p => p.exercise_id));
+
+    function _fatBand(v) { return v >= 66 ? 'fried' : (v >= 33 ? 'recovering' : 'ready'); }
+    function _fatColor(v) {
+        return v >= 66 ? 'var(--push-fg)' : (v >= 33 ? 'var(--core-fg)' : 'var(--legs-fg)');
+    }
+    function _exFatNum(exId) { const f = EX_FAT[exId]; return f ? f.fatigue : null; }
+    function _exFatSort(exId) { const f = EX_FAT[exId]; return f ? f.fatigue : 9999; }
+    function _fatDot(exId) {
+        const v = _exFatNum(exId);
+        if (v === null) return '';
+        return `<span class="fat-dot" style="background:${_fatColor(v)}" title="fatigue ${v}/100"></span>`;
+    }
+    function _fatNumTag(exId) {
+        const v = _exFatNum(exId);
+        if (v === null) return '';
+        return `<span class="fat-num ${_fatBand(v)}">${v}</span>`;
+    }
     const T2_ADDED   = new Set();
     const T3_ADDED   = new Set();
     const T1_NAMES   = {}; // idx → exercise name
 
     // ── Receipt ───────────────────────────────────────────────────
     const RECEIPT    = {}; // String(exId) → entry
+    let   RECEIPT_SEQ = 0; // monotonic add-order counter
 
     function renderReceipt() {
         const body = document.getElementById('receipt-body');
         if (!body) return;
-        const entries = Object.values(RECEIPT);
+        const entries = Object.entries(RECEIPT);
         if (!entries.length) {
             body.innerHTML = '<span class="receipt-empty">Sets appear here as you log them.</span>';
+            scheduleAutosave();
             return;
         }
-        body.innerHTML = Object.entries(RECEIPT).map(([exId, e]) => {
+        // Preserve insertion order: assign a seq the first time we see an entry,
+        // then render sorted by seq (object key order is numeric, not add-order).
+        entries.forEach(([, e]) => { if (e.seq === undefined) e.seq = RECEIPT_SEQ++; });
+        entries.sort((a, b) => a[1].seq - b[1].seq);
+        body.innerHTML = entries.map(([exId, e]) => {
             let stat = '';
             if      (e.phase === 'completed') stat = `<span class="receipt-stat ok">✓ ${e.sets}×${e.reps} @ ${_wtDisplay(e.weight, e.unit || 'kg')}</span>`;
             else if (e.phase === 'failed')    stat = `<span class="receipt-stat fail">✗ ${e.tally}/${e.sets} @ ${_wtDisplay(e.weight, e.unit || 'kg')}</span>`;
@@ -1055,6 +1181,9 @@
         }).join('');
         body.scrollTop = body.scrollHeight;
         updateRemindButtons();
+        renderFatiguePreview();
+        buildRecommended();
+        scheduleAutosave();
     }
 
     function removeFromReceipt(exId) {
@@ -1168,13 +1297,16 @@
         const itemsEl = document.createElement('div');
         itemsEl.className = 't2-grp-items';
         itemsEl.id = itemsId;
-        exs.forEach(ex => {
+        exs.slice().sort((a, b) => _exFatSort(a.id) - _exFatSort(b.id)).forEach(ex => {
             const item = document.createElement('div');
             item.className = 't2-all-item' + (addedCheck(ex.id) ? ' added' : '');
             item.id = `${itemId}-ex-${ex.id}`;
+            item.dataset.exname = ex.name.toLowerCase();
             item.innerHTML =
+                _fatDot(ex.id) +
                 `<span class="t2-all-name">${ex.name}` +
                 `<span style="font-size:.73rem;color:var(--dim);font-weight:400">${_dayLabel(ex.days_since)}</span></span>` +
+                _fatNumTag(ex.id) +
                 (checkClass ? `<span class="${checkClass}">✓</span>` : '');
             item.onclick = () => onClickFn(ex);
             itemsEl.appendChild(item);
@@ -1219,34 +1351,6 @@
                 ex => addT3(ex.id, ex.name, ex.muscle_group),
                 id => T3_ADDED.has(id), 't2-all-check')
         );
-    }
-
-    // ── Day type ──────────────────────────────────────────────────
-
-    function setDayType(dt) {
-        document.getElementById('day-type-input').value = dt;
-        document.querySelectorAll('.btn-day').forEach(b => b.classList.remove('active'));
-        const active = document.querySelector('.btn-day.' + dt);
-        if (active) active.classList.add('active');
-        updateT2Picker(dt);
-    }
-
-    function updateT2Picker(dt) {
-        const chips = document.getElementById('t2-rec-chips');
-        const empty = document.getElementById('t2-rec-empty');
-        chips.querySelectorAll('.t2-chip').forEach(c => c.remove());
-        const recs = TIER2_LIST.filter(ex => ex.day_type === dt);
-        empty.style.display = recs.length ? 'none' : '';
-        recs.forEach(ex => {
-            const chip = document.createElement('button');
-            chip.type      = 'button';
-            chip.className = `t2-chip ${dt}${T2_ADDED.has(ex.id) ? ' added' : ''}`;
-            chip.id        = `t2-chip-${ex.id}`;
-            chip.textContent = (T2_ADDED.has(ex.id) ? '✓ ' : '') + ex.name;
-            chip.dataset.exid = ex.id;
-            chip.onclick = () => addT2(ex.id, ex.name, ex.muscle_group);
-            chips.appendChild(chip);
-        });
     }
 
     function buildT2AllList() {
@@ -1476,7 +1580,7 @@
         if (hiddenScheme && prog?.scheme_id) hiddenScheme.value = prog.scheme_id;
         if (hiddenWeight && currentWt)       hiddenWeight.value = currentWt;
 
-        const tierSchemes = SCHEMES[String(tier)] || [];
+        const tierSchemes = SCHEMES['ex_' + String(exId)] || SCHEMES[String(tier)] || [];
         // Build grid with a synthetic prog-like object for stage highlighting
         const gridProg    = { stage: currentStage };
         const gridHtml    = _buildGrid(tierSchemes, gridProg, idx, exId, tier, containerId);
@@ -1573,7 +1677,7 @@
     }
 
     function selectStage(idx, exId, tier, containerId, schemeId) {
-        const tierSchemes = SCHEMES[String(tier)] || [];
+        const tierSchemes = SCHEMES['ex_' + String(exId)] || SCHEMES[String(tier)] || [];
         const scheme = tierSchemes.find(s => s.id === schemeId);
         if (!scheme) return;
         const wtInput    = document.getElementById('pw-wt-input-' + exId);
@@ -1622,7 +1726,7 @@
         // Superset intercept — route to selecting_done instead of tracking
         if (_ssConfirm(idx, exId, tier, containerId, wt, schemeId)) return;
 
-        const tierSchemes = SCHEMES[String(tier)] || [];
+        const tierSchemes = SCHEMES['ex_' + String(exId)] || SCHEMES[String(tier)] || [];
         const scheme      = tierSchemes.find(s => s.id === schemeId) || {};
         const _st = {
             phase: 'tracking', tally: 0,
@@ -1703,7 +1807,7 @@
 
     function applySchemeChange(idx, exId, tier, containerId, schemeId) {
         const st          = EX_PHASE[String(exId)];
-        const tierSchemes = SCHEMES[String(tier)] || [];
+        const tierSchemes = SCHEMES['ex_' + String(exId)] || SCHEMES[String(tier)] || [];
         const scheme      = tierSchemes.find(s => s.id === schemeId);
         if (!st || !scheme) return;
         st.phase     = 'tracking';
@@ -1825,6 +1929,7 @@
         document.getElementById('t2-blocks').appendChild(block);
         showExerciseDecay('decay-strip-' + idx, exId, 2);
         renderProgWidget('prog-widget-' + idx, exId, 2, PROGS[String(exId)]);
+        maybeWarn(exId); buildRecommended(); renderFatiguePreview();
     }
 
     function removeT2Block(btn, exId, exName) {
@@ -1879,6 +1984,7 @@
         }
         const prog = PROGS[String(exId)];
         renderProgWidget('prog-widget-' + idx, exId, 3, prog);
+        maybeWarn(exId); buildRecommended(); renderFatiguePreview();
     }
 
     function removeT3Block(btn, exId) {
@@ -2126,7 +2232,7 @@
         const grp     = SUPERSET_GROUPS[groupId];
         if (!grp) return false;
 
-        const tierSchemes = SCHEMES[String(tier)] || [];
+        const tierSchemes = SCHEMES['ex_' + String(exId)] || SCHEMES[String(tier)] || [];
         const scheme      = tierSchemes.find(s => s.id === schemeId) || {};
         const prog        = PROGS[String(exId)];
 
@@ -2454,8 +2560,8 @@
         'Legs':             'var(--legs-fg)',
         'Shoulders':        'var(--core-fg)',
         'Biceps':           'var(--swim-fg)',
-        'Triceps':          '#fb923c',
-        'Core':             '#f87171',
+        'Triceps':          'var(--waiting, #fb923c)',
+        'Core':             'var(--red, #f87171)',
         'Posterior Chain':  'var(--legs-fg)',
         'Upper Back':       'var(--t1-fg)',
     };
@@ -2720,13 +2826,15 @@
         const lw = (ex.last_weight != null)
             ? `<span class="mono">${ex.last_weight}</span> kg · ` : '';
         const pr = ex.is_pr ? `<span class="pill-pr">PR</span>` : '';
+        const fv = _exFatNum(ex.id);
+        const fatSub = fv !== null ? ` · <span class="fat-num ${_fatBand(fv)}" style="margin:0">fat ${fv}</span>` : '';
         const right = rec
             ? `<span class="pill-sugg">Suggested</span>`
             : (used ? `<span class="t1-lift-add done">✓</span>` : `<span class="t1-lift-add">+</span>`);
         return `<button type="button" class="t1-lift${rec ? ' rec' : ''}" ${used ? 'disabled' : ''} onclick="pickT1Lift(${ex.id})">
             <span class="t1-lift-main">
-                <span class="t1-lift-name">${ex.name}${pr}</span>
-                <span class="t1-lift-sub">${lw}<span class="${dm.cls}">${dm.label}</span></span>
+                <span class="t1-lift-name">${_fatDot(ex.id)}${ex.name}${pr}</span>
+                <span class="t1-lift-sub">${lw}<span class="${dm.cls}">${dm.label}</span>${fatSub}</span>
             </span>${right}</button>`;
     }
 
@@ -2738,44 +2846,39 @@
         const groups = {};
         TIER1_LIST.forEach(ex => { (groups[ex.muscle_group] = groups[ex.muscle_group] || []).push(ex); });
 
-        // Muscle staleness = most-recent (min) days_since; never = most stale
-        const order = Object.keys(groups).map(g => {
-            let st = null;
-            groups[g].forEach(ex => { const d = ex.days_since; if (d != null && (st == null || d < st)) st = d; });
-            return { g, st };
-        });
-        order.sort((a, b) => (a.st == null ? 9999 : a.st) < (b.st == null ? 9999 : b.st) ? 1 : -1);
+        // Freshest muscle first = lowest current fatigue
+        const order = Object.keys(groups).map(g => ({ g, fat: (FAT_NOW[g] != null ? FAT_NOW[g] : 0) }));
+        order.sort((a, b) => a.fat - b.fat || a.g.localeCompare(b.g));
 
-        // Suggested = top 2 stalest muscles, each's most-overdue unused lift
+        // Suggested = freshest 2 muscles, each's freshest unused lift
         const sugg = [];
         order.forEach(o => {
             if (sugg.length >= 2) return;
             const lifts = groups[o.g].filter(ex => !usedSet.has(ex.id));
             if (!lifts.length) return;
-            lifts.sort((a, b) => (a.days_since == null ? 9999 : a.days_since) < (b.days_since == null ? 9999 : b.days_since) ? 1 : -1);
+            lifts.sort((a, b) => _exFatSort(a.id) - _exFatSort(b.id));
             sugg.push(lifts[0]);
         });
         const recId = sugg.length ? sugg[0].id : null;
 
         let html = '';
         if (sugg.length) {
-            html += `<div class="t1-sugg"><div class="t1-sugg-label">Suggested today</div><div class="t1-sugg-row">`
-                + sugg.map(ex => `<button type="button" class="t1-sugg-chip" onclick="pickT1Lift(${ex.id})">${ex.name} · ${ex.days_since == null ? 'new' : ex.days_since + 'd'}</button>`).join('')
+            html += `<div class="t1-sugg"><div class="t1-sugg-label">Freshest right now</div><div class="t1-sugg-row">`
+                + sugg.map(ex => `<button type="button" class="t1-sugg-chip" onclick="pickT1Lift(${ex.id})">${_fatDot(ex.id)}${ex.name} · ${_exFatNum(ex.id) === null ? 'new' : 'fat ' + _exFatNum(ex.id)}</button>`).join('')
                 + `</div></div>`;
         }
-        html += `<div class="t1-sel-hint">Stalest muscle first — open one to choose the lift.</div>`;
+        html += `<div class="t1-sel-hint">Freshest muscle first — open one to choose the lift.</div>`;
         html += order.map(o => {
-            const meta = staleMeta(o.st);
             const open = T1_OPEN_M === o.g;
-            const pct = Math.min(100, o.st == null ? 100 : Math.round(o.st / 18 * 100));
-            const mlabel = o.st == null ? 'never' : o.st + 'd';
+            const pct  = Math.min(100, Math.round(o.fat));
+            const band = _fatBand(o.fat);
             const head = `<button type="button" class="t1-m-head" onclick="toggleT1Muscle('${o.g.replace(/'/g, "\\'")}')">
                 <span class="t1-m-name">${o.g}</span>
-                <span class="t1-m-bar"><span class="t1-m-fill ${meta.cls}" style="width:${pct}%"></span></span>
-                <span class="t1-m-days ${meta.cls}">${mlabel}</span>
+                <span class="t1-m-bar"><span class="t1-m-fill" style="width:${pct}%;background:${_fatColor(o.fat)}"></span></span>
+                <span class="t1-m-days fat-num ${band}" style="margin:0">${pct}</span>
                 <span class="t1-m-chev">${open ? '⌄' : '›'}</span></button>`;
             const lifts = open
-                ? `<div class="t1-m-lifts">` + groups[o.g].map(ex => _t1LiftRow(ex, ex.id === recId, usedSet)).join('') + `</div>`
+                ? `<div class="t1-m-lifts">` + groups[o.g].slice().sort((a, b) => _exFatSort(a.id) - _exFatSort(b.id)).map(ex => _t1LiftRow(ex, ex.id === recId, usedSet)).join('') + `</div>`
                 : '';
             return `<div class="t1-m-group">${head}${lifts}</div>`;
         }).join('');
@@ -2828,6 +2931,7 @@
         EX_REPS_ONLY[String(exId)]  = !!(exData && exData.reps_only);
         showExerciseDecay('decay-strip-' + idx, exId, 1);
         renderProgWidget('prog-widget-' + idx, exId, 1, PROGS[String(exId)]);
+        maybeWarn(exId); buildRecommended(); renderFatiguePreview();
     }
 
     function cancelT1Block(idx) {
@@ -2844,13 +2948,26 @@
     function buildWarmupPicker() {
         const container = document.getElementById('warmup-picker');
         if (!container) return;
-        const groups = {};
-        TIER4_LIST.forEach(ex => { (groups[ex.muscle_group] = groups[ex.muscle_group] || []).push(ex); });
-        Object.entries(groups).forEach(([grp, exs]) =>
-            _buildAccordionGroup(container, grp, exs, 'wup',
-                ex => addWarmup(ex),
-                id => WARMUP_ADDED.has(id), 't2-all-check')
-        );
+        container.innerHTML = '';
+        const itemsEl = document.createElement('div');
+        itemsEl.className = 't2-grp-items open';
+        TIER4_LIST.slice()
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .forEach(ex => {
+                const item = document.createElement('div');
+                item.className = 't2-all-item' + (WARMUP_ADDED.has(ex.id) ? ' added' : '');
+                item.id = 'wup-ex-' + ex.id;
+                item.dataset.exname = ex.name.toLowerCase();
+                item.innerHTML =
+                    _fatDot(ex.id) +
+                    `<span class="t2-all-name">${ex.name}` +
+                    `<span style="font-size:.73rem;color:var(--dim);font-weight:400">${_dayLabel(ex.days_since)}</span></span>` +
+                    _fatNumTag(ex.id) +
+                    `<span class="t2-all-check">✓</span>`;
+                item.onclick = () => addWarmup(ex);
+                itemsEl.appendChild(item);
+            });
+        container.appendChild(itemsEl);
     }
 
     function addWarmup(ex) {
@@ -2861,10 +2978,28 @@
 
         const sfx = 'w' + (WARMUP_SEQ++);
         const m = ex.metrics || {};
-        const doneOnly = !('distance' in m) && !m.time && !m.resistance;
+        const setsMode = !!m.sets;
+        const weightMode = !!m.weight;
+        const doneOnly = !setsMode && !weightMode && !('distance' in m) && !m.time && !m.resistance;
 
         let metricsHtml;
-        if (doneOnly) {
+        if (setsMode || weightMode) {
+            const setsBlock = setsMode ? `<div class="warmup-metrics warmup-sets">
+                <input type="hidden" name="cardio_sets_${sfx}" id="wm-sets-${sfx}" value="0">
+                <button type="button" class="wm-set-btn" onclick="warmupSetAdd(${ex.id},'${sfx}',${m.sets},-1)">−</button>
+                <span class="wm-set-count" id="wm-set-count-${sfx}">0 × ${m.sets}</span>
+                <button type="button" class="wm-set-btn add" onclick="warmupSetAdd(${ex.id},'${sfx}',${m.sets},1)">+ set of ${m.sets}</button>
+            </div>` : '';
+            const weightBlock = weightMode ? `<div class="warmup-metrics">
+                <div class="wm-field">
+                    <label>Weight (kg)</label>
+                    <input type="number" name="cardio_weight_${sfx}" min="0" step="0.5"
+                           inputmode="decimal" placeholder="0"
+                           oninput="updateWarmupSummary(${ex.id},'${sfx}')">
+                </div>
+            </div>` : '';
+            metricsHtml = weightBlock + setsBlock;
+        } else if (doneOnly) {
             metricsHtml = `<div class="warmup-metrics">
                 <input type="hidden" name="cardio_done_${sfx}" id="wm-done-${sfx}" value="">
                 <button type="button" class="wm-done-btn" id="wm-done-btn-${sfx}"
@@ -2887,6 +3022,11 @@
                 <input type="number" name="cardio_resistance_${sfx}" min="0" step="any"
                        inputmode="decimal" placeholder="0"
                        oninput="updateWarmupSummary(${ex.id},'${sfx}')"></div>`;
+            if (m.speed) fields += `<div class="wm-field">
+                <label>Speed</label>
+                <input type="number" name="cardio_speed_${sfx}" min="0" step="any"
+                       inputmode="decimal" placeholder="0"
+                       oninput="updateWarmupSummary(${ex.id},'${sfx}')"></div>`;
             metricsHtml = `<div class="warmup-metrics">${fields}</div>`;
         }
 
@@ -2905,24 +3045,47 @@
         document.getElementById('warmup-blocks').appendChild(block);
 
         RECEIPT[String(ex.id)] = { name: ex.name, tier: 4, phase: 't4',
-            summary: doneOnly ? 'done?' : 'logging', muscle_group: ex.muscle_group };
+            summary: setsMode ? `0 × ${m.sets}` : ((doneOnly || weightMode) ? 'done?' : 'logging'),
+            muscle_group: ex.muscle_group };
         renderReceipt();
         setProgressChip('warmup', 'done');
     }
+
+    window.warmupSetAdd = function (exId, sfx, per, delta) {
+        const hidden = document.getElementById('wm-sets-' + sfx);
+        if (!hidden) return;
+        let n = (parseInt(hidden.value, 10) || 0) + delta;
+        if (n < 0) n = 0;
+        hidden.value = n;
+        const cnt = document.getElementById('wm-set-count-' + sfx);
+        if (cnt) cnt.textContent = n + ' × ' + per;
+        updateWarmupSummary(exId, sfx);
+    };
 
     function updateWarmupSummary(exId, sfx) {
         const re = RECEIPT[String(exId)];
         if (!re) return;
         const ex   = TIER4_LIST.find(e => String(e.id) === String(exId)) || {};
         const unit = (ex.metrics && ex.metrics.distance) || 'm';
+        const per  = (ex.metrics && ex.metrics.sets) || null;
         const dist = document.querySelector(`[name="cardio_distance_${sfx}"]`);
         const dur  = document.querySelector(`[name="cardio_duration_${sfx}"]`);
         const res  = document.querySelector(`[name="cardio_resistance_${sfx}"]`);
+        const spd  = document.querySelector(`[name="cardio_speed_${sfx}"]`);
+        const wt   = document.querySelector(`[name="cardio_weight_${sfx}"]`);
+        const setsHidden = document.getElementById('wm-sets-' + sfx);
+        const setsN = setsHidden ? (parseInt(setsHidden.value, 10) || 0) : 0;
         const parts = [];
+        if (wt && wt.value)     parts.push(wt.value + 'kg');
+        if (per !== null)       parts.push(setsN + ' × ' + per);
         if (dist && dist.value) parts.push(dist.value + unit);
         if (dur && dur.value)   parts.push(dur.value + 'min');
         if (res && res.value)   parts.push('L' + res.value);
-        re.summary = parts.length ? parts.join(' · ') : 'logging';
+        if (spd && spd.value)   parts.push(spd.value + ' spd');
+        const doneHidden = document.getElementById('wm-done-' + sfx);
+        const doneOn = doneHidden && doneHidden.value === '1';
+        if (parts.length) re.summary = parts.join(' · ') + (doneOn ? ' · done' : '');
+        else re.summary = doneOn ? 'done' : 'logging';
         renderReceipt();
     }
 
@@ -2953,16 +3116,22 @@
     function buildAccessoryPicker() {
         const container = document.getElementById('acc-picker');
         if (!container) return;
+        container.innerHTML = '';
         const groups = {};
         TIER2_LIST.forEach(ex => { (groups[ex.muscle_group] = groups[ex.muscle_group] || []).push(Object.assign({}, ex, {tier: 2})); });
         TIER3_LIST.forEach(ex => { (groups[ex.muscle_group] = groups[ex.muscle_group] || []).push(Object.assign({}, ex, {tier: 3})); });
-        Object.keys(groups).sort().forEach(grp => {
+        const grpOrder = Object.keys(groups).sort((a, b) =>
+            ((FAT_NOW[a] != null ? FAT_NOW[a] : 0) - (FAT_NOW[b] != null ? FAT_NOW[b] : 0)) || a.localeCompare(b));
+        grpOrder.forEach(grp => {
             const itemsId = 'acc-items-' + grp.replace(/\s+/g, '-');
+            const gf = FAT_NOW[grp];
+            const badge = (gf != null)
+                ? `<span class="fat-num ${_fatBand(gf)}" style="margin-left:auto;margin-right:8px">${gf}</span>` : '';
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 't2-grp-btn';
             btn.dataset.group = grp;
-            btn.innerHTML = `<span>${grp}</span><span class="t2-grp-arrow">›</span>`;
+            btn.innerHTML = `<span>${grp}</span>${badge}<span class="t2-grp-arrow">›</span>`;
             btn.onclick = () => {
                 const open = btn.classList.toggle('open');
                 document.getElementById(itemsId).classList.toggle('open', open);
@@ -2972,15 +3141,18 @@
             const itemsEl = document.createElement('div');
             itemsEl.className = 't2-grp-items';
             itemsEl.id = itemsId;
-            groups[grp].forEach(ex => {
+            groups[grp].slice().sort((a, b) => _exFatSort(a.id) - _exFatSort(b.id)).forEach(ex => {
                 const added = ex.tier === 2 ? T2_ADDED.has(ex.id) : T3_ADDED.has(ex.id);
                 const item = document.createElement('div');
                 item.className = 't2-all-item' + (added ? ' added' : '');
                 item.id = ex.tier === 2 ? ('t2-all-' + ex.id) : ('t3p-ex-' + ex.id);
+                item.dataset.exname = ex.name.toLowerCase();
                 item.innerHTML =
                     `<span class="tier-badge t${ex.tier}" style="margin-right:6px">T${ex.tier}</span>` +
+                    _fatDot(ex.id) +
                     `<span class="t2-all-name">${ex.name}` +
                     `<span style="font-size:.73rem;color:var(--dim);font-weight:400">${_dayLabel(ex.days_since)}</span></span>` +
+                    _fatNumTag(ex.id) +
                     `<span class="t2-all-check">✓</span>`;
                 item.onclick = () => ex.tier === 2
                     ? addT2(ex.id, ex.name, ex.muscle_group)
@@ -2988,6 +3160,32 @@
                 itemsEl.appendChild(item);
             });
             container.appendChild(itemsEl);
+        });
+    }
+
+    function filterAccPicker(q) {
+        q = (q || '').trim().toLowerCase();
+        const container = document.getElementById('acc-picker');
+        if (!container) return;
+        const itemSets = container.querySelectorAll('.t2-grp-items');
+        if (!q) {
+            container.querySelectorAll('.t2-grp-btn').forEach(b => { b.style.display = ''; b.classList.remove('open'); });
+            itemSets.forEach(s => { s.classList.remove('open'); s.querySelectorAll('.t2-all-item').forEach(i => i.style.display = ''); });
+            return;
+        }
+        itemSets.forEach(s => {
+            let any = false;
+            s.querySelectorAll('.t2-all-item').forEach(i => {
+                const match = (i.dataset.exname || '').includes(q);
+                i.style.display = match ? '' : 'none';
+                if (match) any = true;
+            });
+            s.classList.toggle('open', any);
+            const btn = s.previousElementSibling;
+            if (btn && btn.classList.contains('t2-grp-btn')) {
+                btn.style.display = any ? '' : 'none';
+                btn.classList.toggle('open', any);
+            }
         });
     }
 
@@ -3000,12 +3198,184 @@
         document.getElementById('stage-acc').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
+    // ── Recommended now / quick add / nudge / preview ─────────────
+
+    function _findEx(exId) {
+        return TIER1_LIST.find(e => e.id === exId)
+            || TIER2_LIST.find(e => e.id === exId)
+            || TIER3_LIST.find(e => e.id === exId) || null;
+    }
+    function _exTier(exId) {
+        if (TIER1_LIST.some(e => e.id === exId)) return 1;
+        if (TIER2_LIST.some(e => e.id === exId)) return 2;
+        if (TIER3_LIST.some(e => e.id === exId)) return 3;
+        return null;
+    }
+
+    function quickAdd(exId) {
+        const ex = _findEx(exId); if (!ex) return;
+        const tier = _exTier(exId);
+        if (tier === 1) {
+            if (_t1UsedIds().has(exId)) return;
+            const sel = document.getElementById('t1-select');
+            if (sel) sel.style.display = 'none';
+            addT1Block(exId, ex.name);
+            const b = document.getElementById('btn-add-t1'); if (b) b.style.display = '';
+            updateT1Counter();
+        } else if (tier === 2) {
+            addT2(exId, ex.name, ex.muscle_group);
+        } else if (tier === 3) {
+            addT3(exId, ex.name, ex.muscle_group);
+        }
+    }
+
+    function buildRecommended() {
+        const wrap  = document.getElementById('rec-now');
+        const chips = document.getElementById('rec-chips');
+        if (!wrap || !chips) return;
+        const added = new Set(Object.keys(RECEIPT).map(Number));
+        const picks = [];
+        PRIORITY.forEach(p => {
+            if (!added.has(p.exercise_id) && _findEx(p.exercise_id)) picks.push({ id: p.exercise_id, priority: true });
+        });
+        FAT_STATE.up_next.forEach(e => {
+            if (picks.length >= 5 || added.has(e.id) || PRIORITY_IDS.has(e.id) || !_findEx(e.id)) return;
+            picks.push({ id: e.id, priority: false });
+        });
+        if (!picks.length) { wrap.style.display = 'none'; return; }
+        wrap.style.display = '';
+        chips.innerHTML = picks.slice(0, 5).map(p => {
+            const ex = _findEx(p.id);
+            const v  = _exFatNum(p.id);
+            return `<button type="button" class="rec-chip${p.priority ? ' priority' : ''}" onclick="quickAdd(${p.id})">
+                ${p.priority ? '<span class="rc-star">★</span>' : _fatDot(p.id)}
+                <span>${ex.name}</span>
+                ${v !== null ? `<span class="fat-num ${_fatBand(v)}" style="margin:0">${v}</span>` : ''}
+                <span class="rc-add">+</span></button>`;
+        }).join('');
+    }
+
+    function maybeWarn(exId) {
+        const f = EX_FAT[exId];
+        const box = document.getElementById('fatigue-warn');
+        if (!box || !f || f.fatigue < 66) return;
+        box.innerHTML = `<span>${f.primary} is still cooling (${f.fatigue}/100). Adding load here slows recovery — go light or rest it.</span>`
+            + `<button type="button" class="fw-x" onclick="dismissWarn()" aria-label="Dismiss">×</button>`;
+        box.style.display = 'flex';
+    }
+    function dismissWarn() {
+        const box = document.getElementById('fatigue-warn');
+        if (box) box.style.display = 'none';
+    }
+
+    function renderFatiguePreview() {
+        const wrap = document.getElementById('fat-preview');
+        const rows = document.getElementById('fat-preview-rows');
+        if (!wrap || !rows) return;
+        const add = {};
+        Object.entries(RECEIPT).forEach(([exId, e]) => {
+            if (!e || e.tier === 4) return;
+            const base = TIER_BASE[e.tier]; if (!base) return;
+            (EX_MUS[exId] || []).forEach(([m, eng]) => { add[m] = (add[m] || 0) + base * eng; });
+        });
+        const muscles = Object.keys(add);
+        if (!muscles.length) { wrap.style.display = 'none'; return; }
+        wrap.style.display = '';
+        muscles.sort((a, b) =>
+            ((FAT_NOW[b] || 0) + add[b]) - ((FAT_NOW[a] || 0) + add[a]));
+        rows.innerHTML = muscles.map(m => {
+            const now  = FAT_NOW[m] != null ? FAT_NOW[m] : 0;
+            const proj = Math.min(100, Math.round(now + add[m]));
+            return `<div class="fp-row">
+                <span class="fp-name">${m}</span>
+                <span class="fp-track">
+                    <span class="fp-proj" style="width:${proj}%;background:${_fatColor(proj)}"></span>
+                    <span class="fp-now" style="width:${Math.round(now)}%"></span>
+                </span>
+                <span class="fp-val">${Math.round(now)}→${proj}</span></div>`;
+        }).join('');
+    }
+
+    // ── Autosave (server-side draft; recovers after refresh/timeout) ──
+    function scheduleAutosave() {
+        if (!_autosaveReady || _restoring) return;
+        clearTimeout(_autosaveTimer);
+        _autosaveTimer = setTimeout(doAutosave, 600);
+    }
+    function doAutosave() {
+        let snap;
+        try { snap = JSON.stringify(_sessSerialize()); } catch (e) { return; }
+        const dateEl = document.getElementById('date');
+        fetch('/session/draft', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window._csrf },
+            body:    JSON.stringify({ date: dateEl ? dateEl.value : '', payload: snap }),
+        }).catch(() => {});
+    }
+    function _sessSerialize() {
+        const form = document.getElementById('session-form');
+        const controls = [];
+        form.querySelectorAll('input, select, textarea').forEach(el => {
+            controls.push([el.value, el.checked ? 1 : 0]);
+        });
+        const activeStage = document.querySelector('.wizard-stage.is-active');
+        return {
+            html:     form.innerHTML,
+            controls: controls,
+            stage:    activeStage ? activeStage.id : 'stage-warmup',
+            state: {
+                RECEIPT: RECEIPT, EX_PHASE: EX_PHASE,
+                SUPERSET_GROUPS: SUPERSET_GROUPS, T1_NAMES: T1_NAMES,
+                T2_ADDED: [...T2_ADDED], T3_ADDED: [...T3_ADDED], WARMUP_ADDED: [...WARMUP_ADDED],
+                nextIdx: nextIdx, ssCounter: ssCounter,
+                WARMUP_SEQ: WARMUP_SEQ, RECEIPT_SEQ: RECEIPT_SEQ,
+            },
+        };
+    }
+    function _sessRestore(d) {
+        if (!d || !d.html) return;
+        _restoring = true;
+        const form = document.getElementById('session-form');
+        form.innerHTML = d.html;
+        const controls = form.querySelectorAll('input, select, textarea');
+        (d.controls || []).forEach((c, i) => {
+            const el = controls[i];
+            if (!el) return;
+            el.value = c[0];
+            if (el.type === 'checkbox' || el.type === 'radio') el.checked = !!c[1];
+        });
+        const s = d.state || {};
+        [[RECEIPT, s.RECEIPT], [EX_PHASE, s.EX_PHASE],
+         [SUPERSET_GROUPS, s.SUPERSET_GROUPS], [T1_NAMES, s.T1_NAMES]].forEach(([obj, src]) => {
+            Object.keys(obj).forEach(k => delete obj[k]);
+            if (src) Object.assign(obj, src);
+        });
+        T2_ADDED.clear();     (s.T2_ADDED || []).forEach(x => T2_ADDED.add(x));
+        T3_ADDED.clear();     (s.T3_ADDED || []).forEach(x => T3_ADDED.add(x));
+        WARMUP_ADDED.clear(); (s.WARMUP_ADDED || []).forEach(x => WARMUP_ADDED.add(x));
+        if (s.nextIdx)    nextIdx     = s.nextIdx;
+        if (s.ssCounter)  ssCounter   = s.ssCounter;
+        if (s.WARMUP_SEQ) WARMUP_SEQ  = s.WARMUP_SEQ;
+        if (s.RECEIPT_SEQ) RECEIPT_SEQ = s.RECEIPT_SEQ;
+        renderReceipt();
+        _restoring = false;
+    }
+    window.discardDraft = function () {
+        const dateEl = document.getElementById('date');
+        fetch('/session/draft/clear', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window._csrf },
+            body:    JSON.stringify({ date: dateEl ? dateEl.value : '' }),
+        }).finally(() => { window.location = '/session/new'; });
+    };
+
     // ── Init ──────────────────────────────────────────────────────
 
     document.addEventListener('DOMContentLoaded', () => {
         buildWarmupPicker();
         buildAccessoryPicker();
         buildT1Selector();
+        buildRecommended();
         let _startStage = 'warmup';
         {% if continue_session and continue_session.exercises %}
         {% for ex in continue_session.exercises %}
@@ -3030,11 +3400,28 @@
         {% endif %}
         updateT1Counter();
         goStage(_startStage);
+        if (PRESELECT) {
+            quickAdd(PRESELECT);
+            goStage(_exTier(PRESELECT) === 1 ? 't1' : 'acc');
+        }
         document.getElementById('session-form').addEventListener('submit', () => {
             const btn = document.querySelector('.btn-save-session');
             btn.disabled = true;
             btn.textContent = 'Saving…';
         });
+
+        // Recover an autosaved in-progress session, if any.
+        if (DRAFT) {
+            _sessRestore(DRAFT);
+            if (DRAFT.stage) goStage(String(DRAFT.stage).replace('stage-', ''));
+            const banner = document.getElementById('draft-banner');
+            if (banner) banner.style.display = '';
+        }
+        // Autosave on every change (debounced) so a refresh/timeout never loses work.
+        const _form = document.getElementById('session-form');
+        _form.addEventListener('input',  scheduleAutosave);
+        _form.addEventListener('change', scheduleAutosave);
+        _autosaveReady = true;
     });
 </script>
 {% endblock %}

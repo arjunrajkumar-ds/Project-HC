@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}Analytics{% endblock %}
+{% block body_class %}{% if not current_profile or current_profile.id != 2 %}pandora{% endif %}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -34,13 +35,15 @@
     text-transform: uppercase; letter-spacing: .05em;
     transition: background .15s, color .15s;
 }
-.pill.active { background: var(--accent); color: #fff; }
+.pill.active { background: var(--accent); color: var(--bg); }
 .pill:active { opacity: .75; }
 </style>
 {% endblock %}
 
 {% block content %}
 <h1>Analytics</h1>
+
+<a href="/exercise-bank" class="btn btn-secondary btn-full" style="margin-bottom:22px; text-decoration:none;">Exercise Bank ›</a>
 
 {# ── 0. Activity Calendar ──────────────────────────────────────────── #}
 <section class="section">
@@ -117,9 +120,24 @@
     const VOLUME_DATA = {{ volume_data | safe }};
     const SWIM_DATA   = {{ swim_data | safe }};
 
-    Chart.defaults.color        = '#6B7280';
-    Chart.defaults.borderColor  = '#E8E5DF';
-    Chart.defaults.font.family  = "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+    const _cs = getComputedStyle(document.body);
+    const THEME = {
+        tick:   (_cs.getPropertyValue('--muted') || '#6B7280').trim(),
+        grid:   (_cs.getPropertyValue('--border') || '#E8E5DF').trim(),
+        accent: (_cs.getPropertyValue('--accent') || '#c46bff').trim(),
+        blue:   (_cs.getPropertyValue('--blue')  || '#6bb3ff').trim(),
+        swim:   (_cs.getPropertyValue('--swim-fg') || '#38bdf8').trim(),
+        font:   (_cs.getPropertyValue('--font-sans') || "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif").trim(),
+    };
+    function _rgba(hex, a) {
+        const m = hex.replace('#','');
+        if (m.length !== 6) return hex;
+        const n = parseInt(m, 16);
+        return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
+    }
+    Chart.defaults.color        = THEME.tick;
+    Chart.defaults.borderColor  = THEME.grid;
+    Chart.defaults.font.family  = THEME.font;
     Chart.defaults.font.size    = 11;
 
     let progChart = null;
@@ -136,10 +154,10 @@
                 datasets: [{
                     label: name,
                     data: data.weights,
-                    borderColor: '#c46bff',
-                    backgroundColor: 'rgba(196,107,255,0.10)',
+                    borderColor: THEME.accent,
+                    backgroundColor: _rgba(THEME.accent, 0.12),
                     borderWidth: 2,
-                    pointBackgroundColor: '#c46bff',
+                    pointBackgroundColor: THEME.accent,
                     pointRadius: 4,
                     tension: 0.3, fill: true,
                 }]
@@ -163,8 +181,8 @@
             labels: WEEK_LABELS,
             datasets: [{
                 data: VOLUME_DATA,
-                backgroundColor: 'rgba(107,179,255,0.65)',
-                borderColor: '#6bb3ff', borderWidth: 1, borderRadius: 4,
+                backgroundColor: _rgba(THEME.blue, 0.55),
+                borderColor: THEME.blue, borderWidth: 1, borderRadius: 4,
             }]
         },
         options: {
@@ -183,8 +201,8 @@
             labels: WEEK_LABELS,
             datasets: [{
                 data: SWIM_DATA,
-                backgroundColor: 'rgba(56,189,248,0.65)',
-                borderColor: '#38bdf8', borderWidth: 1, borderRadius: 4,
+                backgroundColor: _rgba(THEME.swim, 0.55),
+                borderColor: THEME.swim, borderWidth: 1, borderRadius: 4,
             }]
         },
         options: {
