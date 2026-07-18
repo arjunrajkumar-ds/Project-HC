@@ -356,6 +356,44 @@
 }
 .gym-toggle input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 
+/* ── Gayathri: coloured group accordion ──────────────────────────────── */
+.g-group { --g-color: var(--accent); margin-bottom: 8px; }
+.g-group[data-group="Push"]     { --g-color: #e07a7a; }
+.g-group[data-group="Pull"]     { --g-color: #6b93c9; }
+.g-group[data-group="Legs"]     { --g-color: #7fb069; }
+.g-group[data-group="Core"]     { --g-color: #a785c2; }
+.g-group[data-group="Mobility"] { --g-color: #6bb0a8; }
+.g-group[data-group="Balance"]  { --g-color: #d4c574; }
+.g-head {
+    display: grid; grid-template-columns: 4px 1fr auto auto; align-items: center; gap: 10px;
+    width: 100%; background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 12px 14px 12px 10px;
+    cursor: pointer; text-align: left;
+    font-family: inherit; color: var(--text-strong);
+    -webkit-tap-highlight-color: transparent;
+}
+.g-head:active { opacity: .8; }
+.g-stripe { display: block; width: 4px; height: 22px; border-radius: 2px; background: var(--g-color); }
+.g-title { font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--g-color); }
+.g-status { font-family: var(--font-mono); font-size: 12px; color: var(--dim); }
+.g-covered .g-status { color: var(--g-color); font-weight: 700; }
+.g-chev { color: var(--dimmer); font-size: 14px; transition: transform .15s; }
+.g-group.open .g-chev { transform: rotate(90deg); color: var(--g-color); }
+.g-group.open .g-head { border-radius: var(--radius-md) var(--radius-md) 0 0; border-bottom-color: transparent; }
+.g-group .tap-list { display: none; }
+.g-group.open .tap-list {
+    display: flex; flex-direction: column; gap: 6px;
+    border: 1px solid var(--border); border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    padding: 8px 10px 10px;
+}
+.g-group .tap-add,
+.g-group .tap-log { background: var(--g-color); }
+.g-group .tap-tally [data-role="sets"],
+.g-group .tap-tally [data-role="total"] { color: var(--g-color); }
+.g-group .tap-row.just-logged { border-color: var(--g-color); }
+.g-group .tap-custom-btn.open { border-color: var(--g-color); color: var(--g-color); }
+
 /* ── Gayathri: tap-to-log rows ────────────────────────────────────────── */
 .tap-list { display: flex; flex-direction: column; gap: 6px; }
 .tap-row {
@@ -459,10 +497,15 @@
     <span>Show gym-only exercises</span>
 </label>
 
-{# ── Exercise groups — everything visible, tap to log ─────────────── #}
+{# ── Exercise groups — collapsible, colour-coded ──────────────────── #}
 {% for g in gayathri_group_order %}
-<section class="section g-group" data-group="{{ g }}">
-    <p class="section-title">{{ g | lower }}</p>
+<section class="section g-group{% if g in gayathri_covered %} g-covered{% endif %}" data-group="{{ g }}">
+    <button type="button" class="g-head" onclick="toggleGGroup(this)">
+        <span class="g-stripe"></span>
+        <span class="g-title">{{ g | lower }}</span>
+        <span class="g-status">{% if g in gayathri_covered %}✓{% else %}·{% endif %}</span>
+        <span class="g-chev">›</span>
+    </button>
     <div class="tap-list">
         {% for ex in gayathri_groups[g] %}
         {% set t = gayathri_tallies.get(ex.name) %}
@@ -658,6 +701,9 @@
 <script>
 function toggleGroup(btn) {
     btn.closest('.mg-group').classList.toggle('open');
+}
+function toggleGGroup(btn) {
+    btn.closest('.g-group').classList.toggle('open');
 }
 function togglePicker(id) {
     const picker  = document.getElementById('picker-' + id);

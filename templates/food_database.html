@@ -49,8 +49,9 @@
     text-transform: uppercase; border-radius: 20px;
     padding: 3px 7px; flex-shrink: 0;
 }
-.fdb-badge.recipe  { background: rgba(168,85,247,.15); color: #a855f7; }
-.fdb-badge.define  { background: rgba(245,158,11,.16); color: #d97706; }
+.fdb-badge.recipe    { background: rgba(168,85,247,.15); color: #a855f7; }
+.fdb-badge.composite { background: rgba(13,148,136,.16); color: #0d9488; }
+.fdb-badge.define    { background: rgba(245,158,11,.16); color: #d97706; }
 .fdb-unit {
     font-size: 0.72rem; color: var(--dim); flex-shrink: 0; white-space: nowrap;
     align-self: center;
@@ -85,6 +86,8 @@
 <div class="fdb-tabs">
     <button type="button" class="fdb-tab active" data-filter="all" onclick="setTab(this)">
         All<span class="fdb-tab-count">{{ counts.all }}</span></button>
+    <button type="button" class="fdb-tab" data-filter="composite" onclick="setTab(this)">
+        Composite<span class="fdb-tab-count">{{ counts.composites }}</span></button>
     <button type="button" class="fdb-tab" data-filter="recipe" onclick="setTab(this)">
         Recipes<span class="fdb-tab-count">{{ counts.recipes }}</span></button>
     <button type="button" class="fdb-tab" data-filter="pending" onclick="setTab(this)">
@@ -97,10 +100,12 @@
        class="fdb-row"
        data-name="{{ item.name | lower | e }}"
        data-pending="{{ '1' if item.is_pending else '0' }}"
-       data-recipe="{{ '1' if item.is_recipe else '0' }}">
+       data-recipe="{{ '1' if item.is_recipe else '0' }}"
+       data-composite="{{ '1' if item.is_composite else '0' }}">
         <div class="fdb-main">
             <div class="fdb-name-row">
                 <span class="fdb-name">{{ item.name | strip_food_prefix | e }}</span>
+                {% if item.is_composite %}<span class="fdb-badge composite">composite</span>{% endif %}
                 {% if item.is_recipe %}<span class="fdb-badge recipe">recipe</span>{% endif %}
                 {% if item.is_pending %}<span class="fdb-badge define">define</span>{% endif %}
             </div>
@@ -144,9 +149,10 @@ function applyFilters() {
     document.querySelectorAll('#fdb-list .fdb-row').forEach(row => {
         const matchTerm   = !term || row.dataset.name.includes(term);
         const matchFilter =
-            activeFilter === 'all'     ? true :
-            activeFilter === 'recipe'  ? row.dataset.recipe  === '1' :
-            activeFilter === 'pending' ? row.dataset.pending === '1' : true;
+            activeFilter === 'all'       ? true :
+            activeFilter === 'composite' ? row.dataset.composite === '1' :
+            activeFilter === 'recipe'    ? row.dataset.recipe    === '1' :
+            activeFilter === 'pending'   ? row.dataset.pending   === '1' : true;
         const visible = matchTerm && matchFilter;
         row.style.display = visible ? '' : 'none';
         if (visible) shown++;

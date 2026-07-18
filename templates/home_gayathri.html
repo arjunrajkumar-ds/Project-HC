@@ -29,6 +29,33 @@
 }
 .switch-user:active { border-color: var(--accent); color: var(--accent); }
 
+/* ── Mini weight pill (top-right) ────────────────────────────────── */
+.mini-weight {
+    display: inline-flex; align-items: center; gap: 6px; height: 28px;
+    padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: transparent;
+    font-family: var(--font-mono); font-size: 11px; color: var(--dim);
+    -webkit-tap-highlight-color: transparent;
+}
+.mw-icon { font-size: 12px; opacity: .8; }
+.mw-val  { font-size: 12px; font-weight: 600; color: var(--text-strong); cursor: pointer; }
+.mw-val-unit { font-size: 9px; letter-spacing: .04em; text-transform: uppercase; color: var(--dim); }
+.mw-input {
+    background: transparent; border: none; color: var(--text);
+    font-family: var(--font-mono); font-size: 12px; font-weight: 600;
+    padding: 0; margin: 0; width: 30px; text-align: right;
+    line-height: 1; vertical-align: middle;
+    -webkit-appearance: none; appearance: none; -moz-appearance: textfield;
+}
+.mw-input::-webkit-outer-spin-button,
+.mw-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.mw-input::placeholder { color: var(--dim); font-weight: 400; }
+.mw-save {
+    background: none; border: none; color: var(--accent); cursor: pointer;
+    font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; padding: 0 2px;
+    -webkit-tap-highlight-color: transparent;
+}
+
 /* ── Start ───────────────────────────────────────────────────────── */
 .upnext-card { background: transparent; border: none; padding: 0; margin-bottom: 0; }
 .btn-start {
@@ -121,29 +148,6 @@
 .ls-exs { font-family: var(--font-sans); font-size: 12px; color: var(--muted); line-height: 1.4; margin-top: 2px; }
 .ls-stat { font-family: var(--font-mono); font-size: 11px; color: var(--dim); margin-top: 4px; }
 
-/* ── Body weight widget ──────────────────────────────────────────── */
-.weight-widget { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; }
-.weight-widget-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
-.weight-widget-title { font-family: var(--font-mono); font-size: 10px; font-weight: 400; color: var(--dim);
-    text-transform: uppercase; letter-spacing: .14em; }
-.btn-wt-tick {
-    background: var(--green-soft, rgba(127,176,105,.14));
-    border: 1px solid var(--green); border-radius: 50%;
-    color: var(--green); cursor: pointer; font-family: inherit;
-    font-size: 0.85rem; font-weight: 800;
-    width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0; -webkit-tap-highlight-color: transparent;
-}
-.btn-wt-tick:active { opacity: .7; }
-.weight-input-row { display: flex; gap: 8px; align-items: center; }
-.btn-log-weight {
-    background: var(--accent); border: none; border-radius: var(--radius-sm);
-    color: var(--bg); cursor: pointer; font-family: var(--font-sans);
-    font-size: 13px; font-weight: 600; min-height: 44px; padding: 0 18px; white-space: nowrap;
-    -webkit-tap-highlight-color: transparent; flex-shrink: 0;
-}
-.btn-log-weight:active { opacity: .8; }
-
 /* ── Weight chart ────────────────────────────────────────────────── */
 .wt-chart-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 14px; }
 .wt-chart-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
@@ -153,6 +157,178 @@
 .wt-up   { color: var(--red); }
 .wt-down { color: var(--green); }
 .wt-chart-svg { width: 100%; height: 140px; display: block; overflow: visible; }
+
+/* ── Desktop 2-col layout: groups grid + session log ─────────────── */
+.gy-workarea { display: block; }
+@media (min-width: 900px) {
+    .gy-workarea { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; }
+}
+.gy-groups-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+@media (min-width: 640px) { .gy-groups-grid { grid-template-columns: 1fr 1fr; } }
+.gy-groups-grid .g-group { margin-bottom: 0; }
+
+/* Session log panel */
+.slog { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 14px; }
+.slog-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.slog-head-left { display: flex; align-items: baseline; gap: 10px; }
+.slog-title { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+.slog-count { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
+.slog-count b { color: var(--text-strong); }
+.slog-edit-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--dim); cursor: pointer;
+    border-radius: var(--radius-sm); width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 12px; line-height: 1; -webkit-tap-highlight-color: transparent;
+}
+.slog-edit-btn:active { opacity: .7; }
+.slog.editing .slog-edit-btn { border-color: var(--accent); color: var(--accent); }
+.slog-list { display: flex; flex-direction: column; gap: 6px; max-height: 60vh; overflow-y: auto; }
+.slog-empty { font-family: var(--font-mono); font-size: 11px; color: var(--dimmer); text-align: center; padding: 20px 0; }
+.slog-row { display: grid; grid-template-columns: 3px 1fr auto; align-items: center; gap: 8px;
+    padding: 8px 10px; background: var(--panel-soft); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.slog-row .slog-del {
+    display: none; background: transparent; border: 1px solid var(--red, #d97a7a); color: var(--red, #d97a7a);
+    border-radius: 50%; width: 22px; height: 22px; padding: 0; cursor: pointer;
+    font-family: inherit; font-size: 12px; line-height: 1;
+    align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent;
+}
+.slog-row .slog-del:active { opacity: .7; }
+.slog.editing .slog-row { grid-template-columns: 3px 1fr auto 26px; }
+.slog.editing .slog-row .slog-del { display: inline-flex; }
+.slog-row.removing { opacity: 0; transform: translateX(6px); transition: opacity 180ms, transform 180ms; }
+.slog-row.just-in { animation: slog-flash 500ms ease; }
+@keyframes slog-flash {
+    0%   { background: var(--accent-soft, rgba(212,165,116,.16)); }
+    100% { background: var(--panel-soft); }
+}
+.slog-stripe { width: 3px; height: 100%; min-height: 22px; border-radius: 2px; background: var(--slog-color, var(--dim)); }
+.slog-name { font-family: var(--font-sans); font-size: 12px; color: var(--text-strong); line-height: 1.2; }
+.slog-sub  { font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+.slog-amt  { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--slog-color, var(--text-strong)); white-space: nowrap; }
+
+/* Colour map for session log rows (matches group colours) */
+.slog-row[data-group="Push"]     { --slog-color: #e07a7a; }
+.slog-row[data-group="Pull"]     { --slog-color: #6b93c9; }
+.slog-row[data-group="Legs"]     { --slog-color: #7fb069; }
+.slog-row[data-group="Core"]     { --slog-color: #a785c2; }
+.slog-row[data-group="Mobility"] { --slog-color: #6bb0a8; }
+.slog-row[data-group="Balance"]  { --slog-color: #d4c574; }
+.slog-row[data-group="Cardio"]   { --slog-color: #d48a3a; }
+
+/* ── Log-a-set: coverage strip + coloured group accordion ────────── */
+.logset-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.logset-tally { font-family: var(--font-mono); font-size: 11px; color: var(--dim); white-space: nowrap; }
+.logset-tally b { color: var(--text-strong); font-weight: 600; }
+
+.cov-section { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px 14px; }
+.cov-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.cov-tally { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
+.cov-tally b { color: var(--text-strong); }
+.cov-strip { display: flex; flex-wrap: wrap; gap: 6px; }
+.cov-item { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px;
+    border: 1px solid var(--border); border-radius: var(--radius-pill);
+    font-family: var(--font-mono); font-size: 9px; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+.cov-item.on { border-color: var(--green); color: var(--green); }
+.cov-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .7; }
+.cov-done-banner { display: flex; align-items: center; gap: 6px; margin-top: 10px;
+    font-family: var(--font-mono); font-size: 10px; color: var(--red); text-transform: uppercase; letter-spacing: .14em; }
+.cov-done-star { color: var(--red); }
+.cov-section.cov-complete .cov-done-banner { color: var(--green); }
+.cov-section.cov-complete .cov-done-star { color: var(--green); }
+
+/* group accordion — per-group colour via --g-color */
+.g-group { --g-color: var(--accent); margin-bottom: 8px; }
+.g-group[data-group="Push"]     { --g-color: #e07a7a; }
+.g-group[data-group="Pull"]     { --g-color: #6b93c9; }
+.g-group[data-group="Legs"]     { --g-color: #7fb069; }
+.g-group[data-group="Core"]     { --g-color: #a785c2; }
+.g-group[data-group="Mobility"] { --g-color: #6bb0a8; }
+.g-group[data-group="Balance"]  { --g-color: #d4c574; }
+.g-group[data-group="Cardio"]   { --g-color: #d48a3a; }
+.g-head {
+    display: grid; grid-template-columns: 4px 1fr auto auto; align-items: center; gap: 10px;
+    width: 100%; background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 12px 14px 12px 10px;
+    cursor: pointer; text-align: left; font-family: inherit; color: var(--text-strong);
+    -webkit-tap-highlight-color: transparent;
+}
+.g-head:active { opacity: .8; }
+.g-stripe { display: block; width: 4px; height: 22px; border-radius: 2px; background: var(--g-color); }
+.g-title { font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--g-color); }
+.g-status { font-family: var(--font-mono); font-size: 12px; color: var(--dim); }
+.g-covered .g-status { color: var(--g-color); font-weight: 700; }
+.g-chev { color: var(--dimmer); font-size: 14px; transition: transform .15s; }
+.g-group.open .g-chev { transform: rotate(90deg); color: var(--g-color); }
+.g-group.open .g-head { border-radius: var(--radius-md) var(--radius-md) 0 0; border-bottom-color: transparent; }
+.g-group .tap-list { display: none; }
+.g-group.open .tap-list {
+    display: flex; flex-direction: column; gap: 6px;
+    border: 1px solid var(--border); border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    padding: 8px 10px 10px;
+}
+.g-group .tap-add,
+.g-group .tap-log { background: var(--g-color); }
+.g-group .tap-tally [data-role="sets"],
+.g-group .tap-tally [data-role="total"] { color: var(--g-color); }
+.g-group .tap-row.just-logged { border-color: var(--g-color); }
+.g-group .tap-custom-btn.open { border-color: var(--g-color); color: var(--g-color); }
+
+/* tap-to-log rows */
+.tap-list { display: flex; flex-direction: column; gap: 6px; }
+.tap-row {
+    display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 11px 12px;
+}
+.tap-main { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.tap-name { font-family: var(--font-sans); font-size: 13px; color: var(--text-strong); }
+.tap-desc { font-family: var(--font-sans); font-size: 11px; color: var(--muted); line-height: 1.3; }
+.tap-tally { font-family: var(--font-mono); font-size: 10px; color: var(--dim); letter-spacing: .02em; }
+.tap-empty { color: var(--dimmer); }
+.tap-controls { display: flex; align-items: center; gap: 6px; }
+.tap-add {
+    background: var(--accent); color: var(--bg); border: none;
+    border-radius: var(--radius-sm); cursor: pointer;
+    font-family: var(--font-mono); font-size: 12px; font-weight: 600;
+    min-width: 52px; min-height: 38px; padding: 0 10px;
+    -webkit-tap-highlight-color: transparent; transition: transform .08s;
+}
+.tap-add:active { transform: scale(.94); }
+.tap-custom-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--dim);
+    border-radius: var(--radius-sm); cursor: pointer;
+    font-family: var(--font-mono); font-size: 13px; line-height: 1;
+    min-width: 34px; min-height: 38px; padding: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+.tap-custom {
+    grid-column: 1 / -1; display: none;
+    align-items: center; gap: 6px; padding-top: 10px; margin-top: 2px;
+    border-top: 1px dashed var(--border);
+}
+.tap-row.custom-open .tap-custom { display: flex; }
+.tap-step {
+    background: var(--panel-soft); border: 1px solid var(--border); color: var(--text);
+    border-radius: var(--radius-sm); cursor: pointer;
+    font-family: var(--font-mono); font-size: 16px; line-height: 1;
+    width: 38px; height: 38px; flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+.tap-amt {
+    flex: 1; min-width: 0; background: var(--panel-soft); border: 1px solid var(--border);
+    color: var(--text); border-radius: var(--radius-sm); text-align: center;
+    font-family: var(--font-mono); font-size: 14px; height: 38px; padding: 0 6px;
+    -webkit-appearance: none; -moz-appearance: textfield;
+}
+.tap-amt::-webkit-outer-spin-button, .tap-amt::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.tap-log {
+    background: var(--accent); color: var(--bg); border: none;
+    border-radius: var(--radius-sm); cursor: pointer;
+    font-family: var(--font-sans); font-size: 12px; font-weight: 600;
+    min-height: 38px; padding: 0 14px; flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+.tap-row-static { grid-template-columns: 1fr; }
 </style>
 {% endblock %}
 
@@ -183,15 +359,124 @@
     </div>
 </div>
 
-{# ── Start ─────────────────────────────────────────────────────────── #}
+{# ── This week ─────────────────────────────────────────────────────── #}
 <section class="section">
-    <div class="upnext-card">
-        <a href="/workout/log/new" class="btn-start">Log a workout ❯</a>
-        <div class="quick-row">
-            <a href="/missions" class="quick-btn">Missions</a>
-            <a href="/food"     class="quick-btn">Food</a>
-            <a href="/sessions" class="quick-btn">History</a>
+    <p class="section-title">this week</p>
+    <div class="week-strip">
+        {% for day in week_days %}
+        <div class="week-day {% if day.active %}active{% endif %} {% if day.is_today %}today{% endif %}">
+            <span class="week-day-name">{{ day.day_short }}</span>
+            <span class="week-day-num">{{ day.day_num }}</span>
+            {% if day.active %}<div class="week-dot"></div>{% endif %}
         </div>
+        {% endfor %}
+    </div>
+</section>
+
+{# ── Body coverage strip ──────────────────────────────────────────── #}
+{% set _cov_done = gy_group_order | length > 0 and gy_covered | length >= gy_group_order | length %}
+<section class="section cov-section{% if _cov_done %} cov-complete{% endif %}" id="cov-section"
+         data-total-groups="{{ gy_group_order | length }}">
+    <div class="cov-head">
+        <p class="section-title" style="margin-bottom:0">body coverage · today</p>
+        <span class="cov-tally"><span id="cov-count">{{ gy_covered | length }}</span> / {{ gy_group_order | length }}</span>
+    </div>
+    <div class="cov-strip" id="cov-strip">
+        {% for g in gy_group_order %}
+        <div class="cov-item {% if g in gy_covered %}on{% endif %}" data-group="{{ g }}">
+            <span class="cov-dot"></span>
+            <span class="cov-label">{{ g }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="cov-done-banner" id="cov-done-banner">
+        <span class="cov-done-star">✦</span>
+        <span class="cov-done-text">{% if _cov_done %}Whole body covered today{% else %}Missing coverage{% endif %}</span>
+    </div>
+</section>
+
+{# ── Groups grid (2 col × 3 row on desktop) + session log column ──── #}
+<div class="gy-workarea">
+    <div class="gy-groups-grid">
+        {% for g in gy_group_order %}
+        <div class="g-group{% if g in gy_covered %} g-covered{% endif %}" data-group="{{ g }}">
+            <button type="button" class="g-head" onclick="toggleGGroup(this)">
+                <span class="g-stripe"></span>
+                <span class="g-title">{{ g | lower }}</span>
+                <span class="g-status">{% if g in gy_covered %}✓{% else %}·{% endif %}</span>
+                <span class="g-chev">›</span>
+            </button>
+            <div class="tap-list">
+                {% for ex in gy_by_group[g] %}
+                {% set t = gy_tallies.get(ex.name) %}
+                <div class="tap-row" data-exercise="{{ ex.name }}" data-group="{{ g }}"
+                     data-timed="{{ '1' if ex.timed else '0' }}" data-step="{{ ex.step }}">
+                    <div class="tap-main">
+                        <span class="tap-name">{{ ex.name }}</span>
+                        {% if ex.desc %}<span class="tap-desc">{{ ex.desc }}</span>{% endif %}
+                        <span class="tap-tally" data-role="tally">
+                            {%- if t and t.sets -%}
+                                <span data-role="sets">{{ t.sets }}</span> set{{ '' if t.sets == 1 else 's' }} ·
+                                <span data-role="total">{{ t.total }}</span>{{ 's' if ex.timed else ' reps' }} today
+                            {%- else -%}
+                                <span class="tap-empty">not started</span>
+                            {%- endif -%}
+                        </span>
+                    </div>
+                    <div class="tap-controls">
+                        <button type="button" class="tap-custom-btn" data-role="custom"
+                                onclick="toggleCustom(this)" title="Log a custom amount">···</button>
+                        <button type="button" class="tap-add" onclick="quickSet(this, {{ ex.step }})">
+                            +{{ ex.step }}{{ 's' if ex.timed else '' }}
+                        </button>
+                    </div>
+                    <div class="tap-custom" data-role="custom-row">
+                        <button type="button" class="tap-step" onclick="nudge(this,-1)">−</button>
+                        <input type="number" class="tap-amt" value="{{ ex.step }}" min="1" max="600" inputmode="numeric">
+                        <button type="button" class="tap-step" onclick="nudge(this, 1)">+</button>
+                        <button type="button" class="tap-log" onclick="quickSetCustom(this)">Log</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <aside class="slog" id="slog">
+        <div class="slog-head">
+            <div class="slog-head-left">
+                <span class="slog-title">session log · today</span>
+                <span class="slog-count"><b id="slog-count">{{ gy_log | length }}</b> <span id="slog-count-label">{{ 'entry' if gy_log | length == 1 else 'entries' }}</span></span>
+            </div>
+            <button type="button" class="slog-edit-btn" id="slog-edit-btn" onclick="toggleSlogEdit()" title="Edit entries" aria-label="Edit entries">✎</button>
+        </div>
+        <div class="slog-list" id="slog-list">
+            {% if gy_log %}
+                {% for entry in gy_log %}
+                <div class="slog-row" data-group="{{ entry.group }}" data-id="{{ entry.id }}">
+                    <span class="slog-stripe"></span>
+                    <div>
+                        <div class="slog-name">{{ entry.name }}</div>
+                        <div class="slog-sub">{{ entry.group }}</div>
+                    </div>
+                    <span class="slog-amt">{{ entry.amount }}{{ 's' if entry.timed else '' }}</span>
+                    <button type="button" class="slog-del" onclick="deleteSlog(this)" aria-label="Delete entry">×</button>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="slog-empty" id="slog-empty">Nothing logged yet — tap a set to begin.</div>
+            {% endif %}
+        </div>
+    </aside>
+</div>
+
+{# ── Quick links ───────────────────────────────────────────────────── #}
+<section class="section">
+    <div class="quick-row">
+        <a href="/missions" class="quick-btn">Missions</a>
+        <a href="/food"     class="quick-btn">Food</a>
+        <a href="/sessions" class="quick-btn">History</a>
     </div>
 </section>
 
@@ -216,20 +501,6 @@
         </div>
     </div>
     </a>
-</section>
-
-{# ── This week ─────────────────────────────────────────────────────── #}
-<section class="section">
-    <p class="section-title">this week</p>
-    <div class="week-strip">
-        {% for day in week_days %}
-        <div class="week-day {% if day.active %}active{% endif %} {% if day.is_today %}today{% endif %}">
-            <span class="week-day-name">{{ day.day_short }}</span>
-            <span class="week-day-num">{{ day.day_num }}</span>
-            {% if day.active %}<div class="week-dot"></div>{% endif %}
-        </div>
-        {% endfor %}
-    </div>
 </section>
 
 {# ── Weekly stats ──────────────────────────────────────────────────── #}
@@ -292,31 +563,6 @@
     {% endif %}
 </section>
 
-{# ── Body weight ───────────────────────────────────────────────────── #}
-<section class="section">
-    <div class="weight-widget">
-        <div class="weight-widget-header">
-            <span class="weight-widget-title">body weight</span>
-            {% if today_weight %}
-            <button type="button" class="btn-wt-tick" onclick="toggleWtForm()" title="{{ today_weight | round(1) }} kg">✓</button>
-            {% else %}
-            <span style="color:var(--dim);font-size:1rem;">—</span>
-            {% endif %}
-        </div>
-        <div id="wt-form-wrap"{% if today_weight %} style="display:none"{% endif %}>
-            <form method="POST" action="/body-weight" class="weight-input-row">
-                <input type="hidden" name="date" value="{{ today }}">
-                <div class="form-group" style="margin:0;flex:1">
-                    <input type="number" id="wt-input" name="weight_kg"
-                           min="20" max="300" step="0.1" inputmode="decimal"
-                           placeholder="kg" style="margin-top:0">
-                </div>
-                <button type="submit" class="btn-log-weight">Save</button>
-            </form>
-        </div>
-    </div>
-</section>
-
 {% if weight_history and weight_history | length > 1 %}
 <section class="section">
     <div class="wt-chart-card">
@@ -337,14 +583,6 @@
 
 {% block extra_js %}
 <script>
-function toggleWtForm() {
-    const wrap = document.getElementById('wt-form-wrap');
-    if (!wrap) return;
-    const open = wrap.style.display === 'none';
-    wrap.style.display = open ? '' : 'none';
-    if (open) setTimeout(() => document.getElementById('wt-input')?.focus(), 40);
-}
-
 // mini-weight pill inline edit (mirrors Arjun's dashboard)
 function editWeight() {
     const val = document.getElementById('mw-val');
@@ -358,6 +596,177 @@ function editWeight() {
     if (save) save.style.display = '';
     inp.focus(); inp.select();
 }
+
+// ── Coloured group accordion + tap-to-log ───────────────────────────────
+function toggleGGroup(btn) { btn.closest('.g-group').classList.toggle('open'); }
+
+(function () {
+    const csrf = () => document.querySelector('meta[name="csrf-token"]')?.content || window._csrf || '';
+
+    window.toggleCustom = function (btn) {
+        const row = btn.closest('.tap-row');
+        const open = row.classList.toggle('custom-open');
+        btn.classList.toggle('open', open);
+        if (open) setTimeout(() => row.querySelector('.tap-amt')?.focus(), 30);
+    };
+    window.nudge = function (btn, dir) {
+        const inp = btn.parentElement.querySelector('.tap-amt');
+        let v = parseInt(inp.value, 10) || 0;
+        v = Math.max(1, Math.min(600, v + dir * (parseInt(inp.step, 10) || 1)));
+        inp.value = v;
+    };
+
+    function applyResult(row, data) {
+        updateExerciseTally(row.dataset.exercise, data.sets, data.total);
+        row.classList.add('just-logged');
+        setTimeout(() => row.classList.remove('just-logged'), 550);
+        applyCoverage(data);
+    }
+
+    function updateSlogCount() {
+        const list = document.getElementById('slog-list');
+        const cnt  = document.getElementById('slog-count');
+        const lbl  = document.getElementById('slog-count-label');
+        if (!list || !cnt) return;
+        const n = list.querySelectorAll('.slog-row').length;
+        cnt.textContent = n;
+        if (lbl) lbl.textContent = n === 1 ? 'entry' : 'entries';
+        if (n === 0 && !document.getElementById('slog-empty')) {
+            const div = document.createElement('div');
+            div.className = 'slog-empty'; div.id = 'slog-empty';
+            div.textContent = 'Nothing logged yet — tap a set to begin.';
+            list.appendChild(div);
+        }
+    }
+
+    function updateExerciseTally(name, sets, total, timedIfKnown) {
+        // Refresh the tap-row tally (inside the coloured panel) for this exercise.
+        document.querySelectorAll(`.tap-row[data-exercise="${CSS.escape(name)}"]`).forEach(r => {
+            const tally = r.querySelector('[data-role="tally"]');
+            if (!tally) return;
+            const timed = r.dataset.timed === '1';
+            const unit  = timed ? 's' : ' reps';
+            tally.innerHTML = sets
+                ? `<span data-role="sets">${sets}</span> set${sets === 1 ? '' : 's'} · ` +
+                  `<span data-role="total">${total}</span>${unit} today`
+                : '<span class="tap-empty">not started</span>';
+        });
+    }
+
+    function applyCoverage(data) {
+        const covered = new Set(data.covered || []);
+        document.querySelectorAll('.cov-item').forEach(item => {
+            item.classList.toggle('on', covered.has(item.dataset.group));
+        });
+        document.querySelectorAll('.g-group').forEach(sec => {
+            const g = sec.dataset.group;
+            const on = covered.has(g);
+            sec.classList.toggle('g-covered', on);
+            const st = sec.querySelector('.g-status');
+            if (st) st.textContent = on ? '✓' : '·';
+        });
+        const cnt = document.getElementById('cov-count');
+        if (cnt) cnt.textContent = data.covered_count;
+        const section = document.getElementById('cov-section');
+        const total = section ? parseInt(section.dataset.totalGroups, 10) : 0;
+        const done = total > 0 && data.covered_count >= total;
+        if (section) section.classList.toggle('cov-complete', done);
+        const text = document.querySelector('#cov-done-banner .cov-done-text');
+        if (text) text.textContent = done ? 'Whole body covered today' : 'Missing coverage';
+    }
+
+    function prependLog(row, amount, liftId) {
+        const list = document.getElementById('slog-list');
+        if (!list) return;
+        const name = row.dataset.exercise;
+        const group = row.dataset.group;
+        const timed = row.dataset.timed === '1';
+        const empty = document.getElementById('slog-empty');
+        if (empty) empty.remove();
+        const entry = document.createElement('div');
+        entry.className = 'slog-row just-in';
+        entry.dataset.group = group;
+        if (liftId != null) entry.dataset.id = liftId;
+        entry.innerHTML =
+            '<span class="slog-stripe"></span>' +
+            `<div><div class="slog-name">${name}</div><div class="slog-sub">${group}</div></div>` +
+            `<span class="slog-amt">${amount}${timed ? 's' : ''}</span>` +
+            '<button type="button" class="slog-del" onclick="deleteSlog(this)" aria-label="Delete entry">×</button>';
+        list.prepend(entry);
+        setTimeout(() => entry.classList.remove('just-in'), 550);
+        updateSlogCount();
+    }
+
+    window.toggleSlogEdit = function () {
+        const slog = document.getElementById('slog');
+        if (slog) slog.classList.toggle('editing');
+    };
+
+    window.deleteSlog = async function (btn) {
+        const entry = btn.closest('.slog-row');
+        if (!entry) return;
+        const id = entry.dataset.id;
+        if (!id) { entry.remove(); updateSlogCount(); return; }
+        btn.disabled = true;
+        try {
+            const res = await fetch('/workout/quick-set/' + encodeURIComponent(id), {
+                method: 'DELETE',
+                headers: { 'X-CSRF-Token': csrf() },
+            });
+            if (!res.ok) throw new Error('delete failed');
+            const data = await res.json();
+            entry.classList.add('removing');
+            setTimeout(() => { entry.remove(); updateSlogCount(); }, 200);
+            updateExerciseTally(data.exercise, data.sets, data.total);
+            applyCoverage(data);
+        } catch (e) {
+            btn.disabled = false;
+            btn.textContent = '!';
+        }
+    };
+
+    async function postSet(name, amount) {
+        const res = await fetch('/workout/quick-set', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf() },
+            body: JSON.stringify({ exercise: name, amount: amount }),
+        });
+        if (!res.ok) throw new Error('log failed');
+        return res.json();
+    }
+
+    window.quickSet = async function (btn, amount) {
+        const row = btn.closest('.tap-row');
+        btn.disabled = true;
+        try {
+            const data = await postSet(row.dataset.exercise, amount);
+            applyResult(row, data);
+            prependLog(row, amount, data.id);
+        } catch (e) {
+            btn.textContent = 'retry';
+        } finally {
+            setTimeout(() => { btn.disabled = false; }, 250);
+        }
+    };
+
+    window.quickSetCustom = async function (btn) {
+        const row = btn.closest('.tap-row');
+        const inp = row.querySelector('.tap-amt');
+        const amount = Math.max(1, parseInt(inp.value, 10) || 0);
+        btn.disabled = true;
+        try {
+            const data = await postSet(row.dataset.exercise, amount);
+            applyResult(row, data);
+            prependLog(row, amount, data.id);
+            row.classList.remove('custom-open');
+            row.querySelector('[data-role="custom"]')?.classList.remove('open');
+        } catch (e) {
+            btn.textContent = 'retry';
+        } finally {
+            setTimeout(() => { btn.disabled = false; btn.textContent = 'Log'; }, 250);
+        }
+    };
+})();
 
 (function () {
     let WH;

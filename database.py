@@ -560,6 +560,7 @@ def init_db():
     """)
     conn.execute("INSERT OR IGNORE INTO profiles (id, name) VALUES (1, 'Arjun')")
     conn.execute("INSERT OR IGNORE INTO profiles (id, name) VALUES (2, 'Gayathri')")
+    conn.execute("INSERT OR IGNORE INTO profiles (id, name) VALUES (3, 'Raj')")
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS body_weight (
@@ -609,7 +610,8 @@ def init_db():
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
             food_name       TEXT NOT NULL COLLATE NOCASE,
             ingredient_name TEXT NOT NULL,
-            quantity        REAL NOT NULL DEFAULT 0
+            quantity        REAL NOT NULL DEFAULT 0,
+            pct             REAL NOT NULL DEFAULT 0
         )
     """)
     conn.execute("""
@@ -654,6 +656,11 @@ def init_db():
         conn.execute("ALTER TABLE food_items ADD COLUMN unit_type TEXT NOT NULL DEFAULT 'g'")
     if 'name_key' not in _fi_cols:
         conn.execute("ALTER TABLE food_items ADD COLUMN name_key TEXT")
+
+    # Migrate food_components: add pct column for percentage / by-weight composites.
+    _fc_cols = {r[1] for r in conn.execute('PRAGMA table_info(food_components)')}
+    if 'pct' not in _fc_cols:
+        conn.execute('ALTER TABLE food_components ADD COLUMN pct REAL NOT NULL DEFAULT 0')
 
     # Keep the canonical (plural-aware) match key in sync for every food. Cheap to
     # recompute on each init, and it self-heals after any rename or rule change.
@@ -2794,18 +2801,34 @@ def delete_container(container_id):
 
 
 def get_food_components():
-    """Returns {food_name_lower: [{ingredient_name, quantity}]} for all composite unit foods."""
+    """Returns {food_name_lower: [{ingredient_name, quantity, pct}]} for all composite foods.
+
+    Two composition modes share this table:
+      • Fixed portion — `quantity` holds absolute grams/units, parent is unit_type='unit'.
+      • By weight (%) — `pct` holds each ingredient's weight share, parent is unit_type='g'.
+    A component list is a percentage composite when any row carries a pct > 0.
+    """
     conn = get_db()
     rows = conn.execute(
-        'SELECT food_name, ingredient_name, quantity FROM food_components ORDER BY id'
+        'SELECT food_name, ingredient_name, quantity, pct FROM food_components ORDER BY id'
     ).fetchall()
     conn.close()
     result = {}
     for r in rows:
         result.setdefault(r['food_name'].lower(), []).append(
-            {'ingredient_name': r['ingredient_name'], 'quantity': r['quantity']}
+            {'ingredient_name': r['ingredient_name'],
+             'quantity': r['quantity'], 'pct': r['pct']}
         )
     return result
+
+
+def get_food_component_mode(food_name):
+    """Return 'pct' for a percentage/by-weight composite, 'quantity' for a fixed-portion
+    recipe, or None when the food has no components."""
+    comps = get_food_components().get(food_name.lower())
+    if not comps:
+        return None
+    return 'pct' if any((c.get('pct') or 0) > 0 for c in comps) else 'quantity'
 
 
 def save_food_components(food_name, components):
@@ -2853,6 +2876,74 @@ def save_food_components(food_name, components):
         for row in conn.execute("SELECT id, name FROM food_log WHERE calories = 0").fetchall():
             resolved = _resolve_food(conn, row['name'])
             if resolved['matched'] and resolved['key'] == recipe_key:
+                conn.execute("""
+                    UPDATE food_log SET calories=?, protein_g=?, carbs_g=?, fat_g=?
+                    WHERE id=?
+                """, (resolved['calories'], resolved['protein_g'],
+                      resolved['carbs_g'], resolved['fat_g'], row['id']))
+    conn.commit()
+    conn.close()
+
+
+def save_food_components_pct(food_name, components):
+    """Persist a percentage / by-weight composite (e.g. curd rice = 60% rice + 40% yogurt).
+
+    Because the shares are by weight, they *are* the per-100g composition: 100 g of the
+    dish contains `pct` grams of each ingredient. So the parent is stored as an ordinary
+    weight-based food (unit_type='g') whose per-100g macros are the weighted average of
+    the ingredients' per-100g macros. Logging any gram amount then scales through the
+    existing _resolve_food() pipeline with no special-casing.
+
+    `components` is a list of (ingredient_name, pct). Shares are normalised to their own
+    total, so both exact (60/40) and ratio (3/1) entry work. Only weight-based (g-type)
+    ingredients contribute — unit-type ingredients have no per-gram basis and are skipped.
+    """
+    food_name  = _display_name(food_name)
+    components = [(_display_name(ing), pct) for ing, pct in components]
+    components = [(ing, pct) for ing, pct in components if ing and pct > 0]
+    conn = get_db()
+
+    conn.execute('DELETE FROM food_components WHERE food_name = ? COLLATE NOCASE', (food_name,))
+
+    total_pct = sum(pct for _, pct in components)
+    cal = pro = carb = fat = 0.0
+    for ing_name, pct in components:
+        conn.execute(
+            'INSERT INTO food_components (food_name, ingredient_name, quantity, pct) VALUES (?,?,0,?)',
+            (food_name, ing_name, pct)
+        )
+        # Ensure the ingredient exists in the library; unknown ones land as pending stubs.
+        conn.execute("""
+            INSERT INTO food_items (name, name_key, calories, protein_g, carbs_g, fat_g, unit_type)
+            VALUES (?, ?, 0, 0, 0, 0, 'g')
+            ON CONFLICT(name) DO NOTHING
+        """, (ing_name, _food_key(ing_name)))
+        item = _lookup_food_item(conn, _food_key(ing_name))
+        # Only weight-based ingredients carry a per-100g basis usable by weight share.
+        if item and item['calories'] > 0 and item['unit_type'] == 'g' and total_pct > 0:
+            w = pct / total_pct                 # weight fraction of the dish
+            cal  += item['calories']  * w
+            pro  += item['protein_g'] * w
+            carb += item['carbs_g']   * w
+            fat  += item['fat_g']     * w
+
+    # Store the composite as a normal per-100g food so logging scales it by grams.
+    conn.execute("""
+        INSERT INTO food_items (name, name_key, calories, protein_g, carbs_g, fat_g, unit_type)
+        VALUES (?, ?, ?, ?, ?, ?, 'g')
+        ON CONFLICT(name) DO UPDATE SET
+            unit_type='g', name_key=excluded.name_key,
+            calories=excluded.calories, protein_g=excluded.protein_g,
+            carbs_g=excluded.carbs_g,   fat_g=excluded.fat_g
+    """, (food_name, _food_key(food_name),
+          round(cal, 1), round(pro, 1), round(carb, 1), round(fat, 1)))
+
+    # Backfill any 0-cal log rows that resolve to this composite (incl. '150g Curd Rice').
+    if cal > 0:
+        parent_key = _food_key(food_name)
+        for row in conn.execute("SELECT id, name FROM food_log WHERE calories = 0").fetchall():
+            resolved = _resolve_food(conn, row['name'])
+            if resolved['matched'] and resolved['key'] == parent_key:
                 conn.execute("""
                     UPDATE food_log SET calories=?, protein_g=?, carbs_g=?, fat_g=?
                     WHERE id=?
@@ -3412,10 +3503,10 @@ def _init_swim_v2(conn):
 
 
 # ── Muscle-group swimlane (home screen) ────────────────────────────────
-# Collapses the granular exercise muscle_group values onto the five display
-# lanes shown on the dashboard. Anything not mapped (Core, Cardio, Mobility)
-# is intentionally excluded from the swimlane.
-_SWIMLANE_GROUPS = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms']
+# Collapses the granular exercise muscle_group values onto the display
+# lanes shown on the dashboard. Cardio is populated from session_cardio;
+# Core / Mobility are intentionally excluded.
+_SWIMLANE_GROUPS = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Cardio']
 _SWIMLANE_MAP = {
     'Chest': 'Chest',
     'Back': 'Back', 'Upper Back': 'Back', 'Posterior Chain': 'Back',
@@ -3452,6 +3543,16 @@ def get_muscle_swimlane(profile_id, days=7):
         GROUP BY s.date, e.id
         ORDER BY s.date, e.tier, e.name
     """, (profile_id, start.isoformat(), today.isoformat())).fetchall()
+
+    cardio_rows = conn.execute("""
+        SELECT s.date, e.name, COUNT(*) AS sets
+        FROM session_cardio sc
+        JOIN sessions  s ON s.id = sc.session_id
+        JOIN exercises e ON e.id = sc.exercise_id
+        WHERE s.profile_id = ? AND s.date BETWEEN ? AND ?
+        GROUP BY s.date, e.id
+        ORDER BY s.date, e.name
+    """, (profile_id, start.isoformat(), today.isoformat())).fetchall()
     conn.close()
 
     day_list  = [start + timedelta(days=i) for i in range(days)]
@@ -3477,6 +3578,19 @@ def get_muscle_swimlane(profile_id, days=7):
         active_dates.add(r['date'])
         exercise_cnt += 1
         group_sets[group] += r['sets']
+
+    for r in cardio_rows:
+        di = day_index.get(r['date'])
+        if di is None:
+            continue
+        cells['Cardio'][di].append({
+            'tier': 4,
+            'name': r['name'],
+            'sets': r['sets'],
+        })
+        active_dates.add(r['date'])
+        exercise_cnt += 1
+        group_sets['Cardio'] += r['sets']
 
     top_group = max(group_sets, key=group_sets.get) if any(group_sets.values()) else None
 

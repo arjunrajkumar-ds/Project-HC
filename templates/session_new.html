@@ -2952,6 +2952,7 @@
         const itemsEl = document.createElement('div');
         itemsEl.className = 't2-grp-items open';
         TIER4_LIST.slice()
+            .filter(ex => ex.muscle_group !== 'Cardio')
             .sort((a, b) => a.name.localeCompare(b.name))
             .forEach(ex => {
                 const item = document.createElement('div');

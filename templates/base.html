@@ -50,9 +50,12 @@
 
     /* ═══ LAYOUT ════════════════════════════════════════════════════ */
     .page {
-        max-width: 680px;
+        max-width: 1280px;
         margin-inline: auto;
-        padding: 20px 16px calc(var(--nav-h) + var(--sab) + 24px);
+        padding: 20px 24px calc(var(--nav-h) + var(--sab) + 24px);
+    }
+    @media (max-width: 720px) {
+        .page { padding-inline: 16px; }
     }
 
     /* ═══ TYPOGRAPHY ════════════════════════════════════════════════ */
@@ -356,7 +359,7 @@
             <span class="nav-icon">⌂</span>
             <span class="nav-label">Today</span>
         </a>
-        <a href="/workout" class="nav-item {% if request.path.startswith('/workout') %}active{% endif %}">
+        <a href="/workout/log/new" class="nav-item {% if request.path.startswith('/workout/log') %}active{% endif %}">
             <span class="nav-icon">◉</span>
             <span class="nav-label">Train</span>
         </a>

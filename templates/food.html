@@ -544,7 +544,7 @@ body.pandora .dym-chip {
             {{ '+' if diff > 0 else '' }}{{ diff }} kg
         </span>
     </div>
-    <svg id="wt-chart" class="wt-chart-svg" preserveAspectRatio="none"></svg>
+    <svg id="wt-chart" class="wt-chart-svg"></svg>
 </div>
 {% endif %}
 
@@ -1277,75 +1277,75 @@ function toggleWtForm() {
 
 // ── Weight chart ──────────────────────────────────────────────────────
 (function () {
-    const WH = {{ weight_history | tojson }};
-    if (!WH || WH.length < 2) return;
+    const WH  = {{ weight_history | tojson }};
     const svg = document.getElementById('wt-chart');
-    if (!svg) return;
+    if (!svg || !WH || WH.length < 2) return;
 
-    const pts  = WH.slice().reverse();   // oldest → newest
-    const vals = pts.map(r => r.weight_kg);
-    const mn   = Math.min(...vals), mx = Math.max(...vals);
-    const range = (mx - mn) || 1;
+    // Oldest → newest, one point per day (keep the latest reading for a date).
+    const byDate = {};
+    WH.slice().reverse().forEach(r => { byDate[r.date] = r.weight_kg; });
+    const pts = Object.keys(byDate).sort().map(d => ({ t: new Date(d).getTime(), date: d, w: byDate[d] }));
+    if (pts.length < 2) return;
 
-    const W = 320, H = 120;
-    const padL = 38, padR = 10, padT = 10, padB = 24;
-    const cW = W - padL - padR, cH = H - padT - padB;
+    const t0 = pts[0].t, tN = pts[pts.length - 1].t;
+    const span = (tN - t0) || 1;
 
-    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    // Whole-number y-scale: round the data out to integers, then pick a step
+    // that yields ~4 nice round gridlines.
+    const vals = pts.map(p => p.w);
+    let mn = Math.floor(Math.min(...vals));
+    let mx = Math.ceil(Math.max(...vals));
+    if (mx <= mn) mx = mn + 1;
+    const step = Math.max(1, Math.ceil((mx - mn) / 4));
+    mx = mn + Math.ceil((mx - mn) / step) * step;   // span an exact number of steps
+    const range = mx - mn;
 
-    const cx = i  => padL + (i / (pts.length - 1)) * cW;
-    const cy = v  => padT + (1 - (v - mn) / range) * cH;
+    const H = 140, padL = 40, padR = 12, padT = 12, padB = 26;
 
-    // Y-axis gridlines + labels (3 ticks)
-    const ticks = 3;
-    let gridLines = '', yLabels = '';
-    for (let t = 0; t <= ticks; t++) {
-        const v   = mn + (range / ticks) * t;
-        const yy  = cy(v);
-        gridLines += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W - padR}" y2="${yy.toFixed(1)}"
-            stroke="var(--border)" stroke-width="1"/>`;
-        yLabels   += `<text x="${padL - 5}" y="${(yy + 4).toFixed(1)}"
-            fill="var(--dim)" font-size="9" text-anchor="end" font-family="inherit">${v.toFixed(1)}</text>`;
+    function draw() {
+        // Match the viewBox to the real pixel size (1:1) so nothing stretches.
+        const W  = Math.max(260, Math.round(svg.clientWidth || svg.getBoundingClientRect().width || 320));
+        const cW = W - padL - padR, cH = H - padT - padB;
+        svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+        const cx = t => padL + ((t - t0) / span) * cW;
+        const cy = v => padT + (1 - (v - mn) / range) * cH;
+
+        // Y-axis gridlines + whole-number labels (one per step).
+        let grid = '', yLabels = '';
+        for (let v = mn; v <= mx + 1e-9; v += step) {
+            const yy = cy(v);
+            grid    += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W - padR}" y2="${yy.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>`;
+            yLabels += `<text x="${padL - 6}" y="${(yy + 3).toFixed(1)}" fill="var(--dim)" font-size="10" text-anchor="end" font-family="inherit">${Math.round(v)}</text>`;
+        }
+
+        // X-axis date labels — up to 4, spaced by actual time.
+        const xCount = Math.min(4, pts.length);
+        let xLabels = '';
+        for (let i = 0; i < xCount; i++) {
+            const p = pts[Math.round(i * (pts.length - 1) / (xCount - 1))];
+            const label = p.date.slice(5).replace('-', '/');
+            xLabels += `<text x="${cx(p.t).toFixed(1)}" y="${H - 6}" fill="var(--dim)" font-size="9" text-anchor="middle" font-family="inherit">${label}</text>`;
+        }
+
+        const line = pts.map((p, i) => (i ? 'L' : 'M') + cx(p.t).toFixed(1) + ',' + cy(p.w).toFixed(1)).join(' ');
+        const area = line +
+            ` L${cx(tN).toFixed(1)},${(padT + cH).toFixed(1)}` +
+            ` L${cx(t0).toFixed(1)},${(padT + cH).toFixed(1)} Z`;
+        const dots = pts.map((p, i) => {
+            const last = i === pts.length - 1;
+            return `<circle cx="${cx(p.t).toFixed(1)}" cy="${cy(p.w).toFixed(1)}" r="${last ? 3.5 : 2.2}" fill="var(--accent)"${last ? ' stroke="var(--surface)" stroke-width="1.5"' : ''}/>`;
+        }).join('');
+
+        svg.innerHTML = `${grid}${yLabels}${xLabels}
+            <path d="${area}" fill="var(--accent)" fill-opacity="0.10"/>
+            <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            ${dots}`;
     }
 
-    // X-axis date labels — show ~4 evenly spaced
-    const xLabelCount = Math.min(4, pts.length);
-    let xLabels = '';
-    for (let i = 0; i < xLabelCount; i++) {
-        const idx  = Math.round(i * (pts.length - 1) / (xLabelCount - 1));
-        const d    = pts[idx].date.slice(5).replace('-', '/');
-        const xx   = cx(idx);
-        xLabels   += `<text x="${xx.toFixed(1)}" y="${H - 4}"
-            fill="var(--dim)" font-size="9" text-anchor="middle" font-family="inherit">${d}</text>`;
-    }
-
-    // Line path
-    const pathD = pts.map((r, i) =>
-        (i === 0 ? 'M' : 'L') + cx(i).toFixed(1) + ',' + cy(r.weight_kg).toFixed(1)
-    ).join(' ');
-
-    // Filled area under line
-    const areaD = pathD +
-        ` L${cx(pts.length-1).toFixed(1)},${(padT+cH).toFixed(1)}` +
-        ` L${padL},${(padT+cH).toFixed(1)} Z`;
-
-    // Dots
-    const dots = pts.map((r, i) =>
-        `<circle cx="${cx(i).toFixed(1)}" cy="${cy(r.weight_kg).toFixed(1)}" r="2.5" fill="#7c3aed"/>`
-    ).join('');
-
-    svg.innerHTML = `
-        <defs>
-            <linearGradient id="wt-grad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%"   stop-color="#7c3aed" stop-opacity="0.18"/>
-                <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
-            </linearGradient>
-        </defs>
-        ${gridLines}${yLabels}${xLabels}
-        <path d="${areaD}" fill="url(#wt-grad)"/>
-        <path d="${pathD}" fill="none" stroke="#7c3aed" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round"/>
-        ${dots}`;
+    requestAnimationFrame(draw);
+    let rt;
+    window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(draw, 120); });
 })();
 
 // ── Initial render ────────────────────────────────────────────────────

@@ -78,6 +78,22 @@
     -webkit-tap-highlight-color: transparent;
 }
 .btn-save-recipe:active { opacity: .8; }
+.recipe-title-row {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+}
+.pct-chip {
+    font-size: 0.68rem; font-weight: 700; padding: 3px 9px; border-radius: 20px;
+    white-space: nowrap;
+}
+.pct-chip.ok   { background: rgba(var(--accent-rgb, 27,94,59),.1); color: var(--accent); }
+.pct-chip.warn { background: rgba(201,112,100,.15); color: var(--red, #c25a4c); }
+.recipe-col-head {
+    font-size: 0.62rem; color: var(--dim); text-transform: uppercase;
+    letter-spacing: .06em; font-weight: 700;
+}
+.recipe-hint {
+    font-size: 0.68rem; color: var(--dim); line-height: 1.5;
+}
 
 /* ── Delete section ───────────────────────────────────────────────── */
 .btn-delete {
@@ -185,10 +201,20 @@
     </form>
 </div>
 
-{# ── Recipe / components — only when food exists in DB ──────────────── #}
-{% if existing %}
+{# ── Recipe / components — available for any named food (incl. pending) ── #}
+{% if mode != 'new' %}
 <div class="edit-card">
-    <div class="edit-card-title">Recipe (optional — auto-calculates macros)</div>
+    <div class="recipe-title-row">
+        <div class="edit-card-title">Recipe (optional — auto-calculates macros)</div>
+        <span class="pct-chip" id="pct-chip" style="display:none"></span>
+    </div>
+
+    <div class="unit-toggle-row">
+        <button type="button" class="unit-btn" id="rm-pct"
+                onclick="setRecipeMode('pct')">By weight (%)</button>
+        <button type="button" class="unit-btn" id="rm-qty"
+                onclick="setRecipeMode('quantity')">Fixed portion</button>
+    </div>
 
     <datalist id="fe-food-list">
         {% for item in food_library %}
@@ -198,35 +224,31 @@
 
     <form method="POST" action="/food/components/{{ name | urlencode }}"
           id="recipe-form" style="display:flex;flex-direction:column;gap:10px">
+        <input type="hidden" name="recipe_mode" id="h-recipe-mode"
+               value="{{ recipe_mode | default('pct') }}">
 
-        <div id="recipe-rows">
-            {% for c in components %}
-            <div class="recipe-row">
-                <input type="text" name="ing" value="{{ c.ingredient_name | e }}"
-                       list="fe-food-list" placeholder="Ingredient"
-                       oninput="recipeCalc()">
-                <input type="number" name="qty" value="{{ c.quantity }}"
-                       min="0" step="0.1" inputmode="decimal" placeholder="g"
-                       oninput="recipeCalc()">
-                <button type="button" class="btn-rm-row"
-                        onclick="this.closest('.recipe-row').remove();recipeCalc()">✕</button>
-            </div>
-            {% endfor %}
-        </div>
+        <div class="recipe-col-head" id="recipe-head"></div>
+        <div id="recipe-rows"></div>
 
         <button type="button" class="btn-add-ing" onclick="addIngRow()">+ Add ingredient</button>
 
         <div class="recipe-preview" id="recipe-preview" style="display:none">
             <div class="preview-row">
-                <span class="preview-label">Total</span>
+                <span class="preview-label" id="prev-label">Per 100g</span>
                 <span class="preview-val" id="prev-kcal">—</span>
             </div>
             <div class="preview-macros" id="prev-macros"></div>
         </div>
 
+        <div class="recipe-hint" id="recipe-hint"></div>
+
         <button type="submit" class="btn-save-recipe">Save Recipe</button>
     </form>
 </div>
+<script>
+    const RECIPE_INIT = {{ components | tojson }};
+    const RECIPE_MODE_INIT = "{{ recipe_mode | default('pct') }}";
+</script>
 {% endif %}
 
 {# ── Delete — only when food exists in DB ───────────────────────────── #}
@@ -279,41 +301,116 @@ function foodKey(name) {
     return parts.join(' ');
 }
 
-function addIngRow() {
+// recipeMode: 'pct' = by-weight percentage composite (parent stored per-100g),
+//             'quantity' = fixed-portion recipe (parent stored as a whole unit serving).
+let recipeMode = 'pct';
+
+function escAttr(s) { return (s || '').replace(/"/g, '&quot;'); }
+
+function makeRow(ing, val) {
     const row = document.createElement('div');
     row.className = 'recipe-row';
+    const numName = recipeMode === 'pct' ? 'pct' : 'qty';
+    const ph      = recipeMode === 'pct' ? '%'   : 'g / unit';
     row.innerHTML =
-        `<input type="text" name="ing" list="fe-food-list" placeholder="Ingredient" oninput="recipeCalc()">` +
-        `<input type="number" name="qty" min="0" step="0.1" inputmode="decimal" placeholder="g" oninput="recipeCalc()">` +
+        `<input type="text" name="ing" list="fe-food-list" placeholder="Ingredient" value="${escAttr(ing)}" oninput="recipeCalc()">` +
+        `<input type="number" name="${numName}" min="0" step="0.1" inputmode="decimal" placeholder="${ph}" value="${val != null && val !== '' ? val : ''}" oninput="recipeCalc()">` +
         `<button type="button" class="btn-rm-row" onclick="this.closest('.recipe-row').remove();recipeCalc()">✕</button>`;
+    return row;
+}
+
+function currentRows() {
+    return [...document.querySelectorAll('#recipe-rows .recipe-row')].map(r => ({
+        ing: r.querySelector('input[type=text]').value,
+        num: r.querySelector('input[type=number]').value,
+    }));
+}
+
+function drawRows(data) {
+    const wrap = document.getElementById('recipe-rows');
+    wrap.innerHTML = '';
+    (data && data.length ? data : [{ing: '', num: ''}])
+        .forEach(d => wrap.appendChild(makeRow(d.ing, d.num)));
+}
+
+function setRecipeMode(mode) {
+    const data = currentRows();
+    recipeMode = mode === 'quantity' ? 'quantity' : 'pct';
+    document.getElementById('h-recipe-mode').value = recipeMode;
+    document.getElementById('rm-pct').classList.toggle('active', recipeMode === 'pct');
+    document.getElementById('rm-qty').classList.toggle('active', recipeMode === 'quantity');
+    document.getElementById('recipe-head').textContent =
+        recipeMode === 'pct' ? 'Ingredient · weight share (%)' : 'Ingredient · amount (g or units)';
+    document.getElementById('recipe-hint').textContent =
+        recipeMode === 'pct'
+            ? 'Shares are by weight of the finished dish and set its per-100g macros — use cooked ingredient values. Log any gram amount and it scales from there.'
+            : 'Amounts are absolute (grams, or count for unit foods). The dish logs as one whole serving equal to their sum.';
+    drawRows(data);
+    recipeCalc();
+}
+
+function addIngRow() {
+    const row = makeRow('', '');
     document.getElementById('recipe-rows').appendChild(row);
     row.querySelector('input[type=text]').focus();
 }
 
 function recipeCalc() {
+    const data = [...document.querySelectorAll('#recipe-rows .recipe-row')].map(r => ({
+        name: r.querySelector('input[type=text]').value.trim(),
+        num:  parseFloat(r.querySelector('input[type=number]').value) || 0,
+    }));
     let kcal = 0, pro = 0, carb = 0, fat = 0, anyValid = false;
-    document.querySelectorAll('#recipe-rows .recipe-row').forEach(row => {
-        const name = row.querySelector('input[type=text]').value.trim();
-        const qty  = parseFloat(row.querySelector('input[type=number]').value) || 0;
-        if (!name || qty <= 0) return;
-        const m = FOOD_MACROS[foodKey(name)];
-        if (!m) return;
-        const f = m.unit_type === 'unit' ? qty : qty / 100;
-        kcal += m.calories  * f;
-        pro  += m.protein_g * f;
-        carb += m.carbs_g   * f;
-        fat  += m.fat_g     * f;
-        anyValid = true;
-    });
+    const chip = document.getElementById('pct-chip');
+
+    if (recipeMode === 'pct') {
+        const totalPct = data.reduce((s, d) => s + d.num, 0);
+        data.forEach(d => {
+            if (!d.name || d.num <= 0) return;
+            const m = FOOD_MACROS[foodKey(d.name)];
+            if (!m || m.unit_type !== 'g' || totalPct <= 0) return;
+            const w = d.num / totalPct;         // weight fraction of the dish
+            kcal += m.calories  * w;
+            pro  += m.protein_g * w;
+            carb += m.carbs_g   * w;
+            fat  += m.fat_g     * w;
+            anyValid = true;
+        });
+        chip.style.display = totalPct > 0 ? '' : 'none';
+        chip.textContent = Math.round(totalPct) + '% of 100%';
+        chip.className = 'pct-chip ' + (Math.abs(totalPct - 100) < 0.5 ? 'ok' : 'warn');
+    } else {
+        data.forEach(d => {
+            if (!d.name || d.num <= 0) return;
+            const m = FOOD_MACROS[foodKey(d.name)];
+            if (!m) return;
+            const f = m.unit_type === 'unit' ? d.num : d.num / 100;
+            kcal += m.calories  * f;
+            pro  += m.protein_g * f;
+            carb += m.carbs_g   * f;
+            fat  += m.fat_g     * f;
+            anyValid = true;
+        });
+        chip.style.display = 'none';
+    }
+
     const prev = document.getElementById('recipe-preview');
     if (!anyValid) { prev.style.display = 'none'; return; }
     prev.style.display = '';
-    document.getElementById('prev-kcal').textContent   = Math.round(kcal) + ' kcal';
+    document.getElementById('prev-label').textContent = recipeMode === 'pct' ? 'Per 100g' : 'Total';
+    document.getElementById('prev-kcal').textContent  = Math.round(kcal) + ' kcal';
     document.getElementById('prev-macros').textContent =
         `P ${pro.toFixed(1)}g · C ${carb.toFixed(1)}g · F ${fat.toFixed(1)}g`;
 }
 
-// Run on load if there are existing rows
-recipeCalc();
+// Initialise the recipe editor from saved components (only present when editing a food).
+if (document.getElementById('recipe-rows')) {
+    recipeMode = RECIPE_MODE_INIT === 'quantity' ? 'quantity' : 'pct';
+    drawRows((RECIPE_INIT || []).map(c => ({
+        ing: c.ingredient_name,
+        num: recipeMode === 'quantity' ? c.quantity : c.pct,
+    })));
+    setRecipeMode(recipeMode);
+}
 </script>
 {% endblock %}

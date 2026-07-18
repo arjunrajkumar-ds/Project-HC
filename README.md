@@ -12,7 +12,7 @@ It lives entirely on your own Mac. There are no accounts, no subscriptions, and 
 
 A small server runs quietly on your Mac in the background. You open the app like a website — just type an address into Safari or Chrome. Your workout data is saved in a single file on your Mac, not in the cloud.
 
-Because it runs on your local network, you can also open it on your iPhone while you're at the gym — either over your home Wi-Fi, or from anywhere using a free tool called Tailscale (more on that below).
+Because it runs on your local network, you can also open it on your iPhone while you're on the same Wi-Fi — see below.
 
 ---
 
@@ -51,8 +51,7 @@ This installs Flask, the only thing the app needs to run.
 Each time you want to use the app, open Terminal, navigate to the project folder (drag it onto Terminal), then run:
 
 ```
-source venv/bin/activate
-python app.py
+python3 app.py
 ```
 
 You'll see a message saying the server is running. Open Safari or Chrome and go to:
@@ -65,19 +64,15 @@ The app will open. To stop it, go back to Terminal and press Control + C.
 
 ---
 
-## Using the app on your iPhone at the gym
+## Using the app on your iPhone
 
-The short version: install **Tailscale** (free) on your Mac and iPhone, sign into the same account, and the app becomes reachable from your phone anywhere in the world.
+While the server is running on your Mac, both devices need to be on the same Wi-Fi network.
 
-Quick steps:
+1. On your Mac, run `ipconfig getifaddr en0` in Terminal to find its local IP (e.g. `192.168.1.42`)
+2. On your iPhone, open Safari and go to `http://192.168.1.42:5001` (use your actual address)
+3. In Safari, tap Share → Add to Home Screen to save it as a one-tap icon
 
-1. Download Tailscale on your Mac from [tailscale.com](https://tailscale.com) and sign in
-2. Download Tailscale on your iPhone from the App Store and sign in with the same account
-3. Click the Tailscale icon in your Mac's menu bar — note the `100.x.x.x` address shown under your Mac's name
-4. With the app running on your Mac, open Safari on your iPhone and go to `http://100.x.x.x:5001` (use your actual address)
-5. In Safari, tap Share → Add to Home Screen to save it as a one-tap icon
-
-For full step-by-step instructions, screenshots descriptions, troubleshooting, and notes on keeping your Mac awake, see **[SETUP.md](SETUP.md)**.
+For full step-by-step instructions and troubleshooting, see **[SETUP.md](SETUP.md)**.
 
 ---
 
