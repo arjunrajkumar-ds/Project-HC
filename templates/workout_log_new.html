@@ -4,90 +4,6 @@
 
 {% block extra_css %}
 <style>
-/* ── Date card ─────────────────────────────────────────────────────────── */
-.log-date-card {
-    background: var(--surface); border: 0.5px solid var(--border);
-    border-radius: 14px; padding: 16px; margin-bottom: 20px;
-    display: flex; align-items: center; gap: 12px;
-}
-.log-date-label {
-    font-size: 0.72rem; font-weight: 700; color: var(--dim);
-    text-transform: uppercase; letter-spacing: .06em; flex-shrink: 0;
-}
-.log-date-card input[type="date"] {
-    background: none; border: none; padding: 0; min-height: auto;
-    font-size: 0.95rem; font-weight: 700; color: var(--text);
-    width: auto; flex: 1;
-}
-.log-date-card input[type="date"]:focus { outline: none; }
-
-/* ── Continue banner ───────────────────────────────────────────────────── */
-.continue-banner {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 12px; padding: 12px 14px;
-    display: flex; align-items: center; gap: 10px;
-    margin-bottom: 16px;
-}
-.continue-banner-info { flex: 1; min-width: 0; }
-.continue-banner-title {
-    font-size: 0.72rem; font-weight: 700; color: var(--t2-fg);
-    text-transform: uppercase; letter-spacing: .07em; margin-bottom: 3px;
-}
-.continue-banner-exs {
-    font-size: 0.8rem; color: var(--muted);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.btn-continue {
-    background: var(--t2-bg); border: 2px solid var(--t2-fg);
-    border-radius: 10px; color: var(--t2-fg);
-    font-family: inherit; font-size: 0.85rem; font-weight: 800;
-    min-height: 40px; padding: 8px 16px; white-space: nowrap;
-    text-decoration: none; display: inline-flex; align-items: center;
-    -webkit-tap-highlight-color: transparent;
-}
-.btn-continue:active { opacity: .75; }
-
-/* ── Continue-mode bar ─────────────────────────────────────────────────── */
-.continue-mode-bar {
-    background: var(--t2-bg); border: 1px solid var(--t2-fg);
-    border-radius: 10px; padding: 10px 14px;
-    display: flex; flex-direction: column; gap: 6px;
-    margin-bottom: 16px;
-}
-.continue-mode-label {
-    font-size: 0.68rem; font-weight: 700; color: var(--t2-fg);
-    text-transform: uppercase; letter-spacing: .08em;
-}
-.continue-mode-done { display: flex; flex-wrap: wrap; gap: 5px; }
-.done-badge {
-    background: var(--surface); border-radius: 5px;
-    font-size: 0.72rem; font-weight: 600; padding: 3px 9px; color: var(--muted);
-    border: 0.5px solid var(--border);
-}
-
-/* ── Session log card ──────────────────────────────────────────────────── */
-.session-log-card {
-    background: var(--surface); border: 0.5px solid var(--border);
-    border-radius: 14px; padding: 16px; margin-bottom: 12px;
-}
-.session-log-empty {
-    color: var(--dim); font-size: 0.88rem; text-align: center;
-    padding: 12px 0;
-}
-.log-item-row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 9px 0; border-bottom: 1px solid var(--border);
-}
-.log-item-row:last-of-type { border-bottom: none; }
-.log-item-name { flex: 1; font-size: 0.9rem; font-weight: 600; color: var(--text); }
-.log-item-spec { font-size: 0.85rem; color: var(--muted); font-weight: 700; }
-.log-item-rm {
-    background: none; border: none; color: var(--dim);
-    font-size: 1.2rem; cursor: pointer; padding: 2px 6px; line-height: 1;
-    -webkit-tap-highlight-color: transparent;
-}
-.log-item-rm:active { color: var(--red, #991B1B); }
-
 /* ── Muscle group accordion (reused from workout.html) ─────────────────── */
 .mg-group { margin-bottom: 10px; }
 .mg-group-btn {
@@ -124,6 +40,45 @@
 }
 .mg-exercise-name { flex: 1; font-size: 0.9rem; font-weight: 600; color: var(--text); }
 
+/* ── Category sections + ladder cards ───────────────────────────────────── */
+.cat-section { margin-bottom: 18px; }
+.cat-header {
+    font-size: 0.78rem; font-weight: 800; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .07em; margin: 4px 0 10px;
+}
+.ladder-card {
+    background: var(--surface); border: 0.5px solid var(--border);
+    border-radius: 12px; padding: 10px 12px; margin-bottom: 10px;
+}
+.ladder-baseline { margin-bottom: 4px; }
+.baseline-row, .rung-row {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    background: none; border: none; padding: 8px 2px; margin: 0; font-family: inherit;
+    text-align: left; -webkit-tap-highlight-color: transparent; cursor: default;
+}
+.ladder-baseline.status-unlocked .baseline-row,
+.ladder-baseline.status-achieved .baseline-row,
+.ladder-rung.status-current .rung-row { cursor: pointer; }
+.rung-icon { flex-shrink: 0; width: 20px; text-align: center; font-size: 0.95rem; }
+.baseline-row .mg-exercise-name { font-size: 1rem; font-weight: 800; }
+.ladder-baseline.status-locked .baseline-row,
+.ladder-rung.status-locked .rung-row { opacity: 0.4; }
+.ladder-rung.status-cleared .rung-row { opacity: 0.55; }
+.ladder-rung.status-cleared .mg-exercise-name { text-decoration: line-through; }
+.ladder-rungs {
+    list-style: none; margin: 4px 0 0; padding: 6px 0 0;
+    border-top: 1px dashed var(--border); display: flex; flex-direction: column;
+}
+.rung-head { display: flex; align-items: center; gap: 8px; }
+.btn-mark-achieved {
+    background: var(--accent-light); border: none; border-radius: 7px;
+    color: var(--accent-text); cursor: pointer; font-family: inherit;
+    font-size: 0.78rem; font-weight: 700; padding: 6px 10px; white-space: nowrap;
+    -webkit-tap-highlight-color: transparent; flex-shrink: 0;
+}
+.btn-mark-achieved:active { opacity: .75; }
+.btn-mark-achieved:disabled { opacity: .45; cursor: default; }
+
 /* ── Picker / steppers ─────────────────────────────────────────────────── */
 .ex-picker { display: none; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
 .ex-picker.open { display: block; }
@@ -158,6 +113,38 @@
 }
 .btn-add-ex:active { opacity: .75; }
 .btn-add-ex:disabled { opacity: .45; cursor: default; }
+
+/* ── Lifetime tally tiles ────────────────────────────────────────────── */
+.ex-name-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.tally-tiles { display: flex; gap: 3px; }
+.tally-tile {
+    width: 13px; height: 6px; border-radius: 2px;
+    background: var(--border);
+}
+.tally-tile.filled { background: var(--accent, var(--accent-text)); }
+
+/* ── Just-logged flash feedback ─────────────────────────────────────────── */
+.just-logged { background: var(--accent-light); border-radius: 8px; transition: background 0.3s; }
+
+/* ── Tally dialog ─────────────────────────────────────────────────────── */
+.tally-dialog {
+    border: 0.5px solid var(--border); border-radius: 14px; padding: 0;
+    background: var(--surface); color: var(--text);
+    width: min(320px, 88vw);
+}
+.tally-dialog::backdrop { background: rgba(0,0,0,0.45); }
+.tally-dialog-body { padding: 20px 18px; display: flex; flex-direction: column; gap: 16px; }
+.tally-dialog-body p { margin: 0; font-size: 1rem; font-weight: 700; text-align: center; }
+.tally-dialog-actions { display: flex; gap: 10px; }
+.tally-dialog-actions button {
+    flex: 1; font-family: inherit; font-size: 0.85rem; font-weight: 700;
+    border-radius: 9px; min-height: 42px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.tally-btn-primary { background: var(--accent-light); border: none; color: var(--accent-text); }
+.tally-btn-primary:active { opacity: .75; }
+.tally-btn-secondary { background: none; border: 1px solid var(--border); color: var(--muted); }
+.tally-btn-secondary:active { opacity: .75; }
 </style>
 {% endblock %}
 
@@ -167,134 +154,137 @@
     <h1 style="margin-bottom:0;">Log Workout</h1>
 </div>
 
-{# ── Continue banner (today's session exists, not yet in continue mode) ── #}
-{% if today_sessions and not continue_session %}
-  {% for ts in today_sessions %}
-  <div class="continue-banner">
-      <div class="continue-banner-info">
-          <div class="continue-banner-title">Today's session</div>
-          <div class="continue-banner-exs">{{ ts.exercise_names or 'No exercises logged yet' }}</div>
-      </div>
-      <a href="/workout/log/new?continue={{ ts.id }}" class="btn-continue">Continue</a>
-  </div>
-  {% endfor %}
-{% endif %}
-
-{# ── Continue-mode bar ── #}
-{% if continue_session %}
-<div class="continue-mode-bar">
-    <div class="continue-mode-label">Continuing today's session</div>
-    {% if continue_session.exercises %}
-    <div class="continue-mode-done">
-        {% for ex in continue_session.exercises %}
-        <span class="done-badge">{{ ex.name }}</span>
-        {% endfor %}
-    </div>
-    {% endif %}
-</div>
-{% endif %}
-
-{# ── Date (hidden in continue mode — date is locked to today) ── #}
-{% if not continue_session %}
-<div class="log-date-card">
-    <span class="log-date-label">Date</span>
-    <input type="date" id="session-date" value="{{ today }}">
-</div>
-{% endif %}
-
-{# ── Session log ── #}
-<div class="section-title">Session</div>
-<div class="session-log-card" id="session-log-card" style="margin-top:8px;">
-    <div class="session-log-empty" id="log-empty">No exercises added yet</div>
-    <div id="log-items"></div>
-</div>
-<button type="button" class="btn btn-primary btn-full" id="save-btn"
-        onclick="saveSession()" disabled style="margin-bottom:28px; opacity:0.45;">
-    Save Session
-</button>
-
-{# ── Gym filter ── #}
 <div class="section-title" style="margin-top:4px;">Exercises</div>
-<label style="display:flex; align-items:center; gap:10px; margin-bottom:16px; margin-top:10px;
-              background:var(--surface); border:0.5px solid var(--border);
-              border-radius:10px; padding:12px 14px; cursor:pointer;
-              font-size:0.9rem; font-weight:600; color:var(--text);">
-    <input type="checkbox" id="hide-gym-toggle" onchange="filterGym(this.checked)"
-           style="width:18px; height:18px; accent-color:var(--accent); cursor:pointer;">
-    Show gym-only exercises
-</label>
 
 {% set ns = namespace(idx=0) %}
 
-{% for mg, exercises in by_muscle.items() %}
-{% if exercises %}
-<div class="mg-group" data-mg="{{ mg | lower }}">
-    <button class="mg-group-btn" onclick="toggleGroup(this)">
-        <span>{{ mg }}</span>
-        <span class="ex-chevron">›</span>
+{% macro picker(eid, ex) %}
+<div class="ex-picker" id="picker-{{ eid }}"
+     data-name="{{ ex.name }}" data-timed="{{ 'true' if ex.timed else 'false' }}">
+    <div class="picker-row">
+        <span class="picker-label">{{ 'Duration (s)' if ex.timed else 'Reps' }}</span>
+        <div class="stepper">
+            <button class="stepper-btn" onclick="step('{{ eid }}-reps',-1,{{ ex.reps_range[0] }},{{ ex.reps_range[1] }})">−</button>
+            <span class="stepper-val" id="val-{{ eid }}-reps">{{ ex.reps }}</span>
+            <button class="stepper-btn" onclick="step('{{ eid }}-reps', 1,{{ ex.reps_range[0] }},{{ ex.reps_range[1] }})">+</button>
+        </div>
+    </div>
+    <div class="picker-row">
+        <span class="picker-label">Sets</span>
+        <div class="stepper">
+            <button class="stepper-btn" onclick="step('{{ eid }}-sets',-1,{{ ex.sets_range[0] }},{{ ex.sets_range[1] }})">−</button>
+            <span class="stepper-val" id="val-{{ eid }}-sets">{{ ex.sets }}</span>
+            <button class="stepper-btn" onclick="step('{{ eid }}-sets', 1,{{ ex.sets_range[0] }},{{ ex.sets_range[1] }})">+</button>
+        </div>
+    </div>
+    <button type="button" class="btn-add-ex" id="add-btn-{{ eid }}"
+            onclick="logPicker('{{ eid }}')">
+        Add to Session
     </button>
+</div>
+{% endmacro %}
+
+{% for cat in groups %}
+{% set cat_ladders = ladders | selectattr('category', 'equalto', cat) | list %}
+{% set cat_standalone = standalone_by_group.get(cat, []) %}
+{% if cat_ladders or cat_standalone %}
+<div class="cat-section" data-cat="{{ cat | lower }}">
+    <div class="cat-header">{{ group_labels.get(cat, cat) }}</div>
+
+    {% for ladder in cat_ladders %}
+    {% set b = ladder.baseline %}
+    {% set ns.idx = ns.idx + 1 %}
+    {% set beid = 'ex' ~ ns.idx %}
+    <div class="ladder-card">
+        <div class="ladder-baseline status-{{ b.status }}"
+             data-tally-pending="{{ 'true' if b.tally_pending else 'false' }}"
+             data-tally-kind="ladder" data-tally-ladder-key="{{ ladder.key }}"
+             data-tally-stage-index="{{ b.index }}" data-tally-name="{{ b.name }}">
+            <div class="baseline-row rung-head"
+                 {% if b.status in ('unlocked', 'achieved') %}onclick="togglePicker('{{ beid }}')"{% endif %}>
+                <span class="rung-icon">{% if b.status == 'locked' %}🔒{% elif b.status == 'achieved' %}✓{% else %}★{% endif %}</span>
+                <div class="ex-name-wrap">
+                    <span class="mg-exercise-name">{{ b.name }}</span>
+                    <div class="tally-tiles">
+                        {% for i in range(10) %}<span class="tally-tile{{ ' filled' if i < b.tally_filled else '' }}"></span>{% endfor %}
+                    </div>
+                </div>
+                {% if b.status == 'unlocked' %}
+                <button type="button" class="btn-mark-achieved"
+                        onclick="markAchieved(event, '{{ ladder.key }}', {{ b.index }})">Mark Achieved ✓</button>
+                {% endif %}
+                {% if b.status in ('unlocked', 'achieved') %}<span class="ex-chevron" id="chev-{{ beid }}">›</span>{% endif %}
+            </div>
+            {% if b.status in ('unlocked', 'achieved') %}
+                {{ picker(beid, b) }}
+            {% endif %}
+        </div>
+
+        <ul class="ladder-rungs">
+            {% for rung in ladder.benchmarks_display %}
+            {% set ns.idx = ns.idx + 1 %}
+            {% set reid = 'ex' ~ ns.idx %}
+            <li class="ladder-rung status-{{ rung.status }}"
+                data-tally-pending="{{ 'true' if rung.tally_pending else 'false' }}"
+                data-tally-kind="ladder" data-tally-ladder-key="{{ ladder.key }}"
+                data-tally-stage-index="{{ rung.index }}" data-tally-name="{{ rung.name }}">
+                <div class="rung-row rung-head"
+                     {% if rung.status == 'current' %}onclick="togglePicker('{{ reid }}')"{% endif %}>
+                    <span class="rung-icon">{% if rung.status == 'cleared' %}✓{% elif rung.status == 'locked' %}🔒{% else %}●{% endif %}</span>
+                    <div class="ex-name-wrap">
+                        <span class="mg-exercise-name">{{ rung.name }}</span>
+                        <div class="tally-tiles">
+                            {% for i in range(10) %}<span class="tally-tile{{ ' filled' if i < rung.tally_filled else '' }}"></span>{% endfor %}
+                        </div>
+                    </div>
+                    {% if rung.status == 'current' %}
+                    <button type="button" class="btn-mark-achieved"
+                            onclick="markAchieved(event, '{{ ladder.key }}', {{ rung.index }})">Mark Achieved ✓</button>
+                    <span class="ex-chevron" id="chev-{{ reid }}">›</span>
+                    {% endif %}
+                </div>
+                {% if rung.status == 'current' %}
+                    {{ picker(reid, rung) }}
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endfor %}
+
+    {% if cat_standalone %}
     <ul class="mg-exercise-list">
-        {% for ex in exercises %}
+        {% for ex in cat_standalone %}
         {% set ns.idx = ns.idx + 1 %}
         {% set eid = 'ex' ~ ns.idx %}
-        <li class="mg-exercise-item" data-location="{{ ex.location }}">
+        <li class="mg-exercise-item" data-location="{{ ex.location }}"
+            data-tally-pending="{{ 'true' if ex.tally_pending else 'false' }}"
+            data-tally-kind="standalone" data-tally-name="{{ ex.name }}">
             <button class="ex-row" onclick="togglePicker('{{ eid }}')">
-                <span class="mg-exercise-name">{{ ex.name }}</span>
+                <div class="ex-name-wrap">
+                    <span class="mg-exercise-name">{{ ex.name }}</span>
+                    {% if ex.desc %}<span style="font-size:0.78rem; color:var(--muted); font-weight:600;">{{ ex.desc }}</span>{% endif %}
+                    <div class="tally-tiles">
+                        {% for i in range(10) %}<span class="tally-tile{{ ' filled' if i < ex.tally_filled else '' }}"></span>{% endfor %}
+                    </div>
+                </div>
                 <span class="ex-chevron" id="chev-{{ eid }}">›</span>
             </button>
-            <div class="ex-picker" id="picker-{{ eid }}"
-                 data-name="{{ ex.name }}" data-timed="{{ 'true' if ex.timed else 'false' }}">
-                <div class="picker-row">
-                    <span class="picker-label">{{ 'Duration (s)' if ex.timed else 'Reps' }}</span>
-                    <div class="stepper">
-                        <button class="stepper-btn" onclick="step('{{ eid }}-reps',-1,{{ ex.reps_range[0] }},{{ ex.reps_range[1] }})">−</button>
-                        <span class="stepper-val" id="val-{{ eid }}-reps">{{ ex.reps }}</span>
-                        <button class="stepper-btn" onclick="step('{{ eid }}-reps', 1,{{ ex.reps_range[0] }},{{ ex.reps_range[1] }})">+</button>
-                    </div>
-                </div>
-                <div class="picker-row">
-                    <span class="picker-label">Sets</span>
-                    <div class="stepper">
-                        <button class="stepper-btn" onclick="step('{{ eid }}-sets',-1,{{ ex.sets_range[0] }},{{ ex.sets_range[1] }})">−</button>
-                        <span class="stepper-val" id="val-{{ eid }}-sets">{{ ex.sets }}</span>
-                        <button class="stepper-btn" onclick="step('{{ eid }}-sets', 1,{{ ex.sets_range[0] }},{{ ex.sets_range[1] }})">+</button>
-                    </div>
-                </div>
-                <button type="button" class="btn-add-ex" id="add-btn-{{ eid }}"
-                        onclick="addToSession('{{ eid }}')">
-                    Add to Session
-                </button>
-            </div>
+            {{ picker(eid, ex) }}
         </li>
         {% endfor %}
     </ul>
+    {% endif %}
 </div>
 {% endif %}
 {% endfor %}
 
-<div class="mg-group">
-    <button class="mg-group-btn" onclick="toggleGroup(this)">
-        <span>Cardio</span>
-        <span class="ex-chevron">›</span>
-    </button>
-    <ul class="mg-exercise-list">
-        {% for c in cardio %}
-        <li class="mg-exercise-item">
-            <span class="mg-exercise-name">{{ c.name }}</span>
-            <span style="font-size:0.8rem; color:var(--muted); font-weight:600;">{{ c.desc }}</span>
-        </li>
-        {% endfor %}
-    </ul>
-</div>
-
-{# Hidden form — submitted by saveSession() #}
-<form id="log-form" method="POST" action="/workout/custom/log" style="display:none;">
-    <input type="hidden" name="date" id="form-date" value="{{ today }}">
-    {% if continue_session %}
-    <input type="hidden" name="continue_session_id" value="{{ continue_session.id }}">
-    {% endif %}
-    <div id="form-exercise-fields"></div>
-</form>
+<dialog id="tally-dialog" class="tally-dialog">
+  <div class="tally-dialog-body">
+    <p id="tally-dialog-msg"></p>
+    <div class="tally-dialog-actions" id="tally-dialog-actions"></div>
+  </div>
+</dialog>
 {% endblock %}
 
 {% block extra_js %}
@@ -320,95 +310,184 @@ function step(id, delta, min, max) {
     const el = document.getElementById('val-' + id);
     el.textContent = Math.max(min, Math.min(max, parseInt(el.textContent) + delta));
 }
-function filterGym(show) {
-    document.querySelectorAll('.mg-exercise-item[data-location="gym"]').forEach(el => {
-        el.style.display = show ? '' : 'none';
-    });
-}
-document.addEventListener('DOMContentLoaded', () => filterGym(false));
-
-// Keep form date in sync with date picker (date picker absent in continue mode)
-const _dateInput = document.getElementById('session-date');
-if (_dateInput) {
-    _dateInput.addEventListener('change', function() {
-        document.getElementById('form-date').value = this.value;
-    });
+// ── Ladder progression ──────────────────────────────────────────────────
+function _csrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.content || window._csrf || '';
 }
 
-// ── Session log ───────────────────────────────────────────────────────────
-let _items = [];
-let _uid   = 0;
+// ── Immediate quick-set logging (picker "Add to Session" button) ───────
+async function postQuickSet(name, amount) {
+    const res = await fetch('/workout/quick-set', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': _csrfToken() },
+        body: JSON.stringify({ exercise: name, amount: amount }),
+    });
+    if (!res.ok) throw new Error('log failed');
+    return res.json();
+}
 
-function addToSession(eid) {
+function _pickerRow(eid) {
     const picker = document.getElementById('picker-' + eid);
-    const name   = picker.dataset.name;
-    const timed  = picker.dataset.timed === 'true';
-    const reps   = parseInt(document.getElementById('val-' + eid + '-reps').textContent);
-    const sets   = parseInt(document.getElementById('val-' + eid + '-sets').textContent);
-    _items.push({ uid: ++_uid, eid, name, reps, sets, timed });
-    _setBtn(eid, true);
-    picker.classList.remove('open');
-    const chev = document.getElementById('chev-' + eid);
-    if (chev) chev.classList.remove('open');
-    _render();
+    return picker ? picker.closest('.ladder-baseline, .ladder-rung, .mg-exercise-item') : null;
 }
 
-function removeItem(uid) {
-    const item = _items.find(i => i.uid === uid);
-    _items = _items.filter(i => i.uid !== uid);
-    if (item) _setBtn(item.eid, false);
-    _render();
+function updateTallyTiles(eid, filled) {
+    if (typeof filled !== 'number') return;
+    const row = _pickerRow(eid);
+    if (!row) return;
+    row.querySelectorAll('.tally-tile').forEach((tile, i) => {
+        tile.classList.toggle('filled', i < filled);
+    });
 }
 
-function _setBtn(eid, added) {
-    const btn = document.getElementById('add-btn-' + eid);
-    if (!btn) return;
-    btn.textContent = added ? 'Added ✓' : 'Add to Session';
-    btn.disabled    = added;
+function flashLogged(eid) {
+    const row = _pickerRow(eid);
+    if (!row) return;
+    row.classList.add('just-logged');
+    setTimeout(() => row.classList.remove('just-logged'), 550);
 }
 
-function _render() {
-    const empty  = document.getElementById('log-empty');
-    const items  = document.getElementById('log-items');
-    const fields = document.getElementById('form-exercise-fields');
-    const save   = document.getElementById('save-btn');
+async function logPicker(eid) {
+    const picker = document.getElementById('picker-' + eid);
+    const btn    = document.getElementById('add-btn-' + eid);
+    if (!picker || !btn) return;
+    const name = picker.dataset.name;
+    const reps = parseInt(document.getElementById('val-' + eid + '-reps').textContent, 10);
+    const sets = parseInt(document.getElementById('val-' + eid + '-sets').textContent, 10);
+    if (!name || !reps || !sets) return;
 
-    const hasItems = _items.length > 0;
-    empty.style.display   = hasItems ? 'none' : '';
-    save.disabled         = !hasItems;
-    save.style.opacity    = hasItems ? '' : '0.45';
+    btn.disabled = true;
+    let dialogFired = false;
 
-    if (!hasItems) {
-        items.innerHTML  = '';
-        fields.innerHTML = '';
-        return;
+    for (let i = 0; i < sets; i++) {
+        let data;
+        try {
+            data = await postQuickSet(name, reps);
+        } catch (e) {
+            btn.disabled = false;
+            btn.textContent = 'retry';
+            return;
+        }
+        updateTallyTiles(eid, data.tally_filled);
+        if (data.tally_pending) {
+            dialogFired = true;
+            showTallyDialog({
+                kind: data.tally_kind,
+                name: name,
+                ladderKey: data.ladder_key,
+                stageIndex: data.stage_index,
+            });
+            break; // stop issuing further calls — advancing may change what's "current"
+        }
     }
 
-    items.innerHTML = _items.map(item => {
-        const spec = item.timed ? `${item.reps}s × ${item.sets}` : `${item.reps} × ${item.sets}`;
-        return `<div class="log-item-row">
-            <span class="log-item-name">${item.name}</span>
-            <span class="log-item-spec">${spec}</span>
-            <button type="button" class="log-item-rm" onclick="removeItem(${item.uid})">×</button>
-        </div>`;
-    }).join('');
+    flashLogged(eid);
+    if (dialogFired) return; // dialog takes over; page reloads once the user resolves it
 
-    fields.innerHTML = _items.map(item =>
-        `<input type="hidden" name="ex_name" value="${item.name}">` +
-        `<input type="hidden" name="ex_reps" value="${item.reps}">` +
-        `<input type="hidden" name="ex_sets" value="${item.sets}">`
-    ).join('');
+    btn.textContent = 'Logged ✓';
+    setTimeout(() => {
+        btn.textContent = 'Add to Session';
+        btn.disabled = false;
+        picker.classList.remove('open');
+        const chev = document.getElementById('chev-' + eid);
+        if (chev) chev.classList.remove('open');
+    }, 600);
 }
 
-function saveSession() {
-    if (_items.length === 0) return;
-    const form = document.getElementById('log-form');
-    if (!form.querySelector('[name="_csrf"]')) {
-        const inp = document.createElement('input');
-        inp.type = 'hidden'; inp.name = '_csrf'; inp.value = window._csrf || '';
-        form.appendChild(inp);
+async function markAchieved(ev, ladderKey, stageIndex) {
+    ev.stopPropagation();
+    const btn = ev.currentTarget;
+    btn.disabled = true;
+    try {
+        const res = await fetch('/workout/ladder/advance', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': _csrfToken() },
+            body: JSON.stringify({ ladder_key: ladderKey, stage_index: stageIndex }),
+        });
+        if (!res.ok) throw new Error('advance failed');
+        location.reload();
+    } catch (e) {
+        btn.disabled = false;
+        alert('Could not mark as achieved — try again.');
     }
-    form.submit();
 }
+
+// ── Lifetime tally dialog (10-box milestone) ────────────────────────────
+async function _ackTally(name) {
+    try {
+        await fetch('/workout/tally/ack', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': _csrfToken() },
+            body: JSON.stringify({ exercise_name: name }),
+        });
+    } catch (e) { /* best-effort */ }
+}
+
+function showTallyDialog({ kind, name, ladderKey, stageIndex }) {
+    const dialog = document.getElementById('tally-dialog');
+    const msg    = document.getElementById('tally-dialog-msg');
+    const actions = document.getElementById('tally-dialog-actions');
+    if (!dialog || !msg || !actions) return;
+    actions.innerHTML = '';
+
+    if (kind === 'ladder') {
+        msg.textContent = '10 logged — advance to the next stage?';
+        const advanceBtn = document.createElement('button');
+        advanceBtn.className = 'tally-btn-primary';
+        advanceBtn.textContent = 'Advance';
+        advanceBtn.onclick = async () => {
+            advanceBtn.disabled = true;
+            try {
+                const res = await fetch('/workout/ladder/advance', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': _csrfToken() },
+                    body: JSON.stringify({ ladder_key: ladderKey, stage_index: stageIndex }),
+                });
+                if (!res.ok) throw new Error('advance failed');
+                await _ackTally(name);
+                dialog.close();
+                location.reload();
+            } catch (e) {
+                advanceBtn.disabled = false;
+                alert('Could not advance — try again.');
+            }
+        };
+        const notYetBtn = document.createElement('button');
+        notYetBtn.className = 'tally-btn-secondary';
+        notYetBtn.textContent = 'Not yet';
+        notYetBtn.onclick = async () => {
+            notYetBtn.disabled = true;
+            await _ackTally(name);
+            dialog.close();
+            location.reload();
+        };
+        actions.appendChild(advanceBtn);
+        actions.appendChild(notYetBtn);
+    } else {
+        msg.textContent = '10 done! 🎉';
+        const okBtn = document.createElement('button');
+        okBtn.className = 'tally-btn-primary';
+        okBtn.textContent = 'OK';
+        okBtn.onclick = async () => {
+            okBtn.disabled = true;
+            await _ackTally(name);
+            dialog.close();
+            location.reload();
+        };
+        actions.appendChild(okBtn);
+    }
+    dialog.showModal();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const pending = document.querySelector('[data-tally-pending="true"]');
+    if (!pending) return;
+    showTallyDialog({
+        kind: pending.dataset.tallyKind,
+        name: pending.dataset.tallyName,
+        ladderKey: pending.dataset.tallyLadderKey,
+        stageIndex: pending.dataset.tallyStageIndex !== undefined ? parseInt(pending.dataset.tallyStageIndex, 10) : null,
+    });
+});
 </script>
 {% endblock %}

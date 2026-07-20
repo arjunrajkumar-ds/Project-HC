@@ -582,6 +582,17 @@ def init_db():
         )
     """)
 
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS exercise_tally (
+            profile_id    INTEGER NOT NULL,
+            exercise_id   INTEGER NOT NULL REFERENCES exercises(id),
+            count         INTEGER NOT NULL DEFAULT 0,
+            last_prompted INTEGER NOT NULL DEFAULT 0,
+            updated_at    TEXT,
+            PRIMARY KEY (profile_id, exercise_id)
+        )
+    """)
+
     # ── Food tracking ─────────────────────────────────────────────────
     conn.execute("""
         CREATE TABLE IF NOT EXISTS food_reconciliations (
@@ -1146,6 +1157,25 @@ def init_db():
     # user edits stay durable.
     if _lib_seed:
         conn.execute(f'PRAGMA user_version = {_LIBRARY_VERSION}')
+
+    # Seed initial benchmark-ladder progress for the Gayathri/Raj profiles
+    # (2, 3). INSERT OR IGNORE so this never clobbers real future progress —
+    # it only fills the row in if it doesn't already exist.
+    _LADDER_INITIAL_CLEARED = {
+        'ladder__push_pushups':    1,
+        'ladder__pull_deadhang':   0,
+        'ladder__legs_squat':      0,
+        'ladder__legs_jump':       0,
+        'ladder__stability_situp': 0,
+    }
+    from datetime import datetime as _dt
+    _seed_ts = _dt.utcnow().isoformat() + 'Z'
+    for _pid in (2, 3):
+        for _mkey, _cleared in _LADDER_INITIAL_CLEARED.items():
+            conn.execute("""
+                INSERT OR IGNORE INTO mission_progress (profile_id, mission_key, cleared, updated_at)
+                VALUES (?, ?, ?, ?)
+            """, (_pid, _mkey, _cleared, _seed_ts))
 
     conn.commit()
     _init_swim_v2(conn)
@@ -3096,6 +3126,46 @@ def clear_mission_stage(profile_id, mission_key, stage_index):
                        (profile_id, mission_key)).fetchone()
     conn.close()
     return row['cleared'] if row else cleared
+
+
+# ── Exercise tally (lifetime 10-box progress, forward-from-today only) ─────
+
+def get_exercise_tallies(profile_id):
+    """Return {exercise_id: {'count': n, 'last_prompted': n}} for a profile."""
+    conn = get_db()
+    rows = conn.execute(
+        'SELECT exercise_id, count, last_prompted FROM exercise_tally WHERE profile_id=?',
+        (profile_id,)).fetchall()
+    conn.close()
+    return {r['exercise_id']: {'count': r['count'], 'last_prompted': r['last_prompted']} for r in rows}
+
+
+def bump_exercise_tally(profile_id, exercise_id, by=1):
+    """Forward-increment the lifetime tally count by `by` (default 1) and
+    return the new total count."""
+    from datetime import datetime as _dt
+    conn = get_db()
+    conn.execute("""
+        INSERT INTO exercise_tally (profile_id, exercise_id, count, last_prompted, updated_at)
+        VALUES (?,?,?,0,?)
+        ON CONFLICT(profile_id, exercise_id)
+        DO UPDATE SET count = count + excluded.count, updated_at = excluded.updated_at
+    """, (profile_id, exercise_id, by, _dt.utcnow().isoformat() + 'Z'))
+    conn.commit()
+    row = conn.execute('SELECT count FROM exercise_tally WHERE profile_id=? AND exercise_id=?',
+                       (profile_id, exercise_id)).fetchone()
+    conn.close()
+    return row['count'] if row else by
+
+
+def ack_exercise_tally(profile_id, exercise_id):
+    """Mark the current count as acknowledged so the 10-multiple dialog won't
+    reappear until the count advances another 10."""
+    conn = get_db()
+    conn.execute('UPDATE exercise_tally SET last_prompted = count WHERE profile_id=? AND exercise_id=?',
+                (profile_id, exercise_id))
+    conn.commit()
+    conn.close()
 
 
 

@@ -206,13 +206,12 @@
 .slog-amt  { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--slog-color, var(--text-strong)); white-space: nowrap; }
 
 /* Colour map for session log rows (matches group colours) */
-.slog-row[data-group="Push"]     { --slog-color: #e07a7a; }
-.slog-row[data-group="Pull"]     { --slog-color: #6b93c9; }
-.slog-row[data-group="Legs"]     { --slog-color: #7fb069; }
-.slog-row[data-group="Core"]     { --slog-color: #a785c2; }
-.slog-row[data-group="Mobility"] { --slog-color: #6bb0a8; }
-.slog-row[data-group="Balance"]  { --slog-color: #d4c574; }
-.slog-row[data-group="Cardio"]   { --slog-color: #d48a3a; }
+.slog-row[data-group="Push"]      { --slog-color: #e07a7a; }
+.slog-row[data-group="Pull"]      { --slog-color: #6b93c9; }
+.slog-row[data-group="Legs"]      { --slog-color: #7fb069; }
+.slog-row[data-group="Stability"] { --slog-color: #a785c2; }
+.slog-row[data-group="Mobility"]  { --slog-color: #6bb0a8; }
+.slog-row[data-group="Cardio"]    { --slog-color: #d48a3a; }
 
 /* ── Log-a-set: coverage strip + coloured group accordion ────────── */
 .logset-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
@@ -237,13 +236,12 @@
 
 /* group accordion — per-group colour via --g-color */
 .g-group { --g-color: var(--accent); margin-bottom: 8px; }
-.g-group[data-group="Push"]     { --g-color: #e07a7a; }
-.g-group[data-group="Pull"]     { --g-color: #6b93c9; }
-.g-group[data-group="Legs"]     { --g-color: #7fb069; }
-.g-group[data-group="Core"]     { --g-color: #a785c2; }
-.g-group[data-group="Mobility"] { --g-color: #6bb0a8; }
-.g-group[data-group="Balance"]  { --g-color: #d4c574; }
-.g-group[data-group="Cardio"]   { --g-color: #d48a3a; }
+.g-group[data-group="Push"]      { --g-color: #e07a7a; }
+.g-group[data-group="Pull"]      { --g-color: #6b93c9; }
+.g-group[data-group="Legs"]      { --g-color: #7fb069; }
+.g-group[data-group="Stability"] { --g-color: #a785c2; }
+.g-group[data-group="Mobility"]  { --g-color: #6bb0a8; }
+.g-group[data-group="Cardio"]    { --g-color: #d48a3a; }
 .g-head {
     display: grid; grid-template-columns: 4px 1fr auto auto; align-items: center; gap: 10px;
     width: 100%; background: var(--panel); border: 1px solid var(--border);
@@ -329,6 +327,107 @@
     -webkit-tap-highlight-color: transparent;
 }
 .tap-row-static { grid-template-columns: 1fr; }
+
+/* ── Lifetime tally tiles ────────────────────────────────────────────── */
+.tally-tiles { display: flex; gap: 3px; margin-top: 2px; }
+.tally-tile { width: 12px; height: 6px; border-radius: 2px; background: var(--panel-soft); border: 1px solid var(--border); }
+.tally-tile.filled { background: var(--g-color, var(--accent)); border-color: var(--g-color, var(--accent)); }
+
+/* ── Tally dialog ─────────────────────────────────────────────────────── */
+.tally-dialog {
+    border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0;
+    background: var(--panel); color: var(--text-strong);
+    width: min(320px, 88vw);
+}
+.tally-dialog::backdrop { background: rgba(0,0,0,0.5); }
+.tally-dialog-body { padding: 20px 18px; display: flex; flex-direction: column; gap: 16px; }
+.tally-dialog-body p { margin: 0; font-family: var(--font-sans); font-size: 1rem; font-weight: 600; text-align: center; }
+.tally-dialog-actions { display: flex; gap: 10px; }
+.tally-dialog-actions button {
+    flex: 1; font-family: var(--font-sans); font-size: 0.85rem; font-weight: 600;
+    border-radius: var(--radius-sm); min-height: 42px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.tally-btn-primary { background: var(--accent); border: none; color: var(--bg); }
+.tally-btn-primary:active { opacity: .85; }
+.tally-btn-secondary { background: none; border: 1px solid var(--border); color: var(--dim); }
+.tally-btn-secondary:active { opacity: .75; }
+
+/* ── Food logger ─────────────────────────────────────────────────── */
+.fl-add-wrap { margin-bottom: 10px; }
+.fl-add-summary {
+    display: block; width: 100%;
+    border: 1px dashed var(--border); border-radius: var(--radius-sm); padding: 10px;
+    text-align: center; color: var(--dim); font-family: var(--font-mono); font-size: 11px;
+    letter-spacing: .04em; cursor: pointer; list-style: none;
+    -webkit-tap-highlight-color: transparent;
+}
+.fl-add-summary::-webkit-details-marker { display: none; }
+details[open].fl-add-wrap .fl-add-summary { color: var(--accent); border-color: var(--accent); margin-bottom: 8px; }
+.fl-add-body {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 12px; display: flex; flex-direction: column; gap: 8px;
+}
+.fl-meal-row { display: flex; gap: 4px; flex-wrap: wrap; }
+.fl-meal-pill {
+    background: transparent; border: 1px solid var(--border); color: var(--dim);
+    border-radius: var(--radius-sm); cursor: pointer;
+    font-family: var(--font-mono); font-size: 10px; font-weight: 400;
+    letter-spacing: .06em; text-transform: uppercase; padding: 6px 11px;
+    -webkit-tap-highlight-color: transparent; transition: color .12s, border-color .12s, background .12s;
+}
+.fl-meal-pill.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.fl-input-row { display: flex; gap: 6px; }
+.fl-name-input {
+    flex: 1; background: var(--panel-soft); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text);
+    font-family: var(--font-sans); font-size: 13px; padding: 9px 10px;
+}
+.fl-name-input::placeholder { color: var(--dimmer); }
+.fl-submit-btn {
+    background: var(--accent); color: var(--bg); border: none; border-radius: var(--radius-sm);
+    cursor: pointer; font-family: var(--font-sans); font-size: 13px; font-weight: 600;
+    padding: 0 16px; -webkit-tap-highlight-color: transparent;
+}
+.fl-submit-btn:active { opacity: .85; }
+.fl-hint  { font-family: var(--font-mono); font-size: 10px; color: var(--dim); }
+.fl-error { font-family: var(--font-mono); font-size: 10px; color: var(--red); }
+.fl-recents { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.fl-recents-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; color: var(--dim); }
+.fl-recent-chip {
+    background: var(--panel-soft); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--dim); cursor: pointer; font-family: var(--font-mono); font-size: 10px;
+    padding: 4px 9px; -webkit-tap-highlight-color: transparent;
+}
+.fl-recent-chip:active { color: var(--accent); border-color: var(--accent); }
+
+/* Meal group headers */
+.fl-meal-group { margin-bottom: 8px; }
+.fl-meal-header {
+    display: flex; align-items: center; gap: 8px; padding: 8px 0 4px;
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--dim);
+}
+.fl-meal-name { color: var(--accent); }
+.fl-meal-kcal { margin-left: auto; }
+
+/* Food entry rows */
+.fl-entry {
+    display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 6px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 8px 10px; margin-bottom: 4px;
+}
+.fl-entry-name { font-family: var(--font-sans); font-size: 12px; color: var(--text-strong);
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fl-entry-kcal { font-family: var(--font-mono); font-size: 11px; color: var(--text-strong); font-weight: 600; white-space: nowrap; }
+.fl-entry-pro  { font-family: var(--font-mono); font-size: 11px; color: var(--green); white-space: nowrap; }
+.fl-del-btn {
+    background: none; border: none; color: var(--dimmer); cursor: pointer;
+    font-size: 13px; padding: 2px 4px; border-radius: var(--radius-sm);
+    -webkit-tap-highlight-color: transparent;
+}
+.fl-del-btn:active { color: var(--red); }
+.fl-empty { font-family: var(--font-mono); font-size: 11px; color: var(--dimmer); text-align: center; padding: 12px 0; }
 </style>
 {% endblock %}
 
@@ -385,7 +484,7 @@
         {% for g in gy_group_order %}
         <div class="cov-item {% if g in gy_covered %}on{% endif %}" data-group="{{ g }}">
             <span class="cov-dot"></span>
-            <span class="cov-label">{{ g }}</span>
+            <span class="cov-label">{{ gy_group_labels.get(g, g) }}</span>
         </div>
         {% endfor %}
     </div>
@@ -402,7 +501,7 @@
         <div class="g-group{% if g in gy_covered %} g-covered{% endif %}" data-group="{{ g }}">
             <button type="button" class="g-head" onclick="toggleGGroup(this)">
                 <span class="g-stripe"></span>
-                <span class="g-title">{{ g | lower }}</span>
+                <span class="g-title">{{ gy_group_labels.get(g, g) | lower }}</span>
                 <span class="g-status">{% if g in gy_covered %}✓{% else %}·{% endif %}</span>
                 <span class="g-chev">›</span>
             </button>
@@ -410,7 +509,10 @@
                 {% for ex in gy_by_group[g] %}
                 {% set t = gy_tallies.get(ex.name) %}
                 <div class="tap-row" data-exercise="{{ ex.name }}" data-group="{{ g }}"
-                     data-timed="{{ '1' if ex.timed else '0' }}" data-step="{{ ex.step }}">
+                     data-timed="{{ '1' if ex.timed else '0' }}" data-step="{{ ex.step }}"
+                     data-tally-kind="{{ ex.tally_kind }}" data-tally-ladder-key="{{ ex.ladder_key or '' }}"
+                     data-tally-stage-index="{{ ex.stage_index if ex.stage_index is not none else '' }}"
+                     data-tally-pending="{{ 'true' if ex.tally_pending else 'false' }}">
                     <div class="tap-main">
                         <span class="tap-name">{{ ex.name }}</span>
                         {% if ex.desc %}<span class="tap-desc">{{ ex.desc }}</span>{% endif %}
@@ -422,6 +524,9 @@
                                 <span class="tap-empty">not started</span>
                             {%- endif -%}
                         </span>
+                        <div class="tally-tiles" data-role="tally-tiles">
+                            {% for i in range(10) %}<span class="tally-tile{{ ' filled' if i < ex.tally_filled else '' }}"></span>{% endfor %}
+                        </div>
                     </div>
                     <div class="tap-controls">
                         <button type="button" class="tap-custom-btn" data-role="custom"
@@ -503,6 +608,38 @@
     </a>
 </section>
 
+{# ── Food log · today ─────────────────────────────────────────────── #}
+<section class="section">
+    <p class="section-title">food · today</p>
+
+    {# Quick add #}
+    <div class="fl-add-wrap">
+        <div class="fl-meal-row" id="fl-meal-row">
+            <button type="button" class="fl-meal-pill" data-meal="breakfast" onclick="flSelectMeal('breakfast')">Breakfast</button>
+            <button type="button" class="fl-meal-pill" data-meal="lunch"     onclick="flSelectMeal('lunch')">Lunch</button>
+            <button type="button" class="fl-meal-pill" data-meal="dinner"    onclick="flSelectMeal('dinner')">Dinner</button>
+            <button type="button" class="fl-meal-pill" data-meal="snack"     onclick="flSelectMeal('snack')">Snack</button>
+        </div>
+        <div class="fl-input-row">
+            <input type="text" id="fl-name" class="fl-name-input" placeholder="e.g. 78g Chicken" autocomplete="off">
+            <button type="button" class="fl-submit-btn" onclick="flAddEntry()">Add</button>
+        </div>
+        {% if recent_foods %}
+        <div class="fl-recents">
+            <span class="fl-recents-label">Recent</span>
+            {% for rf in recent_foods %}
+            <button type="button" class="fl-recent-chip" onclick="flSetName({{ rf | tojson }})">{{ rf }}</button>
+            {% endfor %}
+        </div>
+        {% endif %}
+        <div class="fl-error" id="fl-error" style="display:none"></div>
+    </div>
+
+    {# Meal sections #}
+    <div id="fl-log" class="fl-log"></div>
+    <div id="fl-empty" class="fl-empty" style="display:none">Nothing logged yet.</div>
+</section>
+
 {# ── Weekly stats ──────────────────────────────────────────────────── #}
 <section class="section">
     <div class="stats-row">
@@ -579,10 +716,138 @@
     </div>
 </section>
 {% endif %}
+
+<dialog id="tally-dialog" class="tally-dialog">
+  <div class="tally-dialog-body">
+    <p id="tally-dialog-msg"></p>
+    <div class="tally-dialog-actions" id="tally-dialog-actions"></div>
+  </div>
+</dialog>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+// ── Food logger ──────────────────────────────────────────────────────────
+(function () {
+    const TODAY = {{ today | tojson }};
+    let FL_ENTRIES = {{ food_entries | tojson }};
+    const FL_GOALS = { calories: {{ goals.calories or 0 }}, protein_g: {{ goals.protein_g or 0 }} };
+    const csrf = () => document.querySelector('meta[name="csrf-token"]')?.content || window._csrf || '';
+
+    const MEAL_ORDER  = ['breakfast', 'lunch', 'dinner', 'snack'];
+    const MEAL_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' };
+
+    // ── Quick add ────────────────────────────────────────────────────────
+    let flSelectedMeal = null;
+
+    window.flSelectMeal = function (type) {
+        flSelectedMeal = type;
+        document.querySelectorAll('.fl-meal-pill').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.meal === type);
+        });
+    };
+
+    window.flSetName = function (name) {
+        const input = document.getElementById('fl-name');
+        input.value = name;
+        input.focus();
+    };
+
+    function flShowError(msg) {
+        const el = document.getElementById('fl-error');
+        el.textContent = msg;
+        el.style.display = '';
+    }
+    function flClearError() {
+        document.getElementById('fl-error').style.display = 'none';
+    }
+
+    window.flAddEntry = async function () {
+        if (!flSelectedMeal) { flShowError('Select a meal type first.'); return; }
+        const input = document.getElementById('fl-name');
+        const name = input.value.trim();
+        if (!name) { flShowError('Enter a food name.'); return; }
+        flClearError();
+        try {
+            const res = await fetch('/food/api/entry', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf() },
+                body: JSON.stringify({ date: TODAY, meal_type: flSelectedMeal, name }),
+            });
+            if (!res.ok) throw new Error('Server error');
+            const data = await res.json();
+            FL_ENTRIES.push(data.entry);
+            input.value = '';
+            flRender();
+        } catch (err) {
+            flShowError('Failed to save — try again.');
+        }
+    };
+
+    document.getElementById('fl-name').addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); flAddEntry(); }
+    });
+
+    function flRender() {
+        const logEl   = document.getElementById('fl-log');
+        const emptyEl = document.getElementById('fl-empty');
+        if (!FL_ENTRIES.length) {
+            logEl.innerHTML = '';
+            emptyEl.style.display = '';
+            return;
+        }
+        emptyEl.style.display = 'none';
+
+        const byMeal = {};
+        MEAL_ORDER.forEach(m => { byMeal[m] = []; });
+        FL_ENTRIES.forEach(e => {
+            const mt = e.meal_type || 'snack';
+            if (byMeal[mt]) byMeal[mt].push(e);
+        });
+
+        let html = '';
+        MEAL_ORDER.forEach(mt => {
+            const rows = byMeal[mt];
+            if (!rows.length) return;
+            const mkcal = rows.reduce((s, e) => s + (e.calories || 0), 0);
+            html += `<div class="fl-meal-group">
+                <div class="fl-meal-header">
+                    <span class="fl-meal-name">${MEAL_LABELS[mt]}</span>
+                    <span class="fl-meal-kcal">${Math.round(mkcal)} kcal</span>
+                </div>`;
+            rows.forEach(e => {
+                html += `<div class="fl-entry" data-id="${e.id}">
+                    <span class="fl-entry-name">${flH(e.name)}</span>
+                    <span class="fl-entry-kcal">${Math.round(e.calories || 0)}</span>
+                    <span class="fl-entry-pro">${(e.protein_g || 0).toFixed(1)}g</span>
+                    <button type="button" class="fl-del-btn" onclick="flDelete(${e.id})" aria-label="Delete">✕</button>
+                </div>`;
+            });
+            html += '</div>';
+        });
+        logEl.innerHTML = html;
+    }
+
+    window.flDelete = async function (id) {
+        try {
+            const res = await fetch(`/food/delete/${id}`, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': csrf() },
+                body: new URLSearchParams({ date: TODAY }),
+            });
+            if (!res.ok) throw new Error();
+            FL_ENTRIES = FL_ENTRIES.filter(e => e.id !== id);
+            flRender();
+        } catch (_) { location.reload(); }
+    };
+
+    function flH(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    flRender();
+})();
+
 // mini-weight pill inline edit (mirrors Arjun's dashboard)
 function editWeight() {
     const val = document.getElementById('mw-val');
@@ -621,6 +886,25 @@ function toggleGGroup(btn) { btn.closest('.g-group').classList.toggle('open'); }
         row.classList.add('just-logged');
         setTimeout(() => row.classList.remove('just-logged'), 550);
         applyCoverage(data);
+        updateTallyTiles(row, data);
+    }
+
+    function updateTallyTiles(row, data) {
+        if (typeof data.tally_filled !== 'number') return;
+        row.querySelectorAll('[data-role="tally-tiles"] .tally-tile').forEach((tile, i) => {
+            tile.classList.toggle('filled', i < data.tally_filled);
+        });
+        if (data.tally_kind) row.dataset.tallyKind = data.tally_kind;
+        row.dataset.tallyLadderKey = data.ladder_key || '';
+        row.dataset.tallyStageIndex = (data.stage_index !== null && data.stage_index !== undefined) ? data.stage_index : '';
+        if (data.tally_pending) {
+            window.showTallyDialog({
+                kind: data.tally_kind,
+                name: row.dataset.exercise,
+                ladderKey: data.ladder_key,
+                stageIndex: data.stage_index,
+            });
+        }
     }
 
     function updateSlogCount() {
@@ -810,6 +1094,89 @@ function toggleGGroup(btn) { btn.closest('.g-group').classList.toggle('open'); }
         <path d="${areaD}" fill="url(#wt-grad)"/>
         <path d="${pathD}" fill="none" stroke="${LINE}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         ${dots}`;
+})();
+
+// ── Lifetime tally dialog (10-box milestone) ────────────────────────────
+(function () {
+    const csrf = () => document.querySelector('meta[name="csrf-token"]')?.content || window._csrf || '';
+
+    async function ackTally(name) {
+        try {
+            await fetch('/workout/tally/ack', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf() },
+                body: JSON.stringify({ exercise_name: name }),
+            });
+        } catch (e) { /* best-effort */ }
+    }
+
+    window.showTallyDialog = function ({ kind, name, ladderKey, stageIndex }) {
+        const dialog  = document.getElementById('tally-dialog');
+        const msg     = document.getElementById('tally-dialog-msg');
+        const actions = document.getElementById('tally-dialog-actions');
+        if (!dialog || !msg || !actions) return;
+        if (dialog.open) return; // don't stack dialogs
+        actions.innerHTML = '';
+
+        if (kind === 'ladder') {
+            msg.textContent = '10 logged — advance to the next stage?';
+            const advanceBtn = document.createElement('button');
+            advanceBtn.className = 'tally-btn-primary';
+            advanceBtn.textContent = 'Advance';
+            advanceBtn.onclick = async () => {
+                advanceBtn.disabled = true;
+                try {
+                    const res = await fetch('/workout/ladder/advance', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf() },
+                        body: JSON.stringify({ ladder_key: ladderKey, stage_index: stageIndex }),
+                    });
+                    if (!res.ok) throw new Error('advance failed');
+                    await ackTally(name);
+                    dialog.close();
+                    location.reload();
+                } catch (e) {
+                    advanceBtn.disabled = false;
+                    alert('Could not advance — try again.');
+                }
+            };
+            const notYetBtn = document.createElement('button');
+            notYetBtn.className = 'tally-btn-secondary';
+            notYetBtn.textContent = 'Not yet';
+            notYetBtn.onclick = async () => {
+                notYetBtn.disabled = true;
+                await ackTally(name);
+                dialog.close();
+                location.reload();
+            };
+            actions.appendChild(advanceBtn);
+            actions.appendChild(notYetBtn);
+        } else {
+            msg.textContent = '10 done! 🎉';
+            const okBtn = document.createElement('button');
+            okBtn.className = 'tally-btn-primary';
+            okBtn.textContent = 'OK';
+            okBtn.onclick = async () => {
+                okBtn.disabled = true;
+                await ackTally(name);
+                dialog.close();
+                location.reload();
+            };
+            actions.appendChild(okBtn);
+        }
+        dialog.showModal();
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const pending = document.querySelector('.tap-row[data-tally-pending="true"]');
+        if (!pending) return;
+        window.showTallyDialog({
+            kind: pending.dataset.tallyKind,
+            name: pending.dataset.exercise,
+            ladderKey: pending.dataset.tallyLadderKey,
+            stageIndex: pending.dataset.tallyStageIndex !== '' ? parseInt(pending.dataset.tallyStageIndex, 10) : null,
+        });
+    });
 })();
 </script>
 {% endblock %}

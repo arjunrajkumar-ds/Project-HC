@@ -63,39 +63,30 @@
 }
 .section-toggle.open { color: var(--accent); border-color: var(--accent); }
 
-/* ── Macro grid (2×2) ────────────────────────────────────────────── */
-.macro-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.macro-cell { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 11px; }
-.macro-eyebrow { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
-.macro-eyebrow.cal  { color: var(--accent); }
-.macro-eyebrow.pro  { color: var(--green); }
-.macro-eyebrow.carb { color: var(--blue); }
-.macro-eyebrow.fat  { color: var(--purple); }
-.macro-value { font-family: var(--font-mono); font-size: 16px; font-weight: 600; color: var(--text-strong); margin: 2px 0 6px; }
-.macro-goal { font-size: 10px; color: var(--dim); font-weight: 400; }
-.macro-track { height: 4px; background: var(--panel-soft); border-radius: 2px; overflow: hidden; }
-.macro-fill { height: 100%; }
-.macro-fill.cal  { background: var(--accent); }
-.macro-fill.pro  { background: var(--green); }
-.macro-fill.carb { background: var(--blue); }
-.macro-fill.fat  { background: var(--purple); }
-.macro-fill.over { background: var(--red) !important; }
-
-/* ── Daily intake: per-meal radials + narrow macros ─────────────────── */
-.intake-row { display: flex; gap: 10px; align-items: flex-start; position: relative; }
-.meals-grid { flex: 1 1 auto; min-width: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.meal-card {
-    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md);
-    padding: 8px 6px 6px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+/* ── Calories-by-meal chart ───────────────────────────────────────────── */
+.cum-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; gap: 8px; }
+.cum-title { font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+.cum-datenav { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.cum-arrow {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); color: var(--dim); text-decoration: none;
+    font-family: var(--font-mono); font-size: 11px; flex-shrink: 0; background: transparent;
+    -webkit-tap-highlight-color: transparent;
 }
-.meal-card-title { font-family: var(--font-mono); font-size: 8.5px; letter-spacing: .1em;
-    text-transform: uppercase; font-weight: 600; }
-.meal-radial { width: 100%; max-width: 100px; height: auto; display: block; }
-.meal-radial path { transition: opacity .12s; cursor: pointer; }
-.meal-radial.dim path:not(.active) { opacity: .3; }
-.meal-empty-ring { stroke: var(--panel-soft); }
-.meal-center-val { font-family: var(--font-mono); font-size: 13px; font-weight: 600; fill: var(--text-strong); }
-.meal-center-lbl { font-family: var(--font-mono); font-size: 6px; letter-spacing: .12em; fill: var(--dim); text-transform: uppercase; }
+.cum-arrow.disabled { opacity: .3; pointer-events: none; }
+.cum-date-label { font-family: var(--font-mono); font-size: 10px; color: var(--text); min-width: 58px; text-align: center; }
+
+.cum-wrap { position: relative; background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 10px 8px 6px; }
+.cum-chart { width: 100%; height: 132px; display: block; overflow: visible; }
+.cum-bar { transition: opacity .12s; cursor: pointer; }
+.cum-bar.dim { opacity: .35; }
+.cum-goal-line { stroke: var(--dim); stroke-dasharray: 3 3; stroke-width: 1; }
+.cum-goal-label { font-family: var(--font-mono); font-size: 7px; fill: var(--dim); }
+.cum-meal-label { font-family: var(--font-mono); font-size: 8px; letter-spacing: .08em;
+    text-transform: uppercase; fill: var(--dim); }
+
 .cal-tooltip {
     position: absolute; pointer-events: none; z-index: 6; left: 0; top: 0;
     transform: translate(-50%, -100%);
@@ -110,10 +101,28 @@
 .cal-tt-stats { font-family: var(--font-mono); font-size: 10px; color: var(--dim); }
 .cal-tt-cal { color: var(--text-strong); font-weight: 600; }
 
-.macro-col { display: flex; flex-direction: column; gap: 8px; width: 116px; flex-shrink: 0;
-    text-decoration: none; color: inherit; }
-.macro-col .macro-cell { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 8px 10px; }
-.macro-col .macro-value { font-size: 14px; margin: 2px 0 6px; }
+/* ── Metric toggle (2×2) — switches what the chart plots ────────────── */
+.metric-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.metric-cell {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: 11px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+    transition: border-color .12s, background .12s;
+}
+.metric-cell.active { border-color: var(--accent); background: var(--accent-soft); }
+.metric-eyebrow { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
+.metric-eyebrow.cal  { color: var(--accent); }
+.metric-eyebrow.pro  { color: var(--green); }
+.metric-eyebrow.carb { color: var(--blue); }
+.metric-eyebrow.fat  { color: var(--purple); }
+.metric-value { font-family: var(--font-mono); font-size: 16px; font-weight: 600; color: var(--text-strong); margin: 2px 0 6px; }
+.metric-goal { font-size: 10px; color: var(--dim); font-weight: 400; }
+.metric-track { height: 4px; background: var(--panel-soft); border-radius: 2px; overflow: hidden; }
+.metric-fill { height: 100%; }
+.metric-fill.cal  { background: var(--accent); }
+.metric-fill.pro  { background: var(--green); }
+.metric-fill.carb { background: var(--blue); }
+.metric-fill.fat  { background: var(--purple); }
+.metric-fill.over { background: var(--red) !important; }
 
 /* ── Quick add-food (mirrors food.html add-entry) ─────────────────── */
 .qf-form {
@@ -333,49 +342,68 @@
     </div>
 </section>
 
-{# ── Macros · today ────────────────────────────────────────────────── #}
+{# ── Calories by meal · today ─────────────────────────────────────────── #}
 {% set _cal_pct  = (food_totals.calories  / food_goals.calories  * 100) if food_goals.calories  else 0 %}
 {% set _pro_pct  = (food_totals.protein_g / food_goals.protein_g * 100) if food_goals.protein_g else 0 %}
 {% set _carb_pct = (food_totals.carbs_g   / food_goals.carbs_g   * 100) if food_goals.carbs_g   else 0 %}
 {% set _fat_pct  = (food_totals.fat_g     / food_goals.fat_g     * 100) if food_goals.fat_g     else 0 %}
 <section class="section">
-    <div class="intake-row">
-        <div class="meals-grid" id="meals-grid"
-             role="img" aria-label="Calories consumed today, one ring per meal"></div>
-        <div class="cal-tooltip" id="cal-tooltip"></div>
-
-        <a href="/food" class="macro-col">
-            <div class="macro-cell">
-                <div class="macro-eyebrow cal">calories</div>
-                <div class="macro-value">{{ '{:,}'.format(food_totals.calories | round | int) }} <span class="macro-goal">/ {{ '{:,}'.format(food_goals.calories | int) }}</span></div>
-                <div class="macro-track"><div class="macro-fill cal{% if food_totals.calories > food_goals.calories and food_goals.calories %} over{% endif %}" style="width:{{ [_cal_pct, 100] | min }}%"></div></div>
-            </div>
-            <div class="macro-cell">
-                <div class="macro-eyebrow pro">protein</div>
-                <div class="macro-value">{{ food_totals.protein_g | round | int }}g <span class="macro-goal">/ {{ food_goals.protein_g | int }}g</span></div>
-                <div class="macro-track"><div class="macro-fill pro{% if food_totals.protein_g > food_goals.protein_g and food_goals.protein_g %} over{% endif %}" style="width:{{ [_pro_pct, 100] | min }}%"></div></div>
-            </div>
-            <div class="macro-cell">
-                <div class="macro-eyebrow carb">carbs</div>
-                <div class="macro-value">{{ food_totals.carbs_g | round | int }}g <span class="macro-goal">/ {{ food_goals.carbs_g | int }}g</span></div>
-                <div class="macro-track"><div class="macro-fill carb{% if food_totals.carbs_g > food_goals.carbs_g and food_goals.carbs_g %} over{% endif %}" style="width:{{ [_carb_pct, 100] | min }}%"></div></div>
-            </div>
-            <div class="macro-cell">
-                <div class="macro-eyebrow fat">fat</div>
-                <div class="macro-value">{{ food_totals.fat_g | round | int }}g <span class="macro-goal">/ {{ food_goals.fat_g | int }}g</span></div>
-                <div class="macro-track"><div class="macro-fill fat{% if food_totals.fat_g > food_goals.fat_g and food_goals.fat_g %} over{% endif %}" style="width:{{ [_fat_pct, 100] | min }}%"></div></div>
-            </div>
-        </a>
+    <div class="cum-head">
+        <span class="cum-title">calories by meal</span>
+        <div class="cum-datenav">
+            <a href="/?date={{ food_prev_date }}" class="cum-arrow" aria-label="Previous day">‹</a>
+            <span class="cum-date-label">{{ food_date | fmt_date }}</span>
+            {% if not food_is_today %}
+            <a href="/?date={{ food_next_date }}" class="cum-arrow" aria-label="Next day">›</a>
+            {% else %}
+            <span class="cum-arrow disabled">›</span>
+            {% endif %}
+        </div>
     </div>
+    <div class="cum-wrap" id="cum-wrap">
+        <svg class="cum-chart" id="cum-chart"
+             role="img" aria-label="Calories logged today, one bar per meal"></svg>
+        <div class="cal-tooltip" id="cal-tooltip"></div>
+    </div>
+    <div class="metric-toggle" id="metric-toggle">
+        <div class="metric-cell active" data-metric="cal" onclick="cumSelectMetric('cal')">
+            <div class="metric-eyebrow cal">calories</div>
+            <div class="metric-value">{{ '{:,}'.format(food_totals.calories | round | int) }} <span class="metric-goal">/ {{ '{:,}'.format(food_goals.calories | int) }}</span></div>
+            <div class="metric-track"><div class="metric-fill cal{% if food_totals.calories > food_goals.calories and food_goals.calories %} over{% endif %}" style="width:{{ [_cal_pct, 100] | min }}%"></div></div>
+        </div>
+        <div class="metric-cell" data-metric="pro" onclick="cumSelectMetric('pro')">
+            <div class="metric-eyebrow pro">protein</div>
+            <div class="metric-value">{{ food_totals.protein_g | round | int }}g <span class="metric-goal">/ {{ food_goals.protein_g | int }}g</span></div>
+            <div class="metric-track"><div class="metric-fill pro{% if food_totals.protein_g > food_goals.protein_g and food_goals.protein_g %} over{% endif %}" style="width:{{ [_pro_pct, 100] | min }}%"></div></div>
+        </div>
+        <div class="metric-cell" data-metric="carb" onclick="cumSelectMetric('carb')">
+            <div class="metric-eyebrow carb">carbs</div>
+            <div class="metric-value">{{ food_totals.carbs_g | round | int }}g <span class="metric-goal">/ {{ food_goals.carbs_g | int }}g</span></div>
+            <div class="metric-track"><div class="metric-fill carb{% if food_totals.carbs_g > food_goals.carbs_g and food_goals.carbs_g %} over{% endif %}" style="width:{{ [_carb_pct, 100] | min }}%"></div></div>
+        </div>
+        <div class="metric-cell" data-metric="fat" onclick="cumSelectMetric('fat')">
+            <div class="metric-eyebrow fat">fat</div>
+            <div class="metric-value">{{ food_totals.fat_g | round | int }}g <span class="metric-goal">/ {{ food_goals.fat_g | int }}g</span></div>
+            <div class="metric-track"><div class="metric-fill fat{% if food_totals.fat_g > food_goals.fat_g and food_goals.fat_g %} over{% endif %}" style="width:{{ [_fat_pct, 100] | min }}%"></div></div>
+        </div>
+    </div>
+    <a href="/food?date={{ food_date }}" class="food-today-link" style="margin-top:8px">view food log ❯</a>
 </section>
 
 <script>
-// ── Per-meal calorie radials (one ring per meal) ───────────────────────
+// ── Calories-by-meal bar chart (one bar per meal — NOT cumulative) ──────
 (function () {
     const FOOD = {{ food_items_json | safe }};
-    const grid = document.getElementById('meals-grid');
-    const tip  = document.getElementById('cal-tooltip');
-    if (!grid) return;
+    const GOALS = {
+        cal:  {{ food_goals.calories  | float }},
+        pro:  {{ food_goals.protein_g | float }},
+        carb: {{ food_goals.carbs_g   | float }},
+        fat:  {{ food_goals.fat_g     | float }},
+    };
+    const chart = document.getElementById('cum-chart');
+    const wrap  = document.getElementById('cum-wrap') || (chart && chart.parentElement);
+    const tip   = document.getElementById('cal-tooltip');
+    if (!chart) return;
 
     const MEAL = {
         breakfast: { c: '#f0b45f', l: 'Breakfast' },
@@ -384,107 +412,111 @@
         snack:     { c: '#a887b8', l: 'Snack' },
     };
     const ORDER = ['breakfast', 'lunch', 'dinner', 'snack'];
-    const GREY = '#6b7480';   // undefined / no-value foods
-    const SVGNS = 'http://www.w3.org/2000/svg';
+    const GREY = '#6b7480';
+    const KEY = { cal: 'cal', pro: 'p', carb: 'c', fat: 'f' };
+    const UNIT = { cal: 'kcal', pro: 'g', carb: 'g', fat: 'g' };
 
-    // Lighten (amt>0 → toward white) / darken (amt<0 → toward black) a hex colour.
-    function shade(hex, amt) {
-        const h = hex.replace('#', '');
-        let r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
-        const f = amt < 0 ? 0 : 255, t = Math.abs(amt);
-        r = Math.round(r + (f - r) * t); g = Math.round(g + (f - g) * t); b = Math.round(b + (f - b) * t);
-        return `rgb(${r},${g},${b})`;
-    }
-    function polar(rad, a) { return [50 + rad * Math.cos(a), 50 + rad * Math.sin(a)]; }
-    function arc(rO, rI, a0, a1) {
-        const large = (a1 - a0) > Math.PI ? 1 : 0;
-        const [x0, y0] = polar(rO, a0), [x1, y1] = polar(rO, a1);
-        const [x2, y2] = polar(rI, a1), [x3, y3] = polar(rI, a0);
-        return `M${x0.toFixed(2)} ${y0.toFixed(2)} A${rO} ${rO} 0 ${large} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`
-             + ` L${x2.toFixed(2)} ${y2.toFixed(2)} A${rI} ${rI} 0 ${large} 0 ${x3.toFixed(2)} ${y3.toFixed(2)} Z`;
-    }
-
-    const byMeal = {}; ORDER.forEach(m => byMeal[m] = []);
-    (FOOD || []).forEach(it => (byMeal[it.meal] || byMeal.snack).push(it));
+    let metric = 'cal';
 
     function move(e) {
-        const r = grid.parentElement.getBoundingClientRect();
+        const r = wrap.getBoundingClientRect();
         tip.style.left = (e.clientX - r.left) + 'px';
         tip.style.top  = (e.clientY - r.top - 10) + 'px';
     }
     function hideAll() {
         tip.classList.remove('show');
-        grid.querySelectorAll('.meal-radial').forEach(s => {
-            s.classList.remove('dim');
-            s.querySelectorAll('path.active').forEach(x => x.classList.remove('active'));
-        });
+        chart.querySelectorAll('.cum-bar').forEach(b => b.classList.remove('dim'));
     }
-    function show(p) {
-        const d = p.dataset;
-        const stats = d.defined === '1'
-            ? `<span class="cal-tt-cal">${d.cal} kcal</span> · P${d.p} C${d.c} F${d.f}`
-            : `<span class="cal-tt-cal" style="color:var(--dim)">undefined</span> · no value yet`;
+    function show(bar) {
+        const d = bar.dataset;
+        const count = parseInt(d.count, 10) || 0;
+        const itemsLabel = count === 0 ? 'no entries yet' : `${count} item${count === 1 ? '' : 's'}`;
+        const stats = count > 0
+            ? `<span class="cal-tt-cal">${d.total}${UNIT[metric]}</span>` + (metric === 'cal' ? ` · P${d.p} C${d.c} F${d.f}` : '')
+            : `<span class="cal-tt-cal" style="color:var(--dim)">0${UNIT[metric]}</span>`;
         tip.innerHTML =
-            `<div class="cal-tt-name">${d.name}</div>` +
-            `<div class="cal-tt-meal" style="color:${d.col}">${d.meal}</div>` +
+            `<div class="cal-tt-name">${d.meal}</div>` +
+            `<div class="cal-tt-meal" style="color:${d.col}">${itemsLabel}</div>` +
             `<div class="cal-tt-stats">${stats}</div>`;
         tip.classList.add('show');
-        p.closest('svg').classList.add('dim'); p.classList.add('active');
+        chart.querySelectorAll('.cum-bar').forEach(b => { if (b !== bar) b.classList.add('dim'); });
     }
 
-    ORDER.forEach(meal => {
-        const items = byMeal[meal];
-        const base  = MEAL[meal];
+    function build() {
+        const byMeal = {}; ORDER.forEach(m => byMeal[m] = []);
+        (FOOD || []).forEach(it => (byMeal[it.meal] || byMeal.snack).push(it));
 
-        const card = document.createElement('div'); card.className = 'meal-card';
-        const title = document.createElement('div'); title.className = 'meal-card-title';
-        title.style.color = base.c; title.textContent = base.l;
-        const svg = document.createElementNS(SVGNS, 'svg');
-        svg.setAttribute('viewBox', '0 0 100 100'); svg.setAttribute('class', 'meal-radial');
-        card.appendChild(title); card.appendChild(svg); grid.appendChild(card);
+        const W = Math.max(240, Math.round(chart.parentElement.clientWidth || 300));
+        const H = 132, padTop = 8, padBottom = 22, padSide = 4;
+        const plotH = H - padTop - padBottom, baseline = H - padBottom;
+        chart.setAttribute('viewBox', `0 0 ${W} ${H}`);
 
-        const definedCals = items.filter(x => x.cal > 0).map(x => x.cal);
-        const mealTotal = definedCals.reduce((s, x) => s + x, 0);
-        const nominal = definedCals.length ? mealTotal / definedCals.length : 100;  // wedge size for undefined
-        const weights = items.map(x => x.cal > 0 ? x.cal : nominal);
-        const wTotal = weights.reduce((s, x) => s + x, 0);
+        // One bar per meal (NOT cumulative) — each bar's height is that meal's
+        // own total for the selected metric, sized against the day's goal.
+        const n = ORDER.length;
+        const groupGap = 16;
+        const availableW = W - padSide * 2;
+        const barW = Math.max(20, Math.min(64, (availableW - groupGap * (n - 1)) / n));
 
-        const rO = 46, rI = 28;
-        if (!items.length || wTotal <= 0) {
-            svg.innerHTML =
-                `<circle cx="50" cy="50" r="37" fill="none" class="meal-empty-ring" stroke-width="16"/>` +
-                `<text x="50" y="49" text-anchor="middle" class="meal-center-val">0</text>` +
-                `<text x="50" y="60" text-anchor="middle" class="meal-center-lbl">kcal</text>`;
+        const goal = GOALS[metric] || 0;
+        const totals = ORDER.map(meal => byMeal[meal].reduce((s, it) => s + (it[KEY[metric]] || 0), 0));
+        const dayTotal = totals.reduce((s, v) => s + v, 0);
+        const maxVal = Math.max(...totals, goal, 1) * 1.15;
+        const yFor = v => baseline - (v / maxVal) * plotH;
+
+        let svg = '';
+        if (goal > 0) {
+            const gy = yFor(goal).toFixed(1);
+            svg += `<line x1="${padSide}" y1="${gy}" x2="${W - padSide}" y2="${gy}" class="cum-goal-line"/>`
+                 + `<text x="${W - padSide}" y="${(+gy - 3).toFixed(1)}" text-anchor="end" class="cum-goal-label">goal ${Math.round(goal).toLocaleString()}${UNIT[metric]}</text>`;
+        }
+
+        if (dayTotal === 0) {
+            svg += `<text x="${W/2}" y="${baseline - plotH/2}" text-anchor="middle" class="cum-goal-label" style="font-size:9px">Nothing logged yet today</text>`;
+            chart.innerHTML = svg;
             return;
         }
 
-        const nDef = definedCals.length, nUnd = items.length - nDef;
-        let di = 0, ui = 0, a = -Math.PI / 2, paths = '';
-        items.forEach(it => {
-            let col;
-            if (it.cal > 0) { const amt = nDef > 1 ? ((di / (nDef - 1)) - 0.5) * 0.44 : 0; col = shade(base.c, amt); di++; }
-            else            { const amt = nUnd > 1 ? ((ui / (nUnd - 1)) - 0.5) * 0.30 : 0; col = shade(GREY, amt); ui++; }
-            const w = it.cal > 0 ? it.cal : nominal;
-            let sweep = (w / wTotal) * Math.PI * 2, a1 = a + sweep;
-            if (sweep > Math.PI * 2 - 0.002) a1 = a + Math.PI * 2 - 0.002;
-            paths += `<path d="${arc(rO, rI, a, a1)}" fill="${col}" stroke="var(--panel)" stroke-width="1"`
-                + ` data-name="${(it.name || '').replace(/"/g, '&quot;')}" data-meal="${meal}" data-col="${col}"`
-                + ` data-defined="${it.cal > 0 ? 1 : 0}" data-cal="${Math.round(it.cal)}"`
-                + ` data-p="${it.p}" data-c="${it.c}" data-f="${it.f}"/>`;
-            a = a1;
-        });
-        svg.innerHTML = paths
-            + `<text x="50" y="49" text-anchor="middle" class="meal-center-val">${Math.round(mealTotal).toLocaleString()}</text>`
-            + `<text x="50" y="60" text-anchor="middle" class="meal-center-lbl">kcal</text>`;
+        // Centre the evenly-spaced bars across the full chart width.
+        const rowW = n * barW + (n - 1) * groupGap;
+        let x = (W - rowW) / 2;
 
-        svg.querySelectorAll('path').forEach(p => {
-            p.addEventListener('mouseenter', () => show(p));
-            p.addEventListener('mousemove', move);
-            p.addEventListener('mouseleave', hideAll);
-            p.addEventListener('click', e => { e.stopPropagation(); show(p); move(e); });
+        ORDER.forEach((meal, gi) => {
+            const items = byMeal[meal];
+            const base = MEAL[meal];
+            const val = totals[gi];
+            const y = yFor(val);
+            const col = val > 0 ? base.c : GREY;
+            const pSum = items.reduce((s, it) => s + (it.p || 0), 0);
+            const cSum = items.reduce((s, it) => s + (it.c || 0), 0);
+            const fSum = items.reduce((s, it) => s + (it.f || 0), 0);
+            svg += `<rect class="cum-bar" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" `
+                 + `height="${Math.max(0, baseline - y).toFixed(1)}" rx="3" fill="${col}" `
+                 + `data-meal="${base.l}" data-col="${col}" data-total="${Math.round(val).toLocaleString()}" `
+                 + `data-count="${items.length}" data-p="${pSum.toFixed(1)}" data-c="${cSum.toFixed(1)}" data-f="${fSum.toFixed(1)}"/>`;
+            svg += `<text x="${(x + barW / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle" class="cum-meal-label" `
+                 + `style="fill:${base.c}">${base.l}</text>`;
+            x += barW + groupGap;
         });
-    });
+
+        chart.innerHTML = svg;
+        chart.querySelectorAll('.cum-bar').forEach(b => {
+            b.addEventListener('mouseenter', () => show(b));
+            b.addEventListener('mousemove', move);
+            b.addEventListener('mouseleave', hideAll);
+            b.addEventListener('click', e => { e.stopPropagation(); show(b); move(e); });
+        });
+    }
+
+    window.cumSelectMetric = function (m) {
+        metric = m;
+        document.querySelectorAll('.metric-cell').forEach(c => c.classList.toggle('active', c.dataset.metric === m));
+        build();
+    };
+
     document.addEventListener('click', hideAll);
+    window.addEventListener('resize', () => { clearTimeout(window._cumRT); window._cumRT = setTimeout(build, 150); });
+    build();
 })();
 </script>
 

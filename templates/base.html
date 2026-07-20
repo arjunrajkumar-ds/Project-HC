@@ -352,8 +352,8 @@
     </div>
 
     {% if current_profile %}
-    {% if current_profile.id == 2 %}
-    {# ── Gayathri: 4-tab nav ─────────────────────────────────────── #}
+    {% if current_profile.id in (2, 3) %}
+    {# ── Gayathri / Raj: 4-tab nav ─────────────────────────────────── #}
     <nav class="bottom-nav">
         <a href="/" class="nav-item {% if request.path == '/' %}active{% endif %}">
             <span class="nav-icon">⌂</span>

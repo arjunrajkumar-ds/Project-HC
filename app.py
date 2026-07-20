@@ -7,7 +7,7 @@ from urllib.parse import quote as _urlquote
 from datetime import date as date_type, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, abort
 from datetime import datetime as _datetime
-from database import init_db, get_db, get_tier1_suggestion, get_tier4_exercises, get_session_cardio, get_t1_last_weights, get_cardio_choices, log_cardio_session, save_session_draft, get_session_draft, clear_session_draft, get_t1_exercises_with_activity, get_muscle_group_activity, get_muscle_swimlane, get_exercise_bank, bank_add_exercise, bank_update_exercise, bank_delete_exercise, get_exercise_decay, get_fatigue_state, adjust_fatigue, get_exercise_muscle_map, FATIGUE_TIER_BASE, get_priority_lifts, set_priority_lift, clear_priority_lift, get_progression, advance_progression, set_progression_weight, get_all_progressions, get_schemes, record_stage_completion, record_exercise_attempt, get_sessions_with_headlines, get_session_detail_with_progression, get_macro_goals, set_macro_goals, sync_food_log_from_library, get_food_log, add_food_entry, log_food_entry, delete_food_entry, get_pending_foods, define_food_item, delete_food_item, get_food_history, get_recent_foods, get_food_library, get_food_components, get_food_component_mode, save_food_components, save_food_components_pct, get_profiles, _parse_qty_name, _parse_gram_prefix, _food_key, log_food_reconciliation, get_food_reconciliations, log_body_weight, get_body_weight, get_body_weight_history, get_pilates_session, get_mission_progress, clear_mission_stage
+from database import init_db, get_db, get_tier1_suggestion, get_tier4_exercises, get_session_cardio, get_t1_last_weights, get_cardio_choices, log_cardio_session, save_session_draft, get_session_draft, clear_session_draft, get_t1_exercises_with_activity, get_muscle_group_activity, get_muscle_swimlane, get_exercise_bank, bank_add_exercise, bank_update_exercise, bank_delete_exercise, get_exercise_decay, get_fatigue_state, adjust_fatigue, get_exercise_muscle_map, FATIGUE_TIER_BASE, get_priority_lifts, set_priority_lift, clear_priority_lift, get_progression, advance_progression, set_progression_weight, get_all_progressions, get_schemes, record_stage_completion, record_exercise_attempt, get_sessions_with_headlines, get_session_detail_with_progression, get_macro_goals, set_macro_goals, sync_food_log_from_library, get_food_log, add_food_entry, log_food_entry, delete_food_entry, get_pending_foods, define_food_item, delete_food_item, get_food_history, get_recent_foods, get_food_library, get_food_components, get_food_component_mode, save_food_components, save_food_components_pct, get_profiles, _parse_qty_name, _parse_gram_prefix, _food_key, log_food_reconciliation, get_food_reconciliations, log_body_weight, get_body_weight, get_body_weight_history, get_pilates_session, get_mission_progress, clear_mission_stage, get_exercise_tallies, bump_exercise_tally, ack_exercise_tally
 from swim_routes import bp as swim_bp
 from pilates_routes import bp as pilates_bp
 app = Flask(__name__)
@@ -123,24 +123,62 @@ _GAYATHRI_ROUTINES = {}
 
 _GAYATHRI_CARDIO = []  # legacy static list — cardio is now a proper group panel
 
-# name, muscle_group, timed(bool). All home bodyweight, for foundational strength.
-_GAYATHRI_EXTRA_EXERCISES = [
-    {'name': 'Wall Push-ups',         'muscle_group': 'Push',     'location': 'home', 'timed': False},
-    {'name': 'Incline Push-ups',      'muscle_group': 'Push',     'location': 'home', 'timed': False},
-    {'name': 'Chair Dips',            'muscle_group': 'Push',     'location': 'home', 'timed': False},
-    {'name': 'Prone Superman',        'muscle_group': 'Pull',     'location': 'home', 'timed': False},
-    {'name': 'Floor Angels',          'muscle_group': 'Pull',     'location': 'home', 'timed': False},
-    {'name': 'Sit-to-Stand',          'muscle_group': 'Legs',     'location': 'home', 'timed': False},
-    {'name': 'Chair Squats',          'muscle_group': 'Legs',     'location': 'home', 'timed': False},
-    {'name': 'Squats',                'muscle_group': 'Legs',     'location': 'home', 'timed': False},
-    {'name': 'Step Down',             'muscle_group': 'Legs',     'location': 'home', 'timed': False},
-    {'name': 'Incline Reverse Plank', 'muscle_group': 'Core',     'location': 'home', 'timed': True},
-    {'name': 'Dead Bug',              'muscle_group': 'Core',     'location': 'home', 'timed': False},
-    {'name': 'Heel Raises',           'muscle_group': 'Balance',  'location': 'home', 'timed': False},
-    {'name': 'Single-Leg Stand',      'muscle_group': 'Balance',  'location': 'home', 'timed': True},
-    {'name': 'Neck Rolls',            'muscle_group': 'Mobility', 'location': 'home', 'timed': True},
-    {'name': 'Hip Flexor Stretch',    'muscle_group': 'Mobility', 'location': 'home', 'timed': True},
-    {'name': '1KM Walk',              'muscle_group': 'Cardio',   'location': 'home', 'timed': False, 'step': 1,
+# Human-baseline + benchmark-ladder model. Each ladder has a baseline movement
+# (something any regular adult should manage) gated behind one or more easier
+# "benchmark" regressions that must be cleared in order (easiest first) before
+# the baseline unlocks for logging. Standalone exercises have no ladder — always
+# loggable, never locked.
+_GAYATHRI_LADDERS = [
+    {'key': 'push_pushups', 'category': 'Push',
+     'baseline': {'name': 'Pushups', 'timed': False},
+     'benchmarks': [
+         {'name': 'Wall Pushups',   'timed': False},
+         {'name': 'Drawer Pushups', 'timed': False},
+         {'name': 'Chair Dips',     'timed': False},
+         {'name': 'Knee Pushups',   'timed': False},
+     ],
+     'initial_cleared': 1},
+    {'key': 'pull_deadhang', 'category': 'Pull',
+     'baseline': {'name': 'Dead Hang', 'timed': True},
+     'benchmarks': [
+         {'name': 'Scapula Presses', 'timed': False},
+         {'name': 'Supermans',       'timed': False},
+     ],
+     'initial_cleared': 0},
+    {'key': 'legs_squat', 'category': 'Legs',
+     'baseline': {'name': 'Squat', 'timed': False},
+     'benchmarks': [
+         {'name': 'Sit-and-Stands', 'timed': False},
+         {'name': 'Box Squats',     'timed': False},
+     ],
+     'initial_cleared': 0},
+    {'key': 'legs_jump', 'category': 'Legs',
+     'baseline': {'name': 'Jump', 'timed': False},
+     'benchmarks': [
+         {'name': 'Calf Raises',           'timed': False},
+         {'name': '30s Calf Stretch',      'timed': True},
+         {'name': 'Elevated Calf Raises',  'timed': False},
+     ],
+     'initial_cleared': 0},
+    {'key': 'stability_situp', 'category': 'Stability',
+     'baseline': {'name': 'Sit-Up', 'timed': False},
+     'benchmarks': [
+         {'name': 'Deadbugs', 'timed': False},
+     ],
+     'initial_cleared': 0},
+]
+
+# name, category, timed(bool). No ladder — always loggable.
+_GAYATHRI_STANDALONE = [
+    {'category': 'Stability', 'name': '10x Stepdown', 'timed': False, 'step': 10,
+     'desc': 'Variations: front, side, backwards'},
+    {'category': 'Mobility', 'name': '1min Squat Hold',          'timed': True,  'step': 60},
+    {'category': 'Mobility', 'name': '30s Stand on One Foot',    'timed': True,  'step': 30},
+    {'category': 'Mobility', 'name': '10x Beanbag Throws',       'timed': False, 'step': 10},
+    {'category': 'Mobility', 'name': '10x Floor Angels',         'timed': False, 'step': 10},
+    {'category': 'Mobility', 'name': '10x Neck Rolls',           'timed': False, 'step': 10},
+    {'category': 'Mobility', 'name': '30s Hip Flexor Stretch',   'timed': True,  'step': 30},
+    {'category': 'Cardio', 'name': '1KM Walk', 'timed': False, 'step': 1,
      'desc': '1 lap around the neighbourhood. 10 minutes'},
 ]
 
@@ -306,11 +344,15 @@ def dashboard():
                    'group': _gayathri_display_group(r['mg']),
                    'timed': bool(r['timed']), 'amount': r['amount']}
                   for r in gy_log_rows]
+        food_entries = [dict(r) for r in get_food_log(today_iso, _profile_id())]
+        recent_foods = get_recent_foods(_profile_id(), limit=8)
+        food_library = [dict(r) for r in get_food_library() if r['calories'] > 0]
         db.close()
         return render_template('home_gayathri.html', today=today_iso, total_cal=total_cal, total_prot=total_prot, goals=goals, today_weight=today_weight, weight_history=[dict(r) for r in (weight_history or [])], week_days=week_days, last_session=dict(last_sess) if last_sess else None,
                                gy_by_group=gy_by_group, gy_tallies=gy_tallies, gy_covered=sorted(gy_covered), gy_total_sets=gy_total_sets,
                                gy_group_order=[g for g in _GAYATHRI_GROUPS if g in gy_by_group], gy_cardio=_GAYATHRI_CARDIO,
-                               gy_log=gy_log)
+                               gy_group_labels=_GAYATHRI_GROUP_LABELS,
+                               gy_log=gy_log, food_entries=food_entries, recent_foods=recent_foods, food_library=food_library)
 
     today = date_type.today()
     week_start = (today - timedelta(days=today.weekday())).isoformat()
@@ -322,14 +364,27 @@ def dashboard():
     prs = db.execute('\n        SELECT e.name, sl.weight_kg, sl.reps, s.date\n        FROM session_lifts sl\n        JOIN exercises e ON e.id = sl.exercise_id\n        JOIN sessions  s ON s.id = sl.session_id\n        WHERE s.profile_id = ?\n        ORDER BY sl.weight_kg DESC\n        LIMIT 5\n    ', (_profile_id(),)).fetchall()
     today_weight = get_body_weight(today.isoformat(), _profile_id())
     food_goals = get_macro_goals(_profile_id())
-    food_rows = get_food_log(today.isoformat(), _profile_id())
+    # Date being viewed on the "cumulative calories" chart — independent of `today`,
+    # which stays anchored to the real date for the weekly stats above.
+    food_date = _validate_date(request.args.get('date', ''))
+    food_d = date_type.fromisoformat(food_date)
+    food_prev_date = (food_d - timedelta(days=1)).isoformat()
+    food_next_date = (food_d + timedelta(days=1)).isoformat()
+    food_is_today = food_d == today
+    if food_is_today:
+        food_date_label = 'Today'
+    elif food_d == today - timedelta(days=1):
+        food_date_label = 'Yesterday'
+    else:
+        food_date_label = food_d.strftime('%a, %b %-d')
+    food_rows = get_food_log(food_date, _profile_id())
     food_totals = {
         'calories': round(sum((r['calories'] or 0) for r in food_rows), 1),
         'protein_g': round(sum((r['protein_g'] or 0) for r in food_rows), 1),
         'carbs_g': round(sum((r['carbs_g'] or 0) for r in food_rows), 1),
         'fat_g': round(sum((r['fat_g'] or 0) for r in food_rows), 1) }
-    # Per-item breakdown for the per-meal radial charts. Undefined (0-cal) foods are
-    # kept too — they render as grey wedges so nothing logged is hidden.
+    # Per-item breakdown for the cumulative-calories bar chart. Undefined (0-cal) foods
+    # are kept too — they render as grey/zero-height bars so nothing logged is hidden.
     _meal_rank = {'breakfast': 0, 'lunch': 1, 'dinner': 2, 'snack': 3}
     food_items = sorted(
         ({'name': r['name'],
@@ -361,7 +416,7 @@ def dashboard():
             'is_today': day == today,
             'is_past': day < today,
             'activities': week_activity.get(day_iso, []) })
-    return render_template('dashboard.html', last_session=last_session, weekly_volume=weekly_volume, weekly_swim=weekly_swim, today=today.isoformat(), week_days=week_days, today_weight=today_weight, food_goals=food_goals, food_totals=food_totals, food_items_json=_json.dumps(food_items), swimlane_json=_json.dumps(get_muscle_swimlane(_profile_id())), fatigue_json=_json.dumps(get_fatigue_state(_profile_id())))
+    return render_template('dashboard.html', last_session=last_session, weekly_volume=weekly_volume, weekly_swim=weekly_swim, today=today.isoformat(), week_days=week_days, today_weight=today_weight, food_goals=food_goals, food_totals=food_totals, food_items_json=_json.dumps(food_items), swimlane_json=_json.dumps(get_muscle_swimlane(_profile_id())), fatigue_json=_json.dumps(get_fatigue_state(_profile_id())), food_date=food_date, food_prev_date=food_prev_date, food_next_date=food_next_date, food_date_label=food_date_label, food_is_today=food_is_today)
 
 
 @app.route('/session/draft', methods=[ 'POST'])
@@ -559,47 +614,91 @@ def session_new():
         continue_session=continue_session)
 
 
-def _gayathri_by_muscle():
-    def shape(ex, loc):
-        timed = bool(ex.get('timed'))
-        return {
-            'name':         ex['name'],
-            'muscle_group': ex.get('muscle_group', 'Other'),
-            'timed':        timed,
-            'location':     loc,
-            'reps':         30 if timed else 8,
-            'sets':         3,
-            'reps_range':   [20, 45] if timed else [5, 12],
-            'sets_range':   [2, 5],
-        }
-    seen = set()
-    by_muscle = {}
-    _MG_ORDER = ['Push', 'Pull', 'Legs', 'Core', 'Mobility', 'Balance']
-    for mg in _MG_ORDER:
-        by_muscle[mg] = []
-    for routine in _GAYATHRI_ROUTINES.values():
-        loc = routine.get('location', 'Home').lower()
-        for ex in routine['exercises']:
-            if ex['name'] in seen:
-                continue
-            seen.add(ex['name'])
-            by_muscle.setdefault(ex.get('muscle_group', 'Other'), []).append(shape(ex, loc))
-    for ex in _GAYATHRI_EXTRA_EXERCISES:
-        if ex['name'] in seen:
-            continue
-        seen.add(ex['name'])
-        by_muscle.setdefault(ex['muscle_group'], []).append(shape(ex, ex.get('location', 'home').lower()))
-    return by_muscle
+def _gayathri_item_shape(name, timed, default=None, desc='', location='home'):
+    timed = bool(timed)
+    val = default if default is not None else (30 if timed else 8)
+    rng = [max(5, val - 30), val + 60] if timed else [max(1, val - 5), val + 20]
+    return {
+        'name': name, 'timed': timed, 'location': location,
+        'reps': val, 'sets': 3,
+        'reps_range': rng, 'sets_range': [1, 5],
+        'desc': desc,
+    }
+
+
+def _gayathri_tally_fill(count):
+    """10-box tile fill count for a lifetime occurrence count. The 10th log
+    fills all 10 tiles; the 11th wraps back to 1 filled, etc."""
+    return 0 if count == 0 else ((count - 1) % 10) + 1
+
+
+def _gayathri_annotate_tally(items, profile_id):
+    """Mutate a list of exercise-shaped dicts (each with a 'name' key) in
+    place, adding tally_count / tally_filled / tally_pending fields based on
+    the lifetime exercise_tally table. Never creates exercises or
+    exercise_tally rows merely from viewing — a never-logged exercise simply
+    reads as count 0 / filled 0 / pending False."""
+    if not items:
+        return items
+    if not profile_id:
+        for it in items:
+            it['tally_count'] = 0
+            it['tally_filled'] = 0
+            it['tally_pending'] = False
+        return items
+    names = [it['name'] for it in items]
+    db = get_db()
+    placeholders = ','.join('?' for _ in names)
+    rows = db.execute(f'SELECT id, name FROM exercises WHERE name COLLATE NOCASE IN ({placeholders})', names).fetchall()
+    db.close()
+    name_to_id = {r['name'].lower(): r['id'] for r in rows}
+    tallies = get_exercise_tallies(profile_id)
+    for it in items:
+        ex_id = name_to_id.get(it['name'].lower())
+        t = tallies.get(ex_id) if ex_id is not None else None
+        t = t or {'count': 0, 'last_prompted': 0}
+        count = t['count']
+        it['tally_count'] = count
+        it['tally_filled'] = _gayathri_tally_fill(count)
+        it['tally_pending'] = bool(count > 0 and count % 10 == 0 and count != t['last_prompted'])
+    return items
+
+
+def _gayathri_ladder_lookup_by_name(name):
+    """Given an exercise name, return (ladder_key, stage_index) if it matches
+    the current benchmark rung or the currently-unlocked baseline of some
+    ladder for the active profile; else None (i.e. it's standalone)."""
+    lname = name.strip().lower()
+    for ladder in _gayathri_ladder_state(_profile_id()):
+        current_bench = next((b for b in ladder['benchmarks'] if b['status'] == 'current'), None)
+        if current_bench is not None and current_bench['name'].strip().lower() == lname:
+            return ladder['key'], current_bench['index']
+        if ladder['baseline']['status'] == 'unlocked' and ladder['baseline']['name'].strip().lower() == lname:
+            return ladder['key'], ladder['baseline']['index']
+    return None
+
+
+def _gayathri_standalone_by_group():
+    by = {g: [] for g in _GAYATHRI_GROUPS}
+    items = []
+    for ex in _GAYATHRI_STANDALONE:
+        shaped = _gayathri_item_shape(ex['name'], ex['timed'], ex.get('step'), ex.get('desc', ''))
+        shaped['muscle_group'] = ex['category']
+        items.append(shaped)
+        by.setdefault(ex['category'], []).append(shaped)
+    _gayathri_annotate_tally(items, _profile_id())
+    return {g: by[g] for g in _GAYATHRI_GROUPS if by[g]}
 
 
 # ── Gayathri: all-day "tap a set" model ─────────────────────────────────────
-_GAYATHRI_GROUPS = ['Push', 'Pull', 'Legs', 'Core', 'Mobility', 'Balance', 'Cardio']
+_GAYATHRI_GROUPS = ['Push', 'Pull', 'Legs', 'Stability', 'Mobility', 'Cardio']
+_GAYATHRI_GROUP_LABELS = {'Mobility': 'Mobility + Coordination'}
 _GAYATHRI_GROUP_MAP = {
-    'Push': 'Push', 'Chest': 'Push', 'Shoulders': 'Push', 'Triceps': 'Push',
+    'Push': 'Push', 'Chest': 'Push', 'Shoulders': 'Push', 'Triceps': 'Push', 'Arms': 'Push',
     'Pull': 'Pull', 'Back': 'Pull', 'Upper Back': 'Pull', 'Biceps': 'Pull',
-    'Arms': 'Push',
     'Legs': 'Legs', 'Posterior Chain': 'Legs',
-    'Core': 'Core', 'Balance': 'Balance', 'Mobility': 'Mobility',
+    'Stability': 'Stability', 'Core': 'Stability', 'Balance': 'Stability',
+    'Mobility': 'Mobility',
     'Cardio': 'Cardio',
 }
 
@@ -607,22 +706,70 @@ def _gayathri_display_group(mg):
     return _GAYATHRI_GROUP_MAP.get(mg, 'Mobility')
 
 
+def _gayathri_ladder_state(profile_id):
+    """Return _GAYATHRI_LADDERS annotated with live progress for profile_id."""
+    prog = get_mission_progress(profile_id) if profile_id else {}
+    out = []
+    all_items = []
+    for ladder in _GAYATHRI_LADDERS:
+        mkey = f"ladder__{ladder['key']}"
+        cleared = prog.get(mkey, ladder['initial_cleared'])
+        n_bench = len(ladder['benchmarks'])
+        benchmarks = []
+        for i, b in enumerate(ladder['benchmarks']):
+            status = 'cleared' if i < cleared else ('current' if i == cleared else 'locked')
+            shaped = _gayathri_item_shape(b['name'], b['timed'])
+            benchmarks.append({**shaped, 'index': i, 'status': status})
+        if cleared >= n_bench + 1:
+            baseline_status = 'achieved'
+        elif cleared >= n_bench:
+            baseline_status = 'unlocked'
+        else:
+            baseline_status = 'locked'
+        baseline_shaped = _gayathri_item_shape(ladder['baseline']['name'], ladder['baseline']['timed'])
+        baseline = {**baseline_shaped, 'index': n_bench, 'status': baseline_status}
+        all_items.extend(benchmarks)
+        all_items.append(baseline)
+        out.append({
+            'key': ladder['key'],
+            'category': ladder['category'],
+            'baseline': baseline,
+            'benchmarks': benchmarks,
+            'benchmarks_display': list(reversed(benchmarks)),
+            'cleared': cleared,
+            'total_stages': n_bench + 1,
+            'complete': baseline_status == 'achieved',
+        })
+    _gayathri_annotate_tally(all_items, profile_id)
+    return out
+
+
 def _gayathri_exercises():
+    """Flat, loggable exercise list for the Today quick-tap panel: the single
+    currently-actionable item per ladder (current benchmark, or the baseline
+    once unlocked) plus every standalone exercise."""
     seen, out = set(), []
-    def add(ex, loc):
-        if ex['name'] in seen:
+    def add(name, category, timed, location='home', step=None, desc='',
+            kind='standalone', ladder_key=None, stage_index=None):
+        if name in seen:
             return
-        seen.add(ex['name'])
-        timed = bool(ex.get('timed'))
-        step = ex.get('step', 30 if timed else 10)
-        out.append({'name': ex['name'], 'group': _gayathri_display_group(ex.get('muscle_group', 'Mobility')),
-                    'timed': timed, 'location': loc, 'step': step, 'desc': ex.get('desc', '')})
-    for routine in _GAYATHRI_ROUTINES.values():
-        loc = routine.get('location', 'Home').lower()
-        for ex in routine['exercises']:
-            add(ex, loc)
-    for ex in _GAYATHRI_EXTRA_EXERCISES:
-        add(ex, ex.get('location', 'home').lower())
+        seen.add(name)
+        st = step if step is not None else (30 if timed else 10)
+        out.append({'name': name, 'group': _gayathri_display_group(category),
+                    'timed': timed, 'location': location, 'step': st, 'desc': desc,
+                    'tally_kind': kind, 'ladder_key': ladder_key, 'stage_index': stage_index})
+    for ladder in _gayathri_ladder_state(_profile_id()):
+        current_bench = next((b for b in ladder['benchmarks'] if b['status'] == 'current'), None)
+        if current_bench is not None:
+            add(current_bench['name'], ladder['category'], current_bench['timed'],
+                kind='ladder', ladder_key=ladder['key'], stage_index=current_bench['index'])
+        elif ladder['baseline']['status'] == 'unlocked':
+            add(ladder['baseline']['name'], ladder['category'], ladder['baseline']['timed'],
+                kind='ladder', ladder_key=ladder['key'], stage_index=ladder['baseline']['index'])
+        # if 'achieved', nothing new to surface on the quick-tap panel
+    for ex in _GAYATHRI_STANDALONE:
+        add(ex['name'], ex['category'], ex['timed'], step=ex.get('step'), desc=ex.get('desc', ''))
+    _gayathri_annotate_tally(out, _profile_id())
     return out
 
 
@@ -683,6 +830,7 @@ def workout_quick_set():
     if not name or amount <= 0:
         return {'error': 'bad_request'}, 400
     date_iso = date_type.today().isoformat()
+    profile_id = _profile_id()
     db = get_db()
     ex_id = _gayathri_ensure_exercise(db, name)
     if ex_id is None:
@@ -696,11 +844,26 @@ def workout_quick_set():
     db.execute('UPDATE sessions SET ended_at=? WHERE id=?', (_datetime.utcnow().isoformat() + 'Z', sid))
     db.commit()
     tallies, covered = _gayathri_today_tallies(db, date_iso)
+    prior_row = db.execute('SELECT last_prompted FROM exercise_tally WHERE profile_id=? AND exercise_id=?',
+                           (profile_id, ex_id)).fetchone()
+    prior_last_prompted = prior_row['last_prompted'] if prior_row else 0
     db.close()
     tally = tallies.get(name, {'sets': 0, 'total': 0})
+
+    new_count = bump_exercise_tally(profile_id, ex_id, 1)
+    tally_pending = bool(new_count > 0 and new_count % 10 == 0 and new_count != prior_last_prompted)
+    ladder_match = _gayathri_ladder_lookup_by_name(name)
+    if ladder_match:
+        tally_kind, (ladder_key, stage_index) = 'ladder', ladder_match
+    else:
+        tally_kind, ladder_key, stage_index = 'standalone', None, None
+
     return {'id': new_id, 'exercise': name, 'sets': tally['sets'], 'total': tally['total'],
             'covered': sorted(covered), 'covered_count': len(covered),
-            'group_count': len(_gayathri_exercises_by_group())}
+            'group_count': len(_gayathri_exercises_by_group()),
+            'tally_count': new_count, 'tally_filled': _gayathri_tally_fill(new_count),
+            'tally_pending': tally_pending, 'tally_kind': tally_kind,
+            'ladder_key': ladder_key, 'stage_index': stage_index}
 
 
 @app.route('/workout/quick-set/<int:lift_id>', methods=['DELETE'])
@@ -734,21 +897,50 @@ def workout_log_new():
     if _profile_id() not in (2, 3):
         return redirect(url_for('dashboard'))
     today_iso = date_type.today().isoformat()
+    return render_template('workout_log_new.html', today=today_iso,
+                           groups=_GAYATHRI_GROUPS, group_labels=_GAYATHRI_GROUP_LABELS,
+                           ladders=_gayathri_ladder_state(_profile_id()),
+                           standalone_by_group=_gayathri_standalone_by_group())
+
+
+@app.route('/workout/ladder/advance', methods=['POST'])
+def workout_ladder_advance():
+    if _profile_id() not in (2, 3):
+        return {'error': 'not_allowed'}, 403
+    data = request.get_json(silent=True) or {}
+    ladder_key = str(data.get('ladder_key', '')).strip()
+    stage_index = _safe_int(data.get('stage_index'), -1)
+    ladder = next((l for l in _GAYATHRI_LADDERS if l['key'] == ladder_key), None)
+    if not ladder or stage_index < 0 or stage_index >= len(ladder['benchmarks']) + 1:
+        return {'error': 'bad_request'}, 400
+    profile_id = _profile_id()
+    prog = get_mission_progress(profile_id)
+    mkey = f'ladder__{ladder_key}'
+    current_cleared = prog.get(mkey, ladder['initial_cleared'])
+    if stage_index != current_cleared:
+        return {'error': 'not_next_stage', 'current_cleared': current_cleared}, 400
+    clear_mission_stage(profile_id, mkey, stage_index)
+    state = next(l for l in _gayathri_ladder_state(profile_id) if l['key'] == ladder_key)
+    return {'ladder_key': ladder_key, 'cleared': state['cleared'],
+            'baseline_status': state['baseline']['status'], 'complete': state['complete']}
+
+
+@app.route('/workout/tally/ack', methods=['POST'])
+def workout_tally_ack():
+    if _profile_id() not in (2, 3):
+        return {'error': 'not_allowed'}, 403
+    data = request.get_json(silent=True) or {}
+    name = str(data.get('exercise_name', '')).strip()
+    if not name:
+        return {'error': 'bad_request'}, 400
     db = get_db()
-    today_gym_rows = db.execute("\n        SELECT s.id, GROUP_CONCAT(DISTINCT e.name) AS exercise_names\n        FROM sessions s\n        LEFT JOIN session_lifts sl ON sl.session_id = s.id\n        LEFT JOIN exercises e ON e.id = sl.exercise_id\n        WHERE s.date = ? AND s.type = 'gym' AND s.profile_id = ?\n        GROUP BY s.id ORDER BY s.id DESC\n    ", (today_iso, _profile_id())).fetchall()
-    today_sessions = [ dict(r) for r in today_gym_rows ]
-    continue_session = None
-    continue_arg = request.args.get('continue', '').strip()
-    if continue_arg.isdigit():
-        csid = int(continue_arg)
-        cs = db.execute('SELECT * FROM sessions WHERE id=? AND date=? AND type="gym" AND profile_id=?', (csid, today_iso, _profile_id())).fetchone()
-        if cs:
-            done_exs = db.execute('\n                SELECT e.name, COUNT(sl.id) AS sets, MAX(sl.reps) AS reps\n                FROM session_lifts sl JOIN exercises e ON e.id = sl.exercise_id\n                WHERE sl.session_id = ? GROUP BY sl.exercise_id ORDER BY MIN(sl.id)\n            ', (csid,)).fetchall()
-            continue_session = {
-                'id': cs['id'],
-                'exercises': [{'name': r['name'], 'sets': r['sets'], 'reps': r['reps']} for r in done_exs] }
+    row = db.execute('SELECT id FROM exercises WHERE name=? COLLATE NOCASE', (name,)).fetchone()
     db.close()
-    return render_template('workout_log_new.html', today=today_iso, by_muscle=_gayathri_by_muscle(), cardio=_GAYATHRI_CARDIO, today_sessions=today_sessions, continue_session=continue_session)
+    if not row:
+        # Never logged (no exercises row) — nothing to acknowledge.
+        return {'ok': True}
+    ack_exercise_tally(_profile_id(), row['id'])
+    return {'ok': True}
 
 
 def _arjun_workout_data():
@@ -907,6 +1099,7 @@ def workout_custom_log():
             db.execute('INSERT INTO session_lifts (session_id, exercise_id, set_number, reps, weight_kg) VALUES (?,?,?,?,?)',
                        (sess_id, ex['id'], set_num + set_offset, reps, 0.0))
             any_lifts = True
+        bump_exercise_tally(_profile_id(), ex['id'], sets)
     if not any_lifts:
         if continuing:
             db.close()
