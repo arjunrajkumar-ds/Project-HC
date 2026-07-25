@@ -5,7 +5,7 @@
 {% block extra_css %}
 <style>
 /* ── Form layout ─────────────────────────────────────────────────── */
-#session-form { display: flex; flex-direction: column; gap: 12px; }
+#session-form { display: flex; flex-direction: column; gap: 12px; padding-bottom: 80px; }
 .draft-banner {
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
     background: var(--core-bg); border: 1px solid var(--core-fg); border-radius: 12px;
@@ -30,6 +30,29 @@
 .fat-num.fried { color: var(--push-fg); }
 
 /* ── Recommended now ─────────────────────────────────────────────── */
+/* ── Template bar ────────────────────────────────────────────────── */
+.template-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; }
+.btn-templates {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    font-family: inherit; font-size: 0.78rem; font-weight: 700; color: var(--muted);
+    padding: 8px 12px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.btn-templates:active { border-color: var(--accent); color: var(--accent); }
+.btn-save-template {
+    background: none; border: 1px dashed var(--border); border-radius: 8px;
+    font-family: inherit; font-size: 0.72rem; font-weight: 600; color: var(--dim);
+    padding: 8px 12px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.btn-save-template:active { color: var(--accent); border-color: var(--accent); }
+.template-item {
+    display: flex; flex-direction: column; gap: 2px; padding: 12px;
+    border: 1px solid var(--border); border-radius: 10px; cursor: pointer;
+    margin-bottom: 8px; background: var(--surface-2);
+}
+.template-item:active { border-color: var(--accent); }
+.template-name { font-size: 0.88rem; font-weight: 700; color: var(--text); }
+.template-meta { font-size: 0.7rem; color: var(--dim); }
+
 .rec-now { margin-bottom: 4px; }
 .rec-now-label {
     font-size: 0.7rem; font-weight: 700; color: var(--dim);
@@ -95,6 +118,29 @@
 .block-title { font-weight: 600; font-size: 0.95rem; color: var(--text); }
 .scheme-tag  { font-size: 0.7rem; color: var(--dim); margin-left: auto; }
 .muscle-tag  { font-size: 0.75rem; color: var(--muted); }
+
+/* ── Lift history strip ──────────────────────────────────────────── */
+.lift-history-strip {
+    display: flex; align-items: center; gap: 4px;
+    margin-top: 8px; padding: 0; font-size: 0.7rem;
+}
+.history-label {
+    color: var(--dim); font-weight: 700; font-size: 0.65rem;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin-right: 4px;
+}
+.history-dot {
+    width: 22px; height: 22px; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.9rem; font-weight: 700; cursor: default;
+    flex-shrink: 0;
+}
+.history-dot[data-result="pass"] {
+    background-color: var(--legs-bg); color: var(--legs-fg);
+}
+.history-dot[data-result="fail"] {
+    background-color: var(--push-bg); color: var(--push-fg);
+}
 
 
 /* ── Tier selector buttons ───────────────────────────────────────── */
@@ -198,52 +244,113 @@
 }
 .btn-rm-block:active { color: var(--push-fg); }
 
-/* ── Notes + save ────────────────────────────────────────────────── */
-.notes-split {
-    display: flex; gap: 10px; margin-top: 4px; align-items: stretch;
+/* ── Superset link button + linked state ─────────────────────────── */
+.btn-link-ss {
+    background: none; border: 1px solid var(--border); border-radius: 6px;
+    color: var(--dim); cursor: pointer; font-size: 0.8rem;
+    padding: 3px 8px; margin-left: auto;
+    -webkit-tap-highlight-color: transparent;
 }
+.btn-link-ss:active { border-color: var(--accent); color: var(--accent); }
+.ss-link-active { border: 2px solid var(--accent) !important; animation: ss-link-pulse 1s ease-in-out infinite; }
+@keyframes ss-link-pulse { 0%,100% { border-color: var(--accent); } 50% { border-color: var(--accent-light); } }
+.ss-linked { border-left: 3px solid var(--accent) !important; }
+.ss-linked-label {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 0.65rem; font-weight: 700; color: var(--accent);
+    text-transform: uppercase; letter-spacing: .08em; margin: 8px 0 4px;
+}
+.ss-unlink-btn {
+    background: none; border: 1px solid var(--border); border-radius: 4px;
+    color: var(--dim); font-size: 0.62rem; font-weight: 700; cursor: pointer;
+    padding: 2px 6px; font-family: inherit;
+}
+.ss-unlink-btn:active { color: var(--push-fg); border-color: var(--push-fg); }
 
-/* Receipt panel */
-.receipt-panel {
-    flex: 1; background: var(--surface); border-radius: 12px;
-    padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
-    min-height: 110px;
+/* ── Notes + save ────────────────────────────────────────────────── */
+
+/* ── Sticky receipt bar ──────────────────────────────────────────── */
+.sticky-receipt-bar {
+    position: sticky; bottom: 0; left: 0; right: 0; z-index: 50;
+    background: var(--surface); border-top: 1px solid var(--border);
+    padding: 12px 16px calc(12px + var(--sab));
+    box-shadow: 0 -4px 12px rgba(0,0,0,.06);
 }
-.receipt-title {
-    font-size: 0.68rem; font-weight: 600; color: var(--dim);
-    text-transform: uppercase; letter-spacing: .07em; flex-shrink: 0;
+.sticky-receipt-collapsed {
+    display: flex; align-items: center; gap: 10px;
+}
+.receipt-toggle {
+    width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border);
+    background: var(--surface-2); font-size: 0.7rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; color: var(--dim);
+    flex-shrink: 0; transition: transform .2s ease;
+    -webkit-tap-highlight-color: transparent;
+}
+.receipt-toggle.expanded { transform: rotate(180deg); }
+.receipt-summary {
+    flex: 1; font-size: 0.78rem; color: var(--muted); font-weight: 600;
+}
+.save-indicator {
+    font-size: 0.68rem; color: var(--legs-fg); font-weight: 600;
+    transition: opacity .3s ease;
+}
+.save-indicator.saving { color: var(--dim); }
+.save-indicator.error  { color: var(--push-fg); }
+@keyframes save-pulse {
+    0% { opacity: .5; } 50% { opacity: 1; } 100% { opacity: .5; }
+}
+.save-indicator.just-saved { animation: save-pulse .6s ease; }
+.tonnage-value {
+    font-weight: 800; font-size: 0.85rem; color: var(--text);
+    display: inline-block; transition: transform .3s ease;
+}
+@keyframes tonnage-bump { 0% { transform: scale(1); } 50% { transform: scale(1.15); } 100% { transform: scale(1); } }
+.tonnage-value.bump { animation: tonnage-bump .3s ease; }
+.sticky-finish-btn {
+    background: var(--accent); border: none; border-radius: 10px;
+    color: var(--bg); font-weight: 800; font-size: 0.85rem;
+    padding: 10px 18px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.sticky-finish-btn:active { opacity: .85; }
+.sticky-finish-btn:disabled { opacity: .45; cursor: default; }
+
+.receipt-expanded {
+    max-height: 40vh; overflow-y: auto; padding-top: 10px;
+    border-top: 1px solid var(--border); margin-top: 10px;
 }
 .receipt-body {
-    flex: 1; display: flex; flex-direction: column; gap: 6px;
-    overflow-y: auto; max-height: 160px;
+    display: flex; flex-direction: column; gap: 6px;
 }
 .receipt-empty {
     font-size: 0.78rem; color: var(--dim); font-style: italic;
 }
 .receipt-row {
-    display: flex; align-items: center; gap: 7px;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 0.8rem; padding: 4px 0;
 }
 .receipt-name {
-    flex: 1; font-size: 0.8rem; font-weight: 600; color: var(--muted);
+    flex: 1; font-weight: 600; color: var(--muted);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .receipt-stat {
-    font-size: 0.75rem; font-weight: 700; flex-shrink: 0;
+    font-size: 0.72rem; font-weight: 700; flex-shrink: 0;
 }
 .receipt-stat.ok      { color: var(--legs-fg); }
 .receipt-stat.fail    { color: var(--push-fg); }
 .receipt-stat.going   { color: var(--muted); }
 .receipt-stat.t3      { color: var(--t3-fg); }
 .receipt-rm {
-    background: none; border: none; color: var(--dim); font-size: 1rem;
+    background: none; border: none; color: var(--dim); font-size: 0.9rem;
     cursor: pointer; padding: 0 2px; line-height: 1; flex-shrink: 0;
 }
 .receipt-rm:hover { color: var(--push-fg); }
 
 /* Remind panel */
 .remind-panel {
-    flex: 1; background: var(--surface); border-radius: 12px;
+    background: var(--surface); border-radius: 12px;
     padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
+    margin-top: 8px;
 }
 .remind-panel-title {
     font-size: 0.68rem; font-weight: 600; color: var(--dim);
@@ -264,15 +371,6 @@
 .btn-remind.reminded {
     text-decoration: line-through; opacity: 0.45; pointer-events: none;
 }
-.btn-save-session {
-    background: var(--accent); border: none; border-radius: 12px;
-    color: var(--bg); cursor: pointer; font-family: inherit;
-    font-size: 1.05rem; font-weight: 800;
-    min-height: 56px; padding: 16px; width: 100%; margin-top: 6px;
-    -webkit-tap-highlight-color: transparent;
-}
-.btn-save-session:active    { opacity: .85; }
-.btn-save-session:disabled  { opacity: .45; cursor: default; }
 
 /* ── Progression widget ───────────────────────────────────────────── */
 .prog-widget {
@@ -306,6 +404,43 @@
     background: var(--t2-bg); border-left: 2px solid var(--t2-fg);
     border-radius: 4px; padding: 4px 8px; margin-top: 6px;
 }
+
+/* ── Compact scheme display ──────────────────────────────────────── */
+.scheme-compact {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.scheme-compact-left {
+    display: flex; align-items: baseline; gap: 8px;
+}
+.scheme-rx {
+    font-size: 1.1rem; font-weight: 800; color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+.scheme-weight-display {
+    font-size: 0.85rem; color: var(--muted); font-weight: 600;
+}
+.scheme-context {
+    font-size: 0.68rem; color: var(--dim); margin-top: 4px;
+}
+.scheme-grid-toggle {
+    margin-top: 6px;
+}
+.btn-show-grid {
+    background: none; border: none; color: var(--accent); font-family: inherit;
+    font-size: 0.7rem; font-weight: 700; cursor: pointer; padding: 0;
+    text-decoration: underline; -webkit-tap-highlight-color: transparent;
+}
+.scheme-grid-advanced {
+    margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border);
+}
+/* ── Plate calculator ────────────────────────────────────────────── */
+.plate-calc {
+    font-size: 0.68rem; color: var(--dim); margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+}
+.plate-calc .plate-label { font-weight: 500; }
+.plate-calc .plate-val { font-weight: 700; }
+.plate-calc-tracking { margin-top: 6px; }
 
 .pw-grid {
     display: flex; flex-direction: column; gap: 3px;
@@ -384,7 +519,7 @@
 .pw-action-row {
     display: flex; gap: 6px; margin-top: 8px;
 }
-.pw-btn-scheme, .pw-btn-weight, .pw-giveup {
+.pw-btn-scheme, .pw-btn-weight {
     background: none; border: 1px solid var(--border); border-radius: 6px;
     cursor: pointer; font-family: inherit; font-size: 0.75rem; font-weight: 700;
     padding: 7px 10px; flex: 1;
@@ -393,8 +528,45 @@
 }
 .pw-btn-scheme:active { border-color: var(--pull-fg); color: var(--pull-fg); }
 .pw-btn-weight:active { border-color: var(--core-fg); color: var(--core-fg); }
-.pw-giveup            { color: var(--dim); }
-.pw-giveup:active     { border-color: var(--red, #f87171); color: var(--red, #f87171); }
+
+/* ── Bail button (hold 3s to fail) ─── */
+.bail-btn {
+    position: relative; overflow: hidden;
+    background: none; border: 1px solid var(--border); border-radius: 6px;
+    cursor: pointer; font-family: inherit; font-size: 0.72rem; font-weight: 700;
+    padding: 7px 12px; color: var(--dim);
+    -webkit-tap-highlight-color: transparent;
+    user-select: none; -webkit-user-select: none;
+}
+.bail-btn .bail-fill {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 0;
+    background: var(--push-fg); opacity: 0.15; border-radius: 5px;
+    transition: none;
+}
+.bail-btn.filling .bail-fill {
+    width: 100%; transition: width 3s linear;
+}
+.bail-btn.bailed {
+    border-color: var(--push-fg); color: var(--push-fg);
+}
+
+/* ── Partial reps inline input (after bail) ─── */
+.partial-reps-row {
+    display: flex; align-items: center; gap: 8px; margin-top: 8px;
+}
+.partial-reps-label {
+    font-size: 0.72rem; color: var(--dim); white-space: nowrap;
+}
+.partial-reps-input {
+    width: 50px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); font-family: inherit;
+    font-size: 16px; font-weight: 700; padding: 6px 8px;
+    -webkit-appearance: none; -moz-appearance: textfield;
+    text-align: center;
+}
+.partial-reps-input::-webkit-inner-spin-button,
+.partial-reps-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+.partial-reps-input:focus { outline: none; border-color: var(--push-fg); }
 
 /* inline scheme picker (change-scheme flow) */
 .pw-scheme-panel {
@@ -431,47 +603,6 @@
 }
 .pw-weight-confirm:active { opacity: .75; }
 
-/* inline give-up confirm panel */
-.pw-giveup-panel {
-    margin-top: 8px; background: var(--push-bg); border: 1px solid var(--push-fg);
-    border-radius: 8px; padding: 10px 12px;
-    display: flex; flex-direction: column; gap: 8px;
-}
-.pw-giveup-summary {
-    font-size: 0.82rem; color: var(--muted); font-weight: 600;
-}
-.pw-giveup-last-row {
-    display: flex; align-items: center; gap: 8px;
-}
-.pw-giveup-last-label {
-    font-size: 0.75rem; color: var(--dim); white-space: nowrap;
-}
-.pw-giveup-last-input {
-    width: 64px; background: var(--surface); border: 1px solid var(--push-fg);
-    border-radius: 6px; color: var(--text); font-family: inherit;
-    font-size: 16px; font-weight: 700; padding: 6px 8px;
-    -webkit-appearance: none; -moz-appearance: textfield;
-    text-align: center;
-}
-.pw-giveup-last-input::-webkit-inner-spin-button,
-.pw-giveup-last-input::-webkit-outer-spin-button { -webkit-appearance: none; }
-.pw-giveup-last-input:focus { outline: none; border-color: var(--push-fg); }
-.pw-giveup-btns { display: flex; gap: 6px; }
-.pw-giveup-confirm {
-    flex: 1; background: var(--push-bg); border: 1px solid var(--push-fg);
-    border-radius: 6px; color: var(--push-fg); cursor: pointer;
-    font-family: inherit; font-size: 0.82rem; font-weight: 800;
-    padding: 8px; -webkit-tap-highlight-color: transparent;
-}
-.pw-giveup-confirm:active { opacity: .75; }
-.pw-giveup-cancel {
-    background: none; border: 1px solid var(--border);
-    border-radius: 6px; color: var(--dim); cursor: pointer;
-    font-family: inherit; font-size: 0.82rem; font-weight: 700;
-    padding: 8px 12px; -webkit-tap-highlight-color: transparent;
-}
-.pw-giveup-cancel:active { opacity: .75; }
-
 /* ── Done / failed banners ───────────────────────────────────────── */
 .pw-done-banner {
     background: var(--accent-light); border: 1px solid var(--legs-fg); border-radius: 8px;
@@ -486,7 +617,7 @@
 
 /* ── Rest timer bar ──────────────────────────────────────────────── */
 #rest-timer-bar {
-    position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%) translateY(20px);
+    position: fixed; bottom: calc(80px + var(--sab, 0px)); left: 50%; transform: translateX(-50%) translateY(20px);
     background: var(--surface); border: 1px solid var(--accent);
     border-radius: 20px; padding: 8px 20px;
     display: flex; align-items: center; gap: 10px;
@@ -495,6 +626,7 @@
     opacity: 0; pointer-events: none;
     transition: opacity .2s ease, transform .2s ease;
     z-index: 999; white-space: nowrap;
+    overflow: hidden; position: fixed; cursor: pointer;
 }
 #rest-timer-bar.visible {
     opacity: 1; pointer-events: auto;
@@ -508,6 +640,13 @@
     animation: rt-pulse 1s ease-in-out infinite;
 }
 @keyframes rt-pulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+#rest-timer-bar .rt-progress {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 0;
+    opacity: 0.15; border-radius: 20px; pointer-events: none;
+}
+#rest-timer-bar .rt-dismiss {
+    font-size: 0.6rem; color: var(--dim); font-weight: 500;
+}
 
 /* ── Superset ────────────────────────────────────────────────────── */
 .btn-add-ss {
@@ -844,7 +983,7 @@
 .btn-add-another:active { border-color: var(--t1-fg); color: var(--t1-fg); }
 
 /* ── Accessories soft gate ───────────────────────────────────────── */
-#stage-acc.locked { opacity: .55; }
+#section-acc.locked { opacity: .55; }
 .stage-head.tappable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .acc-chevron { margin-left: auto; color: var(--dim); font-size: 0.9rem; transition: transform .2s ease; }
 #acc-body.open ~ .stage-head .acc-chevron,
@@ -852,6 +991,10 @@
 #acc-body { max-height: 0; overflow: hidden; transition: max-height .35s ease; }
 #acc-body.open { max-height: 8000px; }
 .acc-gate-note { font-size: 0.76rem; color: var(--dim); margin-bottom: 4px; }
+
+/* ── Warmup collapse ─────────────────────────────────────────────── */
+#warmup-body { max-height: 0; overflow: hidden; transition: max-height .35s ease; }
+#warmup-body.open { max-height: 4000px; }
 
 /* ── Warmup (Tier 4) blocks ──────────────────────────────────────── */
 .tier-badge.t4 { background: var(--swim-bg); color: var(--swim-fg); }
@@ -886,35 +1029,7 @@
 .wm-done-btn.on { background: var(--legs-bg); border-color: var(--legs-fg); color: var(--legs-fg); }
 .wm-done-btn:active { opacity: .75; }
 
-/* ── Connected stepper ───────────────────────────────────────────── */
-.stepper { display: flex; align-items: center; gap: 4px; margin: 6px 0 0; }
-.step-node {
-    width: 30px; height: 30px; border-radius: 50%; border: none;
-    font-family: inherit; font-size: 0.9rem; font-weight: 800; cursor: pointer;
-    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-    -webkit-tap-highlight-color: transparent;
-}
-.step-node.active  { background: var(--accent);    color: var(--bg); }
-.step-node.done    { background: var(--legs-bg);   color: var(--legs-fg); }
-.step-node.pending { background: var(--surface-2); color: var(--dim); }
-.step-node.locked  { background: var(--surface-2); color: var(--dim); }
-.step-line { flex: 1; height: 2px; background: var(--border); }
-.step-line.filled { background: var(--accent); }
-.step-labels { display: flex; margin: 6px 0 14px; }
-.step-labels span { flex: 1; text-align: center; font-size: 0.68rem; color: var(--dim); font-weight: 600; }
-.step-labels span.on { color: var(--accent); font-weight: 800; }
-
-.wizard-stage { display: none; }
-.wizard-stage.is-active { display: block; }
 .mono { font-variant-numeric: tabular-nums; }
-
-.btn-continue-stage {
-    background: var(--accent); border: none; border-radius: 12px; color: var(--bg);
-    cursor: pointer; font-family: inherit; font-size: 1rem; font-weight: 800;
-    min-height: 52px; padding: 14px; width: 100%; margin-top: 12px;
-    -webkit-tap-highlight-color: transparent;
-}
-.btn-continue-stage:active { opacity: .85; }
 
 /* ── Tier 1 smart selector ───────────────────────────────────────── */
 .t1-sel-hint { font-size: 0.72rem; color: var(--dim); margin: 2px 0 8px; }
@@ -968,6 +1083,115 @@
     padding: 3px 9px; border-radius: 999px; flex-shrink: 0;
 }
 
+/* ── FAB (floating add button) ───────────────────────────────────── */
+.fab-add-exercise {
+    position: fixed;
+    bottom: calc(72px + var(--sab, 0px));
+    right: 16px;
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: none;
+    color: var(--bg);
+    font-size: 1.6rem; font-weight: 700; line-height: 1;
+    cursor: pointer;
+    z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 20px rgba(0,0,0,.25);
+    -webkit-tap-highlight-color: transparent;
+    transition: transform .15s ease, opacity .15s ease;
+}
+.fab-add-exercise:active { opacity: .85; transform: scale(.93); }
+
+/* ── Bottom-sheet backdrop ───────────────────────────────────────── */
+.sheet-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.45);
+    z-index: 200;
+    opacity: 0; pointer-events: none;
+    transition: opacity .25s ease;
+}
+.sheet-backdrop.open { opacity: 1; pointer-events: auto; }
+
+/* ── Bottom sheet container ──────────────────────────────────────── */
+.picker-sheet {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    max-height: 70vh;
+    display: flex; flex-direction: column;
+    z-index: 201;
+    transform: translateY(100%);
+    transition: transform .3s cubic-bezier(.32,1,.6,1);
+}
+.picker-sheet.open { transform: translateY(0); }
+
+.sheet-handle {
+    width: 36px; height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin: 12px auto 6px;
+    flex-shrink: 0;
+}
+
+.sheet-header {
+    padding: 4px 14px 4px;
+    flex-shrink: 0;
+}
+
+/* ── Tier filter tabs ────────────────────────────────────────────── */
+.sheet-tabs {
+    display: flex; gap: 6px;
+    padding: 0 14px 10px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    flex-shrink: 0;
+}
+.sheet-tabs::-webkit-scrollbar { display: none; }
+.sheet-tab {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--muted);
+    cursor: pointer; font-family: inherit;
+    font-size: 0.78rem; font-weight: 700;
+    padding: 6px 14px; white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+    flex-shrink: 0;
+    transition: background .15s, border-color .15s, color .15s;
+}
+.sheet-tab.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
+}
+.sheet-tab:active:not(.active) { opacity: .75; }
+
+/* ── Sheet exercise list ─────────────────────────────────────────── */
+.sheet-list {
+    overflow-y: auto;
+    flex: 1;
+    padding: 0 14px calc(var(--sab, 0px) + 20px);
+    display: flex; flex-direction: column; gap: 4px;
+}
+.sheet-item {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface-2);
+    border-radius: 10px;
+    padding: 11px 14px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: opacity .1s;
+}
+.sheet-item:active:not(.added) { opacity: .7; }
+.sheet-item.added { opacity: .38; pointer-events: none; }
+.sheet-item-info { flex: 1; min-width: 0; }
+.sheet-item-name { font-size: 0.88rem; font-weight: 600; color: var(--text); }
+.sheet-item-sub  { font-size: 0.7rem; color: var(--dim); margin-top: 1px; }
+.sheet-item-check { color: var(--legs-fg); font-size: 0.85rem; flex-shrink: 0; visibility: hidden; }
+.sheet-item.added .sheet-item-check { visibility: visible; }
+.sheet-empty { font-size: 0.85rem; color: var(--dim); text-align: center; padding: 24px 0; }
+
 </style>
 {% endblock %}
 
@@ -1009,40 +1233,34 @@
                onchange="if (this.value) window.location = '/session/new?date=' + this.value;">
     </div>
 
+    <div class="template-bar">
+        <button type="button" class="btn-templates" onclick="openTemplateSheet()">📋 Templates</button>
+        <button type="button" class="btn-save-template" id="btn-save-template" style="display:none" onclick="saveCurrentAsTemplate()">Save as template</button>
+    </div>
+
     {# ── Recommended now (fatigue-driven) ────────────────────────── #}
     <div class="rec-now" id="rec-now" style="display:none">
         <div class="rec-now-label">Recommended now · freshest</div>
         <div class="rec-chips" id="rec-chips"></div>
     </div>
 
-    {# ── Connected stepper ───────────────────────────────────────── #}
-    <div class="stepper" id="stepper">
-        <button type="button" class="step-node active"  id="step-warmup" onclick="goStage('warmup')" aria-label="Fa Jin step">1</button>
-        <span class="step-line" id="line-1"></span>
-        <button type="button" class="step-node pending" id="step-t1"     onclick="goStage('t1')"     aria-label="Tier 1 step">2</button>
-        <span class="step-line" id="line-2"></span>
-        <button type="button" class="step-node locked"  id="step-acc"    onclick="goStage('acc')"    aria-label="Accessories step">3</button>
-    </div>
-    <div class="step-labels">
-        <span id="lbl-warmup" class="on">Fa Jin</span>
-        <span id="lbl-t1">Tier 1</span>
-        <span id="lbl-acc">Accessories</span>
-    </div>
-
-    {# ── Stage 1 · Warmup (Tier 4) ───────────────────────────────── #}
-    <div class="stage wizard-stage is-active" id="stage-warmup">
-        <div class="stage-head">
-            <span class="stage-step">Step 1</span>
+    {# ── Section 1 · Warmup (Tier 4) ─────────────────────────────── #}
+    <div class="stage" id="section-warmup">
+        <div class="stage-head tappable" onclick="toggleWarmupSection()" id="warmup-toggle-head">
+            <span class="stage-step">Optional</span>
             <span class="stage-title">Fa Jin</span>
+            <span id="warmup-chevron-label" style="font-size:0.78rem;color:var(--dim);margin-left:auto">Show warmup</span>
+            <span class="acc-chevron" id="warmup-chevron">›</span>
         </div>
-        <div class="stage-sub">Mobility &amp; activation — optional. (Cardio is now on the home screen.)</div>
-        <div id="warmup-blocks"></div>
-        <div class="t2-all-scroll" id="warmup-picker" style="margin-top:4px"></div>
-        <button type="button" class="btn-continue-stage" onclick="goStage('t1')">Continue to Tier 1</button>
+        <div id="warmup-body">
+            <div class="stage-sub">Mobility &amp; activation — optional. (Cardio is now on the home screen.)</div>
+            <div id="warmup-blocks"></div>
+            <div class="t2-all-scroll" id="warmup-picker" style="margin-top:4px"></div>
+        </div>
     </div>
 
-    {# ── Stage 2 · Tier 1 (daily anchor) ─────────────────────────── #}
-    <div class="stage wizard-stage" id="stage-t1">
+    {# ── Section 2 · Tier 1 (daily anchor) ─────────────────────────── #}
+    <div class="stage" id="section-t1">
         <div class="stage-head">
             <span class="stage-step">Step 2</span>
             <span class="stage-title">Tier 1 — daily anchor</span>
@@ -1054,8 +1272,8 @@
                 style="display:none" onclick="showT1Select()">+ Add another Tier 1</button>
     </div>
 
-    {# ── Stage 3 · Accessories (Tier 2 & 3) ──────────────────────── #}
-    <div class="stage wizard-stage" id="stage-acc">
+    {# ── Section 3 · Accessories (Tier 2 & 3) ──────────────────────── #}
+    <div class="stage" id="section-acc">
         <div class="stage-head">
             <span class="stage-step">Step 3</span>
             <span class="stage-title">Accessories — T2 &amp; T3</span>
@@ -1072,35 +1290,72 @@
     {# ── Receipt + remind ────────────────────────────────────────── #}
     <div id="fatigue-warn" class="fatigue-warn" style="display:none"></div>
 
-    <div class="notes-split">
-        <div class="receipt-panel">
-            <div class="receipt-title">Session Log</div>
-            <div class="receipt-body" id="receipt-body">
-                <span class="receipt-empty">Sets appear here as you log them.</span>
-            </div>
-            <div class="fat-preview" id="fat-preview" style="display:none">
-                <div class="fat-preview-label">Projected fatigue after this session</div>
-                <div class="fat-preview-rows" id="fat-preview-rows"></div>
-            </div>
-        </div>
-        <div class="remind-panel">
-            <div class="remind-panel-title">Don't forget:</div>
-            <div class="remind-grid">
-                <button type="button" class="btn-remind" onclick="openAccessoryGroup('Biceps')">Biceps</button>
-                <button type="button" class="btn-remind" onclick="openAccessoryGroup('Triceps')">Triceps</button>
-                <button type="button" class="btn-remind" onclick="openAccessoryGroup('Shoulders')">Shoulders</button>
-                <button type="button" class="btn-remind" onclick="openAccessoryGroup('Core')">Core</button>
-            </div>
+    <div class="remind-panel">
+        <div class="remind-panel-title">Don't forget:</div>
+        <div class="remind-grid">
+            <button type="button" class="btn-remind" onclick="openAccessoryGroup('Biceps')">Biceps</button>
+            <button type="button" class="btn-remind" onclick="openAccessoryGroup('Triceps')">Triceps</button>
+            <button type="button" class="btn-remind" onclick="openAccessoryGroup('Shoulders')">Shoulders</button>
+            <button type="button" class="btn-remind" onclick="openAccessoryGroup('Core')">Core</button>
         </div>
     </div>
 
-    <button type="submit" class="btn-save-session">Save Session</button>
+    <div class="fat-preview" id="fat-preview" style="display:none">
+        <div class="fat-preview-label">Projected fatigue after this session</div>
+        <div class="fat-preview-rows" id="fat-preview-rows"></div>
+    </div>
+
 </form>
 
+{# ── Sticky receipt bar ──────────────────────────────────────────── #}
+<div class="sticky-receipt-bar" id="sticky-receipt-bar">
+    <div class="sticky-receipt-collapsed" id="sticky-receipt-collapsed">
+        <button type="button" class="receipt-toggle" id="receipt-toggle" onclick="toggleReceiptExpanded()">▲</button>
+        <div class="receipt-summary" id="receipt-summary">0 exercises · 0 sets</div>
+        <div class="save-indicator" id="save-indicator">● Saved</div>
+        <button type="button" class="sticky-finish-btn" id="sticky-finish-btn" onclick="document.getElementById('session-form').submit()">Finish</button>
+    </div>
+    <div class="receipt-expanded" id="receipt-expanded" style="display:none">
+        <div class="receipt-body" id="receipt-body">
+            <span class="receipt-empty">Sets appear here as you log them.</span>
+        </div>
+    </div>
+</div>
+
+<button type="button" class="fab-add-exercise" onclick="openPickerSheet()" aria-label="Add exercise">+</button>
+
+<div class="sheet-backdrop" id="sheet-backdrop" onclick="closePickerSheet()"></div>
+<div class="picker-sheet" id="picker-sheet" role="dialog" aria-label="Add exercise">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header">
+        <input type="text" class="picker-search" id="sheet-search"
+               placeholder="Search any exercise…" oninput="filterPickerSheet(this.value)"
+               autocomplete="off">
+    </div>
+    <div class="sheet-tabs">
+        <button type="button" class="sheet-tab active" data-tab="all"    onclick="switchPickerTab('all')">All</button>
+        <button type="button" class="sheet-tab"        data-tab="t1"     onclick="switchPickerTab('t1')">T1</button>
+        <button type="button" class="sheet-tab"        data-tab="t2"     onclick="switchPickerTab('t2')">T2</button>
+        <button type="button" class="sheet-tab"        data-tab="t3"     onclick="switchPickerTab('t3')">T3</button>
+        <button type="button" class="sheet-tab"        data-tab="warmup" onclick="switchPickerTab('warmup')">Warmup</button>
+    </div>
+    <div class="sheet-list" id="sheet-list"></div>
+</div>
+
+{# ── Template sheet ──────────────────────────────────────────────── #}
+<div class="sheet-backdrop" id="template-backdrop" onclick="closeTemplateSheet()" style="display:none"></div>
+<div class="picker-sheet" id="template-sheet" role="dialog" aria-label="Session templates" style="display:none">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header"><span style="font-weight:700;font-size:0.9rem;">Session Templates</span></div>
+    <div class="sheet-list" id="template-list" style="padding:12px;"></div>
+</div>
+
 <div id="rest-timer-bar">
+    <div class="rt-progress" id="rt-progress"></div>
     <span class="rt-dot"></span>
     <span class="rt-label">REST</span>
     <span class="rt-time" id="rt-display">0:00</span>
+    <span class="rt-dismiss" id="rt-dismiss" style="display:none">tap to dismiss</span>
 </div>
 
 <script>
@@ -1158,6 +1413,8 @@
         const entries = Object.entries(RECEIPT);
         if (!entries.length) {
             body.innerHTML = '<span class="receipt-empty">Sets appear here as you log them.</span>';
+            const sumEl = document.getElementById('receipt-summary');
+            if (sumEl) sumEl.textContent = '0 exercises · 0 sets';
             scheduleAutosave();
             return;
         }
@@ -1183,7 +1440,34 @@
         updateRemindButtons();
         renderFatiguePreview();
         buildRecommended();
+        // Update sticky bar summary
+        const exCount = entries.length;
+        const setCount = entries.reduce((sum, [, e]) => {
+            return sum + (e.tally || e.count || 0);
+        }, 0);
+        const tonnage = entries.reduce((sum, [, e]) => {
+            if (e.tier === 4) return sum; // skip warmup
+            const w = e.weight || 0;
+            const r = e.reps || 0;
+            if (e.phase === 'failed') {
+                const fullSets = Math.max(0, (e.tally || 0) - 1);
+                return sum + (w * r * fullSets) + (w * (e.last_reps || 0));
+            }
+            return sum + (w * r * (e.tally || e.count || 0));
+        }, 0);
+        const tonnageStr = tonnage > 0 ? ` · <span class="tonnage-value">${Math.round(tonnage).toLocaleString()} kg</span>` : '';
+        const sumEl = document.getElementById('receipt-summary');
+        if (sumEl) sumEl.innerHTML = `${exCount} exercise${exCount !== 1 ? 's' : ''} · ${setCount} set${setCount !== 1 ? 's' : ''}${tonnageStr}`;
         scheduleAutosave();
+    }
+
+    function toggleReceiptExpanded() {
+        const expanded = document.getElementById('receipt-expanded');
+        const toggle   = document.getElementById('receipt-toggle');
+        if (!expanded) return;
+        const isOpen = expanded.style.display !== 'none';
+        expanded.style.display = isOpen ? 'none' : '';
+        if (toggle) toggle.classList.toggle('expanded', !isOpen);
     }
 
     function removeFromReceipt(exId) {
@@ -1429,6 +1713,51 @@
     const EX_UNIT      = {}; // exId → 'lb' when toggled (absent = kg)
     const EX_IS_BARBELL = {}; // exId → true for barbell T1 exercises
     const EX_REPS_ONLY  = {}; // exId → true for bodyweight/reps-only exercises
+    const EX_HISTORY_CACHE = {}; // exId → {history: [...]}
+
+    function fetchAndRenderHistory(exId, containerId) {
+        const exIdStr = String(exId);
+        if (EX_HISTORY_CACHE[exIdStr]) {
+            _renderHistoryStrip(EX_HISTORY_CACHE[exIdStr], exId, containerId);
+            return;
+        }
+        fetch(`/api/exercise-history/${exId}`)
+            .then(r => r.json())
+            .then(data => {
+                EX_HISTORY_CACHE[exIdStr] = data;
+                _renderHistoryStrip(data, exId, containerId);
+            })
+            .catch(() => {});
+    }
+
+    function _renderHistoryStrip(data, exId, containerId) {
+        const container = document.getElementById(containerId);
+        if (!container || !data.history || data.history.length === 0) return;
+        
+        const block = container.closest('.exercise-block');
+        if (!block) return;
+        
+        let strip = block.querySelector('.lift-history-strip');
+        if (!strip) {
+            strip = document.createElement('div');
+            strip.className = 'lift-history-strip';
+            block.appendChild(strip);
+        }
+        
+        let html = '<span class="history-label">Recent:</span>';
+        data.history.slice(-5).forEach(entry => {
+            const isPass = entry.result === 'pass';
+            const resultClass = isPass ? 'pass' : 'fail';
+            const icon = isPass ? '✓' : '✗';
+            const weight = entry.weight_kg != null ? entry.weight_kg : '?';
+            const sets = entry.sets != null ? entry.sets : '?';
+            const reps = entry.reps != null ? entry.reps : '?';
+            const date = entry.date || '?';
+            const title = `${date} • ${weight} kg • ${sets}×${reps}`;
+            html += `<div class="history-dot" data-result="${resultClass}" title="${title}">${icon}</div>`;
+        });
+        strip.innerHTML = html;
+    }
 
     function _schemeOutcomes(exId, weight_kg) {
         const decay = EX_DECAY_DATA[String(exId)];
@@ -1452,7 +1781,7 @@
             bysets[sc].forEach(s => {
                 const isCurrent = (s.progression_order - 1) === prog.stage;
                 const outcome   = outcomes[String(s.id)];
-                const attCls    = outcome === 'completed' ? ' att-ok' : outcome === 'failed' ? ' att-fail' : '';
+                const attCls    = outcome === 'pass' ? ' att-ok' : outcome === 'fail' ? ' att-fail' : '';
                 const cls       = isCurrent ? 'current' : 'future';
                 html += `<div class="pw-cell ${cls}${attCls}" role="button"
                     title="${s.sets}×${s.reps}"
@@ -1467,7 +1796,50 @@
         const el  = document.getElementById(containerId);
         if (!el) return;
         const idx = containerId.replace('prog-widget-', '');
-        const st  = EX_PHASE[String(exId)];
+        let st  = EX_PHASE[String(exId)];
+
+        // ── Auto-initialize tracking from existing progression ────────
+        if (!st && prog && prog.scheme_id && prog.weight_kg > 0) {
+            const tierSchemes = SCHEMES['ex_' + String(exId)] || SCHEMES[String(tier)] || [];
+            const scheme = tierSchemes.find(s => s.id === prog.scheme_id);
+            if (scheme) {
+                st = EX_PHASE[String(exId)] = {
+                    phase: 'tracking',
+                    sets: scheme.sets,
+                    reps: scheme.reps,
+                    weight: prog.weight_kg,
+                    displayWt: EX_UNIT[String(exId)] === 'lb' 
+                        ? _kgToDisplay(prog.weight_kg, exId)
+                        : prog.weight_kg,
+                    unit: EX_UNIT[String(exId)] || 'kg',
+                    scheme_id: prog.scheme_id,
+                    tally: 0,
+                };
+                // Update hidden form inputs
+                const hiddenScheme = document.getElementById('scheme-id-' + idx);
+                const hiddenWeight = document.getElementById('prog-weight-' + idx);
+                const hiddenTally = document.getElementById('ex-tally-' + idx);
+                const hiddenLastReps = document.getElementById('ex-last-reps-' + idx);
+                if (hiddenScheme) hiddenScheme.value = prog.scheme_id;
+                if (hiddenWeight) hiddenWeight.value = prog.weight_kg;
+                if (hiddenTally) hiddenTally.value = '0';
+                if (hiddenLastReps) hiddenLastReps.value = '0';
+                // Update RECEIPT
+                RECEIPT[String(exId)] = {
+                    name: getExerciseName(idx, tier),
+                    tier,
+                    phase: 'tracking',
+                    tally: 0,
+                    sets: scheme.sets,
+                    reps: scheme.reps,
+                    weight: prog.weight_kg,
+                    displayWt: st.displayWt,
+                    unit: st.unit,
+                    muscle_group: _getMuscleGroup(exId, tier),
+                };
+                renderReceipt();
+            }
+        }
 
         // ── Completed ────────────────────────────────────────────────
         if (st?.phase === 'completed') {
@@ -1480,8 +1852,15 @@
         // ── Failed ───────────────────────────────────────────────────
         if (st?.phase === 'failed') {
             const lastRepsStr = st.last_reps > 0 ? `, ${st.last_reps} on last` : '';
+            const lastRepsVal = st.last_reps || '';
             el.innerHTML = `<div class="prog-widget">
                 <div class="pw-fail-banner">✗ ${st.tally} / ${st.sets} sets${lastRepsStr} — ${_wtDisplay(st.weight, st.unit || 'kg')}</div>
+                <div class="partial-reps-row">
+                    <span class="partial-reps-label">Reps on last set (optional):</span>
+                    <input type="number" class="partial-reps-input" id="partial-reps-${exId}"
+                           value="${lastRepsVal}" min="0" max="${st.reps}" inputmode="numeric" placeholder="—"
+                           oninput="updatePartialReps('${idx}',${exId},this.value)">
+                </div>
             </div>`;
             return;
         }
@@ -1489,6 +1868,17 @@
         // ── Tracking ─────────────────────────────────────────────────
         if (st?.phase === 'tracking') {
             const tapCls = tier === 2 ? 'pw-tap t2' : tier === 3 ? 'pw-tap t3' : 'pw-tap';
+            // Build progression context subtitle
+            let progContext = '';
+            const tierSchemes = SCHEMES['ex_' + String(exId)] || SCHEMES[String(tier)] || [];
+            const prog = PROGS[String(exId)];
+            if (prog && tierSchemes.length > 1) {
+                const stageNum = (prog.stage ?? 0) + 1;
+                const total = tierSchemes.length;
+                const nextScheme = tierSchemes.find(s => (s.progression_order - 1) === (prog.stage ?? 0) + 1);
+                const nextHint = nextScheme ? ` · Next: ${nextScheme.sets}×${nextScheme.reps}` : '';
+                progContext = `<div class="scheme-context">Stage ${stageNum}/${total}${nextHint}</div>`;
+            }
             el.innerHTML = `<div class="prog-widget">
                 <div class="pw-track-row">
                     <div class="pw-summary-col">
@@ -1507,9 +1897,13 @@
                             onclick="startChangeScheme('${idx}',${exId},${tier},'${containerId}')">Change scheme</button>
                     <button type="button" class="pw-btn-weight"
                             onclick="startChangeWeight('${idx}',${exId},${tier},'${containerId}')">Change weight</button>
-                    <button type="button" class="pw-giveup"
-                            onclick="startGiveUp('${idx}',${exId},${tier},'${containerId}')">Give up</button>
+                    <button type="button" class="bail-btn" id="bail-btn-${exId}"
+                            onpointerdown="bailStart('${idx}',${exId},${tier},'${containerId}')"
+                            onpointerup="bailCancel(${exId})" onpointerleave="bailCancel(${exId})">
+                        <span class="bail-fill" id="bail-fill-${exId}"></span>Hold to bail</button>
                 </div>
+                ${progContext}
+                ${EX_IS_BARBELL[String(exId)] ? `<div class="plate-calc plate-calc-tracking">${(() => { const p = calcPlates(st.weight, exId); return p ? 'Plates: ' + p.join(' + ') + ' /side' : ''; })()}</div>` : ''}
             </div>`;
             return;
         }
@@ -1546,30 +1940,6 @@
             return;
         }
 
-        // ── Give-up confirm ───────────────────────────────────────────
-        if (st?.phase === 'giving_up') {
-            el.innerHTML = `<div class="prog-widget">
-                <div class="pw-giveup-panel">
-                    <span class="pw-giveup-summary">${st.tally} / ${st.sets} sets completed</span>
-                    <div class="pw-giveup-last-row">
-                        <span class="pw-giveup-last-label">Reps on last set</span>
-                        <input type="number" class="pw-giveup-last-input"
-                               id="pw-last-reps-${exId}"
-                               min="0" max="${st.reps}" inputmode="numeric"
-                               placeholder="—">
-                    </div>
-                    <div class="pw-giveup-btns">
-                        <button type="button" class="pw-giveup-confirm"
-                                onclick="confirmGiveUp('${idx}',${exId},${tier},'${containerId}')">Record & finish</button>
-                        <button type="button" class="pw-giveup-cancel"
-                                onclick="cancelGiveUp('${idx}',${exId},${tier},'${containerId}')">Cancel</button>
-                    </div>
-                </div>
-            </div>`;
-            document.getElementById('pw-last-reps-' + exId)?.focus();
-            return;
-        }
-
         // ── Selecting (default) ──────────────────────────────────────
         const currentWt    = prog?.weight_kg ?? '';
         const currentStage = prog?.stage     ?? -1;
@@ -1581,17 +1951,34 @@
         if (hiddenWeight && currentWt)       hiddenWeight.value = currentWt;
 
         const tierSchemes = SCHEMES['ex_' + String(exId)] || SCHEMES[String(tier)] || [];
-        // Build grid with a synthetic prog-like object for stage highlighting
-        const gridProg    = { stage: currentStage };
-        const gridHtml    = _buildGrid(tierSchemes, gridProg, idx, exId, tier, containerId);
 
         const unit      = EX_UNIT[String(exId)] || 'kg';
         const displayWt = (unit === 'lb' && currentWt) ? _kgToDisplay(currentWt, exId) : currentWt;
 
         const showNote   = unit === 'lb' && EX_IS_BARBELL[String(exId)];
         const repsOnly   = !!(EX_REPS_ONLY[String(exId)]);
+
+        // Compact prescription line (from current scheme stage)
+        const currentScheme = tierSchemes.find(s => s.id === prog?.scheme_id);
+        const rxSets = currentScheme?.sets || tierSchemes[0]?.sets || '?';
+        const rxReps = currentScheme?.reps || tierSchemes[0]?.reps || '?';
+        const totalStages = tierSchemes.length;
+        const stageNum = currentStage >= 0 ? currentStage + 1 : 1;
+        const schemeName = currentScheme?.name || '';
+
+        // Next stage info
+        let nextHint = '';
+        if (currentStage >= 0 && currentStage < totalStages - 1) {
+            const nextScheme = tierSchemes.find(s => (s.progression_order - 1) === currentStage + 1);
+            if (nextScheme) nextHint = `Next: ${nextScheme.sets}×${nextScheme.reps}`;
+        }
+
         el.innerHTML = `<div class="prog-widget">
-            <div class="pw-main">
+            <div class="scheme-compact">
+                <div class="scheme-compact-left">
+                    <span class="scheme-rx">${rxSets} × ${rxReps}</span>
+                    ${repsOnly ? '' : `<span class="scheme-weight-display">@ ${displayWt || '—'} ${unit}</span>`}
+                </div>
                 ${repsOnly ? '' : `<div class="pw-weight-col">
                     <input type="number" class="pw-weight-input" id="pw-wt-input-${exId}"
                            value="${displayWt}" min="0" step="0.5" inputmode="decimal"
@@ -1601,14 +1988,39 @@
                     <button type="button" class="pw-unit-toggle" id="pw-unit-btn-${exId}"
                             onclick="toggleUnit(${exId},'${idx}')">${unit === 'lb' ? 'kg' : 'lb'}</button>
                 </div>`}
-                ${gridHtml}
                 <div class="pw-tick-col">
                     <button type="button" class="pw-tick"
                             onclick="confirmSelection('${idx}',${exId},${tier},'${containerId}')">✓</button>
                 </div>
             </div>
+            <div class="scheme-context">
+                ${totalStages > 1 ? `Stage ${stageNum}/${totalStages}${schemeName ? ' · ' + schemeName : ''}${nextHint ? ' · ' + nextHint : ''}` : ''}
+            </div>
+            <div class="scheme-grid-toggle">
+                <button type="button" class="btn-show-grid" onclick="toggleSchemeGrid('${idx}',${exId},${tier},'${containerId}')">Show full grid</button>
+            </div>
+            <div class="scheme-grid-advanced" id="scheme-grid-${exId}" style="display:none"></div>
             ${showNote ? `<div class="pw-barbell-note" id="pw-bb-note-${exId}">Plates only — bar (20 kg) added to total</div>` : `<div class="pw-barbell-note" id="pw-bb-note-${exId}" style="display:none">Plates only — bar (20 kg) added to total</div>`}
+            <div class="plate-calc" id="plate-calc-${exId}"></div>
         </div>`;
+    }
+
+    function toggleSchemeGrid(idx, exId, tier, containerId) {
+        const gridEl = document.getElementById('scheme-grid-' + exId);
+        if (!gridEl) return;
+        const isHidden = gridEl.style.display === 'none';
+        if (isHidden) {
+            // Lazily render the grid on first expand
+            if (!gridEl.innerHTML) {
+                const tierSchemes = SCHEMES['ex_' + String(exId)] || SCHEMES[String(tier)] || [];
+                const prog = PROGS[String(exId)];
+                const gridProg = { stage: prog?.stage ?? -1 };
+                gridEl.innerHTML = _buildGrid(tierSchemes, gridProg, idx, exId, tier, containerId);
+            }
+            gridEl.style.display = '';
+        } else {
+            gridEl.style.display = 'none';
+        }
     }
 
     function _lbToKg(raw, exId) {
@@ -1641,6 +2053,38 @@
         const hidden = document.getElementById('prog-weight-' + idx);
         if (hidden) hidden.value = wt > 0 ? wt : '';
         if (PROGS[String(exId)]) PROGS[String(exId)].weight_kg = wt;
+        renderPlateCalc(exId, wt);
+    }
+
+    // ── Plate calculator ──────────────────────────────────────────
+    const PLATES_KG = [25, 20, 15, 10, 5, 2.5, 1.25];
+    const PLATES_LB = [45, 35, 25, 10, 5, 2.5];
+    const BAR_KG = 20;
+    const BAR_LB = 45;
+
+    function calcPlates(totalKg, exId) {
+        const isBarbell = EX_IS_BARBELL[String(exId)];
+        if (!isBarbell || !totalKg || totalKg <= BAR_KG) return null;
+        const unit = EX_UNIT[String(exId)] || 'kg';
+        const plates = unit === 'lb' ? PLATES_LB : PLATES_KG;
+        const barWt = unit === 'lb' ? BAR_LB : BAR_KG;
+        const perSide = (totalKg - BAR_KG) / 2; // always calc in kg internally
+        let remaining = perSide;
+        const result = [];
+        for (const p of PLATES_KG) {
+            while (remaining >= p - 0.01) { result.push(p); remaining -= p; }
+        }
+        return result.length ? result : null;
+    }
+
+    function renderPlateCalc(exId, totalKg) {
+        const el = document.getElementById('plate-calc-' + exId);
+        if (!el) return;
+        const isBarbell = EX_IS_BARBELL[String(exId)];
+        if (!isBarbell) { el.textContent = ''; return; }
+        const plates = calcPlates(totalKg, exId);
+        if (!plates || !plates.length) { el.textContent = ''; return; }
+        el.innerHTML = `<span class="plate-label">Each side:</span> <span class="plate-val">${plates.join(' + ')}</span>`;
     }
 
     function toggleUnit(exId, idx) {
@@ -1769,7 +2213,7 @@
             }, 750);
             return;
         } else {
-            startRestTimer();
+            startRestTimer(tier);
             const re = RECEIPT[String(exId)];
             if (re) { re.tally = st.tally; renderReceipt(); }
         }
@@ -1852,41 +2296,63 @@
         renderProgWidget(containerId, exId, tier, PROGS[String(exId)]);
     }
 
-    function startGiveUp(idx, exId, tier, containerId) {
+    // ── Bail (hold 3s to fail) ────────────────────────────────────
+    const _bailTimers = {};
+
+    function bailStart(idx, exId, tier, containerId) {
+        const st = EX_PHASE[String(exId)];
+        if (!st || st.phase !== 'tracking') return;
+        // Start the fill animation
+        const fill = document.getElementById('bail-fill-' + exId);
+        const btn  = document.getElementById('bail-btn-' + exId);
+        if (fill) fill.style.width = '0';
+        if (btn) btn.classList.remove('filling');
+        // Force reflow then add filling class
+        void btn?.offsetWidth;
+        if (btn) btn.classList.add('filling');
+        // Set 3-second timer
+        _bailTimers[exId] = setTimeout(() => {
+            confirmBail(idx, exId, tier, containerId);
+        }, 3000);
+    }
+
+    function bailCancel(exId) {
+        if (_bailTimers[exId]) {
+            clearTimeout(_bailTimers[exId]);
+            delete _bailTimers[exId];
+        }
+        const fill = document.getElementById('bail-fill-' + exId);
+        const btn  = document.getElementById('bail-btn-' + exId);
+        if (btn) btn.classList.remove('filling');
+        if (fill) fill.style.width = '0';
+    }
+
+    function confirmBail(idx, exId, tier, containerId) {
+        delete _bailTimers[exId];
         const st = EX_PHASE[String(exId)];
         if (!st) return;
         stopRestTimer();
-        st.phase = 'giving_up';
-        renderProgWidget(containerId, exId, tier, PROGS[String(exId)]);
-    }
-
-    function cancelGiveUp(idx, exId, tier, containerId) {
-        const st = EX_PHASE[String(exId)];
-        if (!st) return;
-        st.phase = 'tracking';
-        renderProgWidget(containerId, exId, tier, PROGS[String(exId)]);
-    }
-
-    function confirmGiveUp(idx, exId, tier, containerId) {
-        const st       = EX_PHASE[String(exId)];
-        if (!st) return;
-        const lastReps = parseInt(document.getElementById('pw-last-reps-' + exId)?.value) || 0;
-        st.phase       = 'failed';
-        st.last_reps   = lastReps;
+        st.phase     = 'failed';
+        st.last_reps = 0;
         const resultHidden   = document.getElementById('ex-result-'    + idx);
         const tallyHidden    = document.getElementById('ex-tally-'     + idx);
         const lastRepsHidden = document.getElementById('ex-last-reps-' + idx);
-        if (resultHidden)   resultHidden.value   = 'failed';
-        if (tallyHidden)    tallyHidden.value     = st.tally;
-        if (lastRepsHidden) lastRepsHidden.value  = lastReps;
+        if (resultHidden)   resultHidden.value   = 'fail';
+        if (tallyHidden)    tallyHidden.value    = st.tally;
+        if (lastRepsHidden) lastRepsHidden.value = 0;
         const re = RECEIPT[String(exId)];
-        if (re) { re.phase = 'failed'; re.tally = st.tally; re.last_reps = lastReps; renderReceipt(); }
+        if (re) { re.phase = 'failed'; re.tally = st.tally; re.last_reps = 0; renderReceipt(); }
         renderProgWidget(containerId, exId, tier, PROGS[String(exId)]);
-        if (tier === 1) onT1Done();
-        setTimeout(() => {
-            const block = document.querySelector(`[data-idx="${idx}"]`);
-            if (block) preserveAndDismissBlock(block);
-        }, 1200);
+    }
+
+    function updatePartialReps(idx, exId, val) {
+        const reps = parseInt(val) || 0;
+        const st = EX_PHASE[String(exId)];
+        if (st) st.last_reps = reps;
+        const hidden = document.getElementById('ex-last-reps-' + idx);
+        if (hidden) hidden.value = reps;
+        const re = RECEIPT[String(exId)];
+        if (re) { re.last_reps = reps; renderReceipt(); }
     }
 
     // ── T1 ────────────────────────────────────────────────────────
@@ -1914,6 +2380,7 @@
             `<div class="block-header">` +
                 `<span class="tier-badge t2">T2</span>` +
                 `<span class="block-title">${exName}</span>` +
+                `<button type="button" class="btn-link-ss" onclick="ssLinkToggle(${exId},2,${idx})" title="Link as superset">⟷</button>` +
                 `<button type="button" class="btn-rm-block"
                          onclick="removeT2Block(this,${exId},'${exName.replace(/'/g,"\\'")}')">Remove</button>` +
             `</div>` +
@@ -1929,6 +2396,7 @@
         document.getElementById('t2-blocks').appendChild(block);
         showExerciseDecay('decay-strip-' + idx, exId, 2);
         renderProgWidget('prog-widget-' + idx, exId, 2, PROGS[String(exId)]);
+        fetchAndRenderHistory(exId, 'prog-widget-' + idx);
         maybeWarn(exId); buildRecommended(); renderFatiguePreview();
     }
 
@@ -2031,23 +2499,45 @@
     // ── Rest timer ───────────────────────────────────────────────
     let _rtInterval = null;
     let _rtStart    = null;
+    let _rtTarget   = null;
+    const REST_DURATIONS = { 1: 180, 2: 90, 3: 60, 4: 45 };
 
     function _rtFmt(secs) {
-        const m = Math.floor(secs / 60);
-        const s = secs % 60;
-        return m + ':' + String(s).padStart(2, '0');
+        const m = Math.floor(Math.abs(secs) / 60);
+        const s = Math.abs(secs) % 60;
+        const prefix = secs < 0 ? '+' : '';
+        return prefix + m + ':' + String(s).padStart(2, '0');
     }
 
-    function startRestTimer() {
+    function startRestTimer(tier) {
         if (_rtInterval) clearInterval(_rtInterval);
         _rtStart = Date.now();
+        _rtTarget = REST_DURATIONS[tier] || 90;
         const bar = document.getElementById('rest-timer-bar');
         const disp = document.getElementById('rt-display');
-        disp.textContent = '0:00';
+        const progress = document.getElementById('rt-progress');
+        const dismiss = document.getElementById('rt-dismiss');
+        disp.textContent = _rtFmt(_rtTarget);
+        disp.style.color = '';
         bar.classList.add('visible');
+        if (progress) { progress.style.transition = 'none'; progress.style.width = '0'; progress.style.background = 'var(--accent)'; void progress.offsetWidth; progress.style.transition = `width ${_rtTarget}s linear`; progress.style.width = '100%'; }
+        if (dismiss) dismiss.style.display = 'none';
         _rtInterval = setInterval(() => {
             const elapsed = Math.floor((Date.now() - _rtStart) / 1000);
-            disp.textContent = _rtFmt(elapsed);
+            const remaining = _rtTarget - elapsed;
+            if (remaining > 0) {
+                disp.textContent = _rtFmt(remaining);
+                disp.style.color = '';
+            } else if (remaining === 0) {
+                disp.textContent = 'GO';
+                disp.style.color = 'var(--legs-fg)';
+                if (dismiss) dismiss.style.display = '';
+                if (progress) { progress.style.transition = 'none'; progress.style.background = 'var(--push-fg)'; progress.style.opacity = '0.15'; }
+            } else {
+                disp.textContent = _rtFmt(remaining);
+                disp.style.color = 'var(--push-fg)';
+                if (dismiss) dismiss.style.display = '';
+            }
         }, 1000);
     }
 
@@ -2055,13 +2545,84 @@
         if (_rtInterval) { clearInterval(_rtInterval); _rtInterval = null; }
         const bar = document.getElementById('rest-timer-bar');
         bar.classList.remove('visible');
+        const progress = document.getElementById('rt-progress');
+        if (progress) { progress.style.transition = 'none'; progress.style.width = '0'; progress.style.opacity = ''; }
     }
+
+    // Tap rest timer bar to dismiss
+    document.getElementById('rest-timer-bar')?.addEventListener('click', stopRestTimer);
 
     // ── Superset ─────────────────────────────────────────────────
 
     const SUPERSET_GROUPS = {};
     let ssCounter = 0;
     const SS_T1_USED = new Set(); // T1 exIds reserved inside supersets
+    const SS_TRANSITION_REST = 10; // seconds between exercises within a superset round
+
+    // ── Link gesture: tap one exercise then another to form a superset ──
+    let _ssLinkSource = null; // { exId, tier, idx, blockEl }
+
+    function ssLinkToggle(exId, tier, idx) {
+        const block = document.querySelector(`[data-idx="${idx}"]`);
+        if (!block) return;
+
+        // If this exercise is already the link source, deselect
+        if (_ssLinkSource && _ssLinkSource.exId === exId) {
+            block.classList.remove('ss-link-active');
+            _ssLinkSource = null;
+            return;
+        }
+
+        // If another is already the link source, create superset
+        if (_ssLinkSource) {
+            const src = _ssLinkSource;
+            src.blockEl.classList.remove('ss-link-active');
+            _ssLinkSource = null;
+            ssLinkPair(src.exId, src.tier, src.idx, exId, tier, idx);
+            return;
+        }
+
+        // Mark this as link source
+        _ssLinkSource = { exId, tier, idx, blockEl: block };
+        block.classList.add('ss-link-active');
+    }
+
+    function ssLinkPair(exId1, tier1, idx1, exId2, tier2, idx2) {
+        // Create a superset group containing both exercises
+        const groupId = 'ss_' + (++ssCounter);
+        const tier = Math.min(tier1, tier2);
+        SUPERSET_GROUPS[groupId] = {
+            groupId, tier, slots: [
+                { label: 'A1', idx: idx1, exId: exId1, confirmed: true },
+                { label: 'A2', idx: idx2, exId: exId2, confirmed: true },
+            ],
+            currentRound: 0, timerInterval: null, tracking: false,
+        };
+
+        // Visual: wrap both blocks in a superset indicator
+        const block1 = document.querySelector(`[data-idx="${idx1}"]`);
+        const block2 = document.querySelector(`[data-idx="${idx2}"]`);
+        if (block1) block1.classList.add('ss-linked');
+        if (block2) block2.classList.add('ss-linked');
+        // Add a visual label above the first block
+        if (block1) {
+            const label = document.createElement('div');
+            label.className = 'ss-linked-label';
+            label.innerHTML = `<span>⟷ Superset</span><button type="button" class="ss-unlink-btn" onclick="ssUnlink('${groupId}',${idx1},${idx2})">Unlink</button>`;
+            block1.parentNode.insertBefore(label, block1);
+        }
+    }
+
+    function ssUnlink(groupId, idx1, idx2) {
+        delete SUPERSET_GROUPS[groupId];
+        const block1 = document.querySelector(`[data-idx="${idx1}"]`);
+        const block2 = document.querySelector(`[data-idx="${idx2}"]`);
+        if (block1) block1.classList.remove('ss-linked');
+        if (block2) block2.classList.remove('ss-linked');
+        // Remove the label
+        const labels = document.querySelectorAll('.ss-linked-label');
+        labels.forEach(l => l.remove());
+    }
 
     function createSupersetGroup(tier) {
         const groupId = 'ss_' + (++ssCounter);
@@ -2738,7 +3299,6 @@
     // ── Guided flow: stepper, wizard navigation, Tier-1 counter ───
 
     let T1_DONE = 0;
-    let currentStage = 'warmup';
     let T1_OPEN_M = null;       // muscle group expanded in the selector
 
     // Kept as a safe no-op for warmup helpers that still call it
@@ -2752,50 +3312,9 @@
         return { cls: 'overdue', label: d + 'd ago' };
     }
 
-    function _setNode(id, state, content) {
-        const el = document.getElementById(id);
-        if (!el) return;
-        el.className = 'step-node ' + state;
-        el.innerHTML = content;
-    }
-
-    function renderStepper() {
-        const done2 = T1_DONE >= 2;
-        const wState = currentStage === 'warmup' ? 'active' : 'done';
-        const tState = currentStage === 't1' ? 'active' : (done2 ? 'done' : 'pending');
-        const aState = currentStage === 'acc' ? 'active' : (done2 ? 'pending' : 'locked');
-        _setNode('step-warmup', wState, wState === 'done' ? '✓' : '1');
-        _setNode('step-t1', tState, tState === 'done' ? '✓' : '2');
-        _setNode('step-acc', aState, aState === 'done' ? '✓' : '3');
-        const l1 = document.getElementById('line-1');
-        const l2 = document.getElementById('line-2');
-        if (l1) l1.className = 'step-line' + (wState === 'done' ? ' filled' : '');
-        if (l2) l2.className = 'step-line' + (done2 ? ' filled' : '');
-        ['warmup', 't1', 'acc'].forEach(st => {
-            const lbl = document.getElementById('lbl-' + st);
-            if (lbl) lbl.classList.toggle('on', currentStage === st);
-        });
-    }
-
-    function goStage(stage) {
-        currentStage = stage;
-        ['warmup', 't1', 'acc'].forEach(st => {
-            const el = document.getElementById('stage-' + st);
-            if (el) el.classList.toggle('is-active', st === stage);
-        });
-        if (stage === 't1') {
-            const blocks = document.getElementById('t1-blocks');
-            if (blocks && !blocks.querySelector('.exercise-block')) showT1Select();
-        }
-        renderStepper();
-        const top = document.getElementById('stepper');
-        if (top) top.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
     function updateT1Counter() {
         const c = document.getElementById('t1-count');
         if (c) { c.textContent = T1_DONE + ' / 2'; c.classList.toggle('full', T1_DONE >= 2); }
-        renderStepper();
     }
 
     function onT1Done() {
@@ -2807,7 +3326,6 @@
             } else {
                 const addBtn = document.getElementById('btn-add-t1');
                 if (addBtn) addBtn.style.display = '';
-                goStage('acc');
             }
         }, 1300);
     }
@@ -2914,6 +3432,7 @@
             `<div class="block-header">` +
                 `<span class="tier-badge t1">T1</span>` +
                 `<span class="block-title">${exName}</span>` +
+                `<button type="button" class="btn-link-ss" onclick="ssLinkToggle(${exId},1,${idx})" title="Link as superset">⟷</button>` +
                 `<button type="button" class="btn-rm-block" onclick="cancelT1Block(${idx})">Change</button>` +
             `</div>` +
             `<input type="hidden" name="exercise_id_${idx}" id="t1-exid-${idx}" value="${exId}">` +
@@ -2931,6 +3450,7 @@
         EX_REPS_ONLY[String(exId)]  = !!(exData && exData.reps_only);
         showExerciseDecay('decay-strip-' + idx, exId, 1);
         renderProgWidget('prog-widget-' + idx, exId, 1, PROGS[String(exId)]);
+        fetchAndRenderHistory(exId, 'prog-widget-' + idx);
         maybeWarn(exId); buildRecommended(); renderFatiguePreview();
     }
 
@@ -3112,6 +3632,15 @@
         if (!document.querySelector('.warmup-block')) setProgressChip('warmup', '');
     }
 
+    function toggleWarmupSection() {
+        const body    = document.getElementById('warmup-body');
+        const chevron = document.getElementById('warmup-chevron');
+        const label   = document.getElementById('warmup-chevron-label');
+        const open    = body.classList.toggle('open');
+        if (chevron) chevron.style.transform = open ? 'rotate(90deg)' : '';
+        if (label)   label.textContent = open ? '' : 'Show warmup';
+    }
+
     // ── Accessories picker (T2 + T3 by muscle) ────────────────────
 
     function buildAccessoryPicker() {
@@ -3191,12 +3720,125 @@
     }
 
     function openAccessoryGroup(muscle) {
-        goStage('acc');
         const container = document.getElementById('acc-picker');
         const btn   = container.querySelector(`.t2-grp-btn[data-group="${muscle}"]`);
         const items = document.getElementById('acc-items-' + muscle.replace(/\s+/g, '-'));
         if (btn && items && !btn.classList.contains('open')) { btn.classList.add('open'); items.classList.add('open'); }
-        document.getElementById('stage-acc').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.getElementById('section-acc').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // ── FAB / bottom-sheet picker ─────────────────────────────────
+
+    let _pickerTab = 'all';
+
+    function openPickerSheet() {
+        const inp = document.getElementById('sheet-search');
+        if (inp) inp.value = '';
+        buildPickerSheetList('');
+        document.getElementById('sheet-backdrop').classList.add('open');
+        document.getElementById('picker-sheet').classList.add('open');
+        if (inp) setTimeout(() => inp.focus(), 320);
+    }
+
+    function closePickerSheet() {
+        document.getElementById('sheet-backdrop').classList.remove('open');
+        document.getElementById('picker-sheet').classList.remove('open');
+    }
+
+    function switchPickerTab(tab) {
+        _pickerTab = tab;
+        document.querySelectorAll('.sheet-tab').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.tab === tab);
+        });
+        const q = (document.getElementById('sheet-search')?.value || '').trim().toLowerCase();
+        buildPickerSheetList(q);
+    }
+
+    function filterPickerSheet(raw) {
+        buildPickerSheetList((raw || '').trim().toLowerCase());
+    }
+
+    function buildPickerSheetList(q) {
+        const el = document.getElementById('sheet-list');
+        if (!el) return;
+
+        // Build unified list for current tab
+        const rows = [];
+        function pushList(list, tier) {
+            list.forEach(ex => rows.push({ ex, tier }));
+        }
+
+        if (_pickerTab === 'all' || _pickerTab === 't1')     pushList(TIER1_LIST, 1);
+        if (_pickerTab === 'all' || _pickerTab === 't2')     pushList(TIER2_LIST, 2);
+        if (_pickerTab === 'all' || _pickerTab === 't3')     pushList(TIER3_LIST, 3);
+        if (_pickerTab === 'all' || _pickerTab === 'warmup')
+            pushList(TIER4_LIST.filter(e => e.muscle_group !== 'Cardio'), 4);
+
+        // Filter by query
+        const filtered = q
+            ? rows.filter(({ ex }) => ex.name.toLowerCase().includes(q)
+                || (ex.muscle_group || '').toLowerCase().includes(q))
+            : rows;
+
+        // Sort: fatigue ascending (freshest first), unknowns last
+        filtered.sort((a, b) => _exFatSort(a.ex.id) - _exFatSort(b.ex.id));
+
+        if (!filtered.length) {
+            el.innerHTML = '<div class="sheet-empty">No exercises match.</div>';
+            return;
+        }
+
+        const t1Used = _t1UsedIds();
+        el.innerHTML = filtered.map(({ ex, tier }) => {
+            const added = tier === 1 ? t1Used.has(ex.id)
+                        : tier === 2 ? T2_ADDED.has(ex.id)
+                        : tier === 3 ? T3_ADDED.has(ex.id)
+                        : WARMUP_ADDED.has(ex.id);
+            const fv = _exFatNum(ex.id);
+            const fatHtml = fv !== null
+                ? `${_fatDot(ex.id)}<span class="fat-num ${_fatBand(fv)}" style="margin:0">${fv}</span>`
+                : '';
+            const tierLabel = tier === 4 ? 'WU' : 'T' + tier;
+            const tierCls   = tier === 4 ? 't4' : 't' + tier;
+            return `<div class="sheet-item${added ? ' added' : ''}" onclick="_pickerAddEx(${ex.id},${tier})">
+                <span class="tier-badge ${tierCls}">${tierLabel}</span>
+                ${fatHtml}
+                <div class="sheet-item-info">
+                    <div class="sheet-item-name">${ex.name}</div>
+                    <div class="sheet-item-sub">${ex.muscle_group || ''}</div>
+                </div>
+                <span class="sheet-item-check">✓</span>
+            </div>`;
+        }).join('');
+    }
+
+    function _pickerAddEx(exId, tier) {
+        if (tier === 1) {
+            if (_t1UsedIds().has(exId)) return;
+            closePickerSheet();
+            pickT1Lift(exId);
+        } else if (tier === 2) {
+            if (T2_ADDED.has(exId)) return;
+            const ex = TIER2_LIST.find(e => e.id === exId);
+            if (!ex) return;
+            closePickerSheet();
+            addT2(exId, ex.name, ex.muscle_group);
+        } else if (tier === 3) {
+            if (T3_ADDED.has(exId)) return;
+            const ex = TIER3_LIST.find(e => e.id === exId);
+            if (!ex) return;
+            closePickerSheet();
+            addT3(exId, ex.name, ex.muscle_group);
+        } else if (tier === 4) {
+            if (WARMUP_ADDED.has(exId)) return;
+            const ex = TIER4_LIST.find(e => e.id === exId);
+            if (!ex) return;
+            closePickerSheet();
+            // Expand warmup section if it's collapsed
+            const body = document.getElementById('warmup-body');
+            if (body && !body.classList.contains('open')) toggleWarmupSection();
+            addWarmup(ex);
+        }
     }
 
     // ── Recommended now / quick add / nudge / preview ─────────────
@@ -3307,11 +3949,24 @@
         let snap;
         try { snap = JSON.stringify(_sessSerialize()); } catch (e) { return; }
         const dateEl = document.getElementById('date');
+        const indic = document.getElementById('save-indicator');
+        if (indic) { indic.textContent = '● Saving…'; indic.className = 'save-indicator saving'; }
         fetch('/session/draft', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window._csrf },
             body:    JSON.stringify({ date: dateEl ? dateEl.value : '', payload: snap }),
-        }).catch(() => {});
+        }).then(r => {
+            if (indic) {
+                indic.textContent = '● Saved';
+                indic.className = 'save-indicator just-saved';
+                setTimeout(() => { indic.className = 'save-indicator'; }, 700);
+            }
+        }).catch(() => {
+            if (indic) {
+                indic.textContent = '● Error';
+                indic.className = 'save-indicator error';
+            }
+        });
     }
     function _sessSerialize() {
         const form = document.getElementById('session-form');
@@ -3319,11 +3974,9 @@
         form.querySelectorAll('input, select, textarea').forEach(el => {
             controls.push([el.value, el.checked ? 1 : 0]);
         });
-        const activeStage = document.querySelector('.wizard-stage.is-active');
         return {
             html:     form.innerHTML,
             controls: controls,
-            stage:    activeStage ? activeStage.id : 'stage-warmup',
             state: {
                 RECEIPT: RECEIPT, EX_PHASE: EX_PHASE,
                 SUPERSET_GROUPS: SUPERSET_GROUPS, T1_NAMES: T1_NAMES,
@@ -3377,7 +4030,6 @@
         buildAccessoryPicker();
         buildT1Selector();
         buildRecommended();
-        let _startStage = 'warmup';
         {% if continue_session and continue_session.exercises %}
         {% for ex in continue_session.exercises %}
         RECEIPT['{{ ex.id }}'] = {
@@ -3397,24 +4049,88 @@
             const b = document.getElementById('btn-add-t1');
             if (b) b.style.display = '';
         }
-        _startStage = T1_DONE >= 2 ? 'acc' : 't1';
         {% endif %}
         updateT1Counter();
-        goStage(_startStage);
         if (PRESELECT) {
             quickAdd(PRESELECT);
-            goStage(_exTier(PRESELECT) === 1 ? 't1' : 'acc');
         }
+
+    // ── Session Templates ─────────────────────────────────────────
+    function openTemplateSheet() {
+        const backdrop = document.getElementById('template-backdrop');
+        const sheet = document.getElementById('template-sheet');
+        if (backdrop) backdrop.style.display = '';
+        if (sheet) sheet.style.display = '';
+        fetchTemplates();
+    }
+    function closeTemplateSheet() {
+        const backdrop = document.getElementById('template-backdrop');
+        const sheet = document.getElementById('template-sheet');
+        if (backdrop) backdrop.style.display = 'none';
+        if (sheet) sheet.style.display = 'none';
+    }
+    function fetchTemplates() {
+        const list = document.getElementById('template-list');
+        if (!list) return;
+        list.innerHTML = '<span style="color:var(--dim);font-size:0.8rem;">Loading…</span>';
+        fetch('/api/templates').then(r => r.json()).then(data => {
+            const templates = data.templates || [];
+            if (!templates.length) {
+                list.innerHTML = '<span style="color:var(--dim);font-size:0.82rem;">No templates saved yet. Add exercises and tap "Save as template".</span>';
+                return;
+            }
+            list.innerHTML = templates.map(t => `
+                <div class="template-item" onclick="loadTemplate(${t.id},'${t.name.replace(/'/g,"\\'")}',${t.exercise_count})">
+                    <span class="template-name">${t.name}</span>
+                    <span class="template-meta">${t.exercise_count} exercises${t.last_used_at ? ' · last used ' + t.last_used_at.slice(0,10) : ''}</span>
+                </div>
+            `).join('');
+        }).catch(() => { list.innerHTML = '<span style="color:var(--push-fg)">Failed to load templates.</span>'; });
+    }
+    function loadTemplate(tid, name, count) {
+        if (!confirm(`Load "${name}"? This will add ${count} exercises.`)) return;
+        fetch(`/api/templates/${tid}/load`, { method: 'POST', headers: { 'X-CSRF-Token': window._csrf } })
+            .then(r => r.json())
+            .then(data => {
+                closeTemplateSheet();
+                (data.exercises || []).forEach(ex => {
+                    const exId = ex.exercise_id;
+                    if (RECEIPT[String(exId)]) return; // already in session
+                    const tier = ex.tier || 2;
+                    if (tier === 1) { pickT1Lift(exId); }
+                    else if (tier === 2) { const e = TIER2_LIST.find(x => x.id === exId); if (e) addT2(exId, e.name, e.muscle_group); }
+                    else if (tier === 3) { const e = TIER3_LIST.find(x => x.id === exId); if (e) addT3(exId, e.name, e.muscle_group); }
+                });
+            });
+    }
+    function saveCurrentAsTemplate() {
+        const entries = Object.entries(RECEIPT).filter(([,e]) => e.tier && e.tier <= 3);
+        if (!entries.length) { alert('Add at least one exercise first.'); return; }
+        const name = prompt('Template name:');
+        if (!name || !name.trim()) return;
+        const exercises = entries.map(([exId, e]) => ({ exercise_id: parseInt(exId), tier: e.tier }));
+        fetch('/api/templates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window._csrf },
+            body: JSON.stringify({ name: name.trim(), exercises }),
+        }).then(r => { if (r.ok) alert('Template saved!'); });
+    }
+    // Show "Save as template" button when exercises exist
+    const _origRenderReceipt = renderReceipt;
+    renderReceipt = function() {
+        _origRenderReceipt();
+        const btn = document.getElementById('btn-save-template');
+        if (btn) btn.style.display = Object.keys(RECEIPT).length > 0 ? '' : 'none';
+    };
+
         document.getElementById('session-form').addEventListener('submit', () => {
-            const btn = document.querySelector('.btn-save-session');
-            btn.disabled = true;
-            btn.textContent = 'Saving…';
+            const btn = document.getElementById('sticky-finish-btn');
+            if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
         });
 
         // Recover an autosaved in-progress session, if any.
         if (DRAFT) {
             _sessRestore(DRAFT);
-            if (DRAFT.stage) goStage(String(DRAFT.stage).replace('stage-', ''));
             const banner = document.getElementById('draft-banner');
             if (banner) banner.style.display = '';
         }

@@ -32,6 +32,7 @@
 .eb-cur    { color: var(--muted); }
 .eb-cur.none { color: var(--dim); }
 .eb-act    { text-align: right; white-space: nowrap; }
+.eb-row-disabled td { opacity: .65; }
 .eb-iconbtn { background: none; border: none; cursor: pointer; color: var(--dim); font-size: 0.9rem;
               padding: 2px 4px; -webkit-tap-highlight-color: transparent; }
 .eb-iconbtn:hover { color: var(--text); }
@@ -62,7 +63,7 @@
 {% block content %}
 <div class="eb-head">
     <h1 style="margin-bottom:0;">Exercise Bank</h1>
-    <a href="/analytics" class="eb-back">‹ Stats</a>
+    <a href="{{ '/' if current_profile and current_profile.id in (2, 3) else '/analytics' }}" class="eb-back">‹ Back</a>
 </div>
 <p class="eb-sub">{{ bank.total }} defined exercises · set scheme is sets × reps</p>
 
@@ -90,6 +91,7 @@
                 <option value="any" selected>any</option><option value="push">push</option>
                 <option value="pull">pull</option><option value="legs">legs</option><option value="core">core</option>
             </select></div>
+        <div class="eb-field"><label>Notes</label><input type="text" name="notes" class="w-name" placeholder="optional"></div>
         <div class="eb-field"><label>Sets</label>
             <span style="display:flex;gap:4px;align-items:center;">
                 <input type="number" name="sets_min" class="w-num" min="1" max="20" placeholder="min">
@@ -102,6 +104,13 @@
                 <span style="color:var(--dim)">–</span>
                 <input type="number" name="reps_max" class="w-num" min="1" max="50" placeholder="max">
             </span></div>
+        <div class="eb-field"><label>Flags</label>
+            <span style="display:flex;gap:8px;align-items:center;min-height:34px;">
+                <label style="font-size:.72rem;text-transform:none;letter-spacing:0"><input type="checkbox" name="is_barbell"> barbell</label>
+                <label style="font-size:.72rem;text-transform:none;letter-spacing:0"><input type="checkbox" name="reps_only"> reps-only</label>
+                <label style="font-size:.72rem;text-transform:none;letter-spacing:0"><input type="checkbox" name="is_timed"> timed</label>
+            </span></div>
+        <div class="eb-field"><label>Cardio Metrics (JSON)</label><input type="text" name="cardio_metrics" class="w-name" value="{}"></div>
         <button type="submit" class="btn btn-primary">Add</button>
         <p class="eb-hint">Leave sets/reps blank to use the tier's default ladder. Tier 4 (cardio / finishers) has no progression scheme.</p>
     </form>
@@ -123,7 +132,7 @@
         </thead>
         <tbody>
             {% for ex in bank.tiers[tier_num] %}
-            <tr>
+            <tr class="{% if not ex.is_enabled %}eb-row-disabled{% endif %}">
                 <td><span class="eb-name">{{ ex.name }}</span>{% for f in ex.flags %}<span class="eb-flag">{{ f }}</span>{% endfor %}</td>
                 <td class="eb-muscle">{{ ex.muscle_group }}</td>
                 <td class="eb-day">{{ ex.day_type }}</td>
@@ -131,9 +140,9 @@
                 <td class="eb-cur {% if ex.current == '—' %}none{% endif %}">{{ ex.current }}</td>
                 <td class="eb-act">
                     <button type="button" class="eb-iconbtn" title="Edit" onclick="ebToggle('e{{ ex.id }}')">✎</button>
-                    <form method="POST" action="/exercise-bank/{{ ex.id }}/delete" style="display:inline"
-                          onsubmit="return confirm('Delete {{ ex.name }}? This can\'t be undone.');">
-                        <button type="submit" class="eb-iconbtn del" title="Delete">✕</button>
+                    <form method="POST" action="/exercise-bank/{{ ex.id }}/enabled" style="display:inline">
+                        <input type="hidden" name="enabled" value="{{ 0 if ex.is_enabled else 1 }}">
+                        <button type="submit" class="eb-iconbtn del" title="{{ 'Disable' if ex.is_enabled else 'Enable' }}">{{ '⏸' if ex.is_enabled else '↺' }}</button>
                     </form>
                 </td>
             </tr>
@@ -150,6 +159,8 @@
                             <select name="day_type" class="w-sel">
                                 {% for d in ['any','push','pull','legs','core'] %}<option value="{{ d }}" {{ 'selected' if ex.day_type == d }}>{{ d }}</option>{% endfor %}
                             </select></div>
+                        <div class="eb-field"><label>Notes</label>
+                            <input type="text" name="notes" class="w-name" value="{{ ex.notes }}"></div>
                         <div class="eb-field"><label>Sets</label>
                             <span style="display:flex;gap:4px;align-items:center;">
                                 <input type="number" name="sets_min" class="w-num" min="1" max="20" value="{{ ex.sets_min if ex.sets_min is not none }}" placeholder="min">
@@ -162,6 +173,14 @@
                                 <span style="color:var(--dim)">–</span>
                                 <input type="number" name="reps_max" class="w-num" min="1" max="50" value="{{ ex.reps_max if ex.reps_max is not none }}" placeholder="max">
                             </span></div>
+                        <div class="eb-field"><label>Flags</label>
+                            <span style="display:flex;gap:8px;align-items:center;min-height:34px;">
+                                <label style="font-size:.72rem;text-transform:none;letter-spacing:0"><input type="checkbox" name="is_barbell" {{ 'checked' if ex.is_barbell }}> barbell</label>
+                                <label style="font-size:.72rem;text-transform:none;letter-spacing:0"><input type="checkbox" name="reps_only" {{ 'checked' if ex.reps_only }}> reps-only</label>
+                                <label style="font-size:.72rem;text-transform:none;letter-spacing:0"><input type="checkbox" name="is_timed" {{ 'checked' if ex.is_timed }}> timed</label>
+                            </span></div>
+                        <div class="eb-field"><label>Cardio Metrics (JSON)</label>
+                            <input type="text" name="cardio_metrics" class="w-name" value="{{ ex.cardio_metrics }}"></div>
                         <button type="submit" class="btn btn-primary">Save</button>
                         <button type="button" class="btn btn-secondary" onclick="ebToggle('e{{ ex.id }}')">Cancel</button>
                     </form>

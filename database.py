@@ -531,7 +531,7 @@ def init_db():
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             exercise_id INTEGER NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
             scheme_id   INTEGER NOT NULL,
-            result      TEXT NOT NULL CHECK(result IN ('completed','failed')),
+            result      TEXT NOT NULL CHECK(result IN ('pass','fail')),
             sets_done   INTEGER NOT NULL,
             date        TEXT NOT NULL,
             weight_kg   REAL
@@ -561,6 +561,62 @@ def init_db():
     conn.execute("INSERT OR IGNORE INTO profiles (id, name) VALUES (1, 'Arjun')")
     conn.execute("INSERT OR IGNORE INTO profiles (id, name) VALUES (2, 'Gayathri')")
     conn.execute("INSERT OR IGNORE INTO profiles (id, name) VALUES (3, 'Raj')")
+
+    # Profile-scoped exercise-bank configuration. Canonical exercise identity
+    # remains in exercises; per-scope overrides and enable/disable live here.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS exercise_bank_config (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            bank_scope    TEXT NOT NULL CHECK(bank_scope IN ('arjun','home')),
+            exercise_id   INTEGER NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
+            tier          INTEGER NOT NULL CHECK(tier IN (1, 2, 3, 4)),
+            muscle_group  TEXT NOT NULL,
+            day_type      TEXT NOT NULL CHECK(day_type IN ('push','pull','legs','core','any')),
+            notes         TEXT,
+            is_barbell    INTEGER NOT NULL DEFAULT 0,
+            reps_only     INTEGER NOT NULL DEFAULT 0,
+            is_timed      INTEGER NOT NULL DEFAULT 0,
+            cardio_metrics TEXT NOT NULL DEFAULT '{}',
+            reps_min      INTEGER,
+            reps_max      INTEGER,
+            sets_min      INTEGER,
+            sets_max      INTEGER,
+            is_enabled    INTEGER NOT NULL DEFAULT 1,
+            created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(bank_scope, exercise_id)
+        )
+    """)
+    conn.execute("""
+        INSERT OR IGNORE INTO exercise_bank_config (
+            bank_scope, exercise_id, tier, muscle_group, day_type, notes,
+            is_barbell, reps_only, is_timed, cardio_metrics,
+            reps_min, reps_max, sets_min, sets_max, is_enabled
+        )
+        SELECT
+            'arjun', id, tier, muscle_group, day_type, notes,
+            is_barbell, reps_only, is_timed, COALESCE(cardio_metrics, '{}'),
+            reps_min, reps_max, sets_min, sets_max, 1
+        FROM exercises
+    """)
+    conn.execute("""
+        INSERT OR IGNORE INTO exercise_bank_config (
+            bank_scope, exercise_id, tier, muscle_group, day_type, notes,
+            is_barbell, reps_only, is_timed, cardio_metrics,
+            reps_min, reps_max, sets_min, sets_max, is_enabled
+        )
+        SELECT
+            'home', id, tier, muscle_group, day_type, notes,
+            is_barbell, reps_only, is_timed, COALESCE(cardio_metrics, '{}'),
+            reps_min, reps_max, sets_min, sets_max, 1
+        FROM exercises
+    """)
+    conn.execute(
+        'CREATE INDEX IF NOT EXISTS idx_bank_cfg_scope_enabled ON exercise_bank_config(bank_scope, is_enabled)'
+    )
+    conn.execute(
+        'CREATE INDEX IF NOT EXISTS idx_bank_cfg_scope_tier_name ON exercise_bank_config(bank_scope, tier, muscle_group, exercise_id)'
+    )
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS body_weight (
@@ -765,6 +821,17 @@ def init_db():
             reps              INTEGER NOT NULL,
             sets              INTEGER NOT NULL,
             progression_order INTEGER NOT NULL
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS session_templates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            exercises TEXT NOT NULL,
+            created_at TEXT,
+            last_used_at TEXT
         )
     """)
 
@@ -1498,7 +1565,7 @@ def get_all_progressions():
     return result
 
 
-def get_tier1_suggestion():
+def get_tier1_suggestion(profile_id=1):
     """Return all Tier 1 exercises ordered by days-since-last-performed descending.
 
     Never-performed exercises sort first (highest priority).
@@ -1507,22 +1574,26 @@ def get_tier1_suggestion():
     """
     conn = get_db()
     today = date.today().isoformat()
+    scope = bank_scope_for_profile(profile_id)
 
     rows = conn.execute("""
         SELECT
             e.id,
             e.name,
-            e.muscle_group,
-            e.is_barbell,
-            e.reps_only,
+            COALESCE(cfg.muscle_group, e.muscle_group) AS muscle_group,
+            COALESCE(cfg.is_barbell, e.is_barbell) AS is_barbell,
+            COALESCE(cfg.reps_only, e.reps_only) AS reps_only,
             MAX(s.date) AS last_performed
         FROM exercises e
+        LEFT JOIN exercise_bank_config cfg
+               ON cfg.exercise_id = e.id AND cfg.bank_scope = ?
         LEFT JOIN session_lifts sl ON sl.exercise_id = e.id
         LEFT JOIN sessions      s  ON s.id = sl.session_id AND s.type = 'gym'
-        WHERE e.tier = 1
+        WHERE COALESCE(cfg.tier, e.tier) = 1
+          AND COALESCE(cfg.is_enabled, 1) = 1
         GROUP BY e.id
         ORDER BY last_performed ASC NULLS FIRST
-    """).fetchall()
+    """, (scope,)).fetchall()
     conn.close()
 
     # Annotate with days_since (None if never performed)
@@ -1546,23 +1617,29 @@ def get_tier1_suggestion():
     return result
 
 
-def get_tier4_exercises():
+def get_tier4_exercises(profile_id=1):
     """Tier 4 warmup / cardio exercises with their metric spec and days-since-last.
 
     Each row: id, name, muscle_group, metrics (dict), days_since (int or None).
     """
     conn = get_db()
     today = date.today().isoformat()
+    scope = bank_scope_for_profile(profile_id)
     rows = conn.execute("""
-        SELECT e.id, e.name, e.muscle_group, e.cardio_metrics,
+        SELECT e.id, e.name,
+               COALESCE(cfg.muscle_group, e.muscle_group) AS muscle_group,
+               COALESCE(cfg.cardio_metrics, e.cardio_metrics, '{}') AS cardio_metrics,
                MAX(s.date) AS last_performed
         FROM exercises e
+        LEFT JOIN exercise_bank_config cfg
+               ON cfg.exercise_id = e.id AND cfg.bank_scope = ?
         LEFT JOIN session_cardio sc ON sc.exercise_id = e.id
         LEFT JOIN sessions      s  ON s.id = sc.session_id AND s.type = 'gym'
-        WHERE e.tier = 4
+        WHERE COALESCE(cfg.tier, e.tier) = 4
+          AND COALESCE(cfg.is_enabled, 1) = 1
         GROUP BY e.id
-        ORDER BY e.muscle_group, e.name
-    """).fetchall()
+        ORDER BY COALESCE(cfg.muscle_group, e.muscle_group), e.name
+        """, (scope,)).fetchall()
     conn.close()
 
     result = []
@@ -1666,10 +1743,10 @@ def get_session_cardio(session_id):
     return out
 
 
-def get_cardio_choices():
+def get_cardio_choices(profile_id=1):
     """Tier 4 cardio exercises (muscle_group='Cardio') with their metric spec, for the
     standalone cardio logger."""
-    return [e for e in get_tier4_exercises() if e['muscle_group'] == 'Cardio']
+    return [e for e in get_tier4_exercises(profile_id) if e['muscle_group'] == 'Cardio']
 
 
 def log_cardio_session(profile_id, date_str, exercise_id,
@@ -1996,7 +2073,7 @@ def get_exercise_decay(exercise_id, days=21):
         SELECT ea.date, ea.result, ea.sets_done, sc.reps, sc.sets
         FROM exercise_attempts ea
         JOIN schemes sc ON sc.id = ea.scheme_id
-        WHERE ea.exercise_id = ? AND ea.result = 'completed'
+        WHERE ea.exercise_id = ? AND ea.result = 'pass'
         ORDER BY ea.date DESC, ea.id DESC LIMIT 1
     """, (exercise_id,)).fetchone()
 
@@ -2013,8 +2090,8 @@ def get_exercise_decay(exercise_id, days=21):
         LIMIT 30
     """, (exercise_id,)).fetchall()
 
-    # Per-scheme outcomes keyed by weight — {weight_str: {scheme_id_str: 'completed'|'failed'}}
-    # 'completed' beats 'failed' for the same weight+scheme
+    # Per-scheme outcomes keyed by weight — {weight_str: {scheme_id_str: 'pass'|'fail'}}
+    # 'pass' beats 'fail' for the same weight+scheme
     outcome_rows = conn.execute("""
         SELECT scheme_id, result, weight_kg
         FROM exercise_attempts
@@ -2027,7 +2104,7 @@ def get_exercise_decay(exercise_id, days=21):
         wkey = str(round(row['weight_kg'], 2))
         skey = str(row['scheme_id'])
         bucket = scheme_outcomes_by_weight.setdefault(wkey, {})
-        if bucket.get(skey) != 'completed':
+        if bucket.get(skey) != 'pass':
             bucket[skey] = row['result']
 
     conn.close()
@@ -2053,6 +2130,44 @@ def get_exercise_decay(exercise_id, days=21):
                                     for r in hist_rows],
         'scheme_outcomes_by_weight': scheme_outcomes_by_weight,
     }
+
+
+def get_exercise_history_last_5(exercise_id):
+    """Return the last 5 recorded sessions for an exercise with pass/fail status.
+    
+    Returns: {
+        "history": [
+            {"date": "2026-07-14", "result": "pass", "weight_kg": 105, "sets": 5, "reps": 5},
+            ...
+        ]
+    }
+    
+    Queries exercise_attempts (which has pass/fail result + weight_kg) and joins with
+    schemes to get sets/reps. Returns empty list if no attempts exist.
+    """
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT ea.date, ea.result, ea.weight_kg, sc.sets, sc.reps
+        FROM exercise_attempts ea
+        JOIN schemes sc ON sc.id = ea.scheme_id
+        WHERE ea.exercise_id = ?
+        ORDER BY ea.date DESC
+        LIMIT 5
+    """, (exercise_id,)).fetchall()
+    conn.close()
+    
+    history = [
+        {
+            'date': r['date'],
+            'result': r['result'],
+            'weight_kg': r['weight_kg'],
+            'sets': r['sets'],
+            'reps': r['reps'],
+        }
+        for r in rows
+    ]
+    
+    return {'history': list(reversed(history))}  # oldest first for display
 
 
 # ── Fatigue / cooldown calculation ────────────────────────────────────
@@ -3690,25 +3805,48 @@ _BANK_META = {
 }
 _BANK_TIER_DEFAULT = {1: '3–5 × 3–5', 2: '3–4 × 6–8', 3: '3–4 × 8–12'}
 
+_BANK_SCOPE_ARJUN = 'arjun'
+_BANK_SCOPE_HOME = 'home'
 
-def get_exercise_bank():
-    """Every defined exercise grouped by tier, with set scheme + current working set.
 
-    Returns {'meta', 'tiers': {1..4: [rows]}, 'counts', 'total'}. Each row carries
-    name, muscle_group, day_type, scheme (sets × reps band), current (working set @
-    load), and flags (reps-only / timed). Scheme uses the exercise's custom bounds
-    when set, else the tier default; Tier 4 has no progression scheme.
-    """
+def bank_scope_for_profile(profile_id):
+    try:
+        pid = int(profile_id)
+    except (TypeError, ValueError):
+        pid = 1
+    return _BANK_SCOPE_HOME if pid in (2, 3) else _BANK_SCOPE_ARJUN
+
+
+def get_exercise_bank(profile_id=1):
+    """Every defined exercise grouped by tier, with set scheme + current working set."""
     conn = get_db()
+    scope = bank_scope_for_profile(profile_id)
     rows = conn.execute("""
-        SELECT e.id, e.name, e.tier, e.muscle_group, e.day_type, e.reps_only, e.is_timed,
-               e.reps_min, e.reps_max, e.sets_min, e.sets_max,
+        SELECT e.id, e.name,
+               COALESCE(cfg.tier, e.tier) AS tier,
+               COALESCE(cfg.muscle_group, e.muscle_group) AS muscle_group,
+               COALESCE(cfg.day_type, e.day_type) AS day_type,
+               COALESCE(cfg.notes, e.notes) AS notes,
+               COALESCE(cfg.is_barbell, e.is_barbell) AS is_barbell,
+               COALESCE(cfg.reps_only, e.reps_only) AS reps_only,
+               COALESCE(cfg.is_timed, e.is_timed) AS is_timed,
+               COALESCE(cfg.cardio_metrics, e.cardio_metrics, '{}') AS cardio_metrics,
+               COALESCE(cfg.reps_min, e.reps_min) AS reps_min,
+               COALESCE(cfg.reps_max, e.reps_max) AS reps_max,
+               COALESCE(cfg.sets_min, e.sets_min) AS sets_min,
+               COALESCE(cfg.sets_max, e.sets_max) AS sets_max,
+               COALESCE(cfg.is_enabled, 1) AS is_enabled,
                p.weight_kg, sc.sets AS cur_sets, sc.reps AS cur_reps
         FROM exercises e
+        LEFT JOIN exercise_bank_config cfg
+               ON cfg.exercise_id = e.id AND cfg.bank_scope = ?
         LEFT JOIN progression p ON p.exercise_id = e.id
         LEFT JOIN schemes     sc ON sc.id = p.scheme_id
-        ORDER BY e.tier, e.muscle_group, e.name
-    """).fetchall()
+        ORDER BY COALESCE(cfg.is_enabled, 1) DESC,
+                 COALESCE(cfg.tier, e.tier),
+                 COALESCE(cfg.muscle_group, e.muscle_group),
+                 e.name
+    """, (scope,)).fetchall()
     conn.close()
 
     tiers = {1: [], 2: [], 3: [], 4: []}
@@ -3736,27 +3874,36 @@ def get_exercise_bank():
             flags.append('reps-only')
         if r['is_timed']:
             flags.append('timed')
+        if not r['is_enabled']:
+            flags.append('disabled')
 
         tiers.setdefault(t, []).append({
-            'id':           r['id'],
-            'tier':         t,
-            'name':         r['name'],
+            'id': r['id'],
+            'tier': t,
+            'name': r['name'],
             'muscle_group': r['muscle_group'],
-            'day_type':     r['day_type'],
-            'scheme':       scheme,
-            'current':      current,
-            'flags':        flags,
-            'reps_min':     r['reps_min'],
-            'reps_max':     r['reps_max'],
-            'sets_min':     r['sets_min'],
-            'sets_max':     r['sets_max'],
+            'day_type': r['day_type'],
+            'scheme': scheme,
+            'current': current,
+            'flags': flags,
+            'reps_min': r['reps_min'],
+            'reps_max': r['reps_max'],
+            'sets_min': r['sets_min'],
+            'sets_max': r['sets_max'],
+            'notes': r['notes'] or '',
+            'is_barbell': bool(r['is_barbell']),
+            'reps_only': bool(r['reps_only']),
+            'is_timed': bool(r['is_timed']),
+            'cardio_metrics': r['cardio_metrics'] or '{}',
+            'is_enabled': bool(r['is_enabled']),
         })
 
     return {
-        'meta':   _BANK_META,
-        'tiers':  tiers,
+        'meta': _BANK_META,
+        'tiers': tiers,
         'counts': {t: len(v) for t, v in tiers.items()},
-        'total':  len(rows),
+        'total': len(rows),
+        'scope': scope,
     }
 
 
@@ -3790,6 +3937,60 @@ def _bank_validate(tier, muscle_group, day_type, bounds):
     return (rmin, rmax, smin, smax), None
 
 
+def _bank_clean_meta(notes, is_barbell, reps_only, is_timed, cardio_metrics_raw):
+    notes = (notes or '').strip() or None
+    if notes and len(notes) > 2000:
+        return None, 'Notes must be 2000 characters or fewer.'
+    try:
+        metrics_obj = _json.loads((cardio_metrics_raw or '').strip() or '{}')
+        if not isinstance(metrics_obj, dict):
+            return None, 'Cardio metrics must be a JSON object.'
+    except Exception:
+        return None, 'Cardio metrics must be valid JSON.'
+    return {
+        'notes': notes,
+        'is_barbell': 1 if is_barbell else 0,
+        'reps_only': 1 if reps_only else 0,
+        'is_timed': 1 if is_timed else 0,
+        'cardio_metrics': _json.dumps(metrics_obj, sort_keys=True, separators=(',', ':')),
+    }, None
+
+
+def _upsert_bank_config(conn, scope, ex_id, tier, muscle_group, day_type,
+                        reps_min, reps_max, sets_min, sets_max,
+                        notes, is_barbell, reps_only, is_timed, cardio_metrics,
+                        is_enabled=1):
+    conn.execute(
+        """
+        INSERT INTO exercise_bank_config (
+            bank_scope, exercise_id, tier, muscle_group, day_type,
+            reps_min, reps_max, sets_min, sets_max,
+            notes, is_barbell, reps_only, is_timed, cardio_metrics,
+            is_enabled, updated_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+        ON CONFLICT(bank_scope, exercise_id) DO UPDATE SET
+            tier=excluded.tier,
+            muscle_group=excluded.muscle_group,
+            day_type=excluded.day_type,
+            reps_min=excluded.reps_min,
+            reps_max=excluded.reps_max,
+            sets_min=excluded.sets_min,
+            sets_max=excluded.sets_max,
+            notes=excluded.notes,
+            is_barbell=excluded.is_barbell,
+            reps_only=excluded.reps_only,
+            is_timed=excluded.is_timed,
+            cardio_metrics=excluded.cardio_metrics,
+            is_enabled=excluded.is_enabled,
+            updated_at=CURRENT_TIMESTAMP
+        """,
+        (scope, ex_id, tier, muscle_group, day_type,
+         reps_min, reps_max, sets_min, sets_max,
+         notes, is_barbell, reps_only, is_timed, cardio_metrics,
+         1 if is_enabled else 0)
+    )
+
+
 def _regen_exercise_schemes(conn, ex_id):
     """Rebuild an exercise's progression ladder after a tier/bounds change.
 
@@ -3808,7 +4009,8 @@ def _regen_exercise_schemes(conn, ex_id):
         order, rows = 1, []
         for s in range(ex['sets_min'], ex['sets_max'] + 1):
             for r in range(ex['reps_min'], ex['reps_max'] + 1):
-                rows.append((tier, ex_id, r, s, order)); order += 1
+                rows.append((tier, ex_id, r, s, order))
+                order += 1
         conn.executemany(
             'INSERT INTO schemes (tier, exercise_id, reps, sets, progression_order) VALUES (?,?,?,?,?)',
             rows
@@ -3821,7 +4023,10 @@ def _regen_exercise_schemes(conn, ex_id):
     conn.execute('DELETE FROM exercise_attempts  WHERE exercise_id=?', (ex_id,))
 
 
-def bank_add_exercise(name, tier, muscle_group, day_type, bounds=(None, None, None, None)):
+def bank_add_exercise(name, tier, muscle_group, day_type,
+                      bounds=(None, None, None, None),
+                      profile_id=1, notes=None, is_barbell=False,
+                      reps_only=False, is_timed=False, cardio_metrics='{}'):
     """Create a new exercise. Returns (ok, error)."""
     name = (name or '').strip()
     if not name:
@@ -3829,14 +4034,64 @@ def bank_add_exercise(name, tier, muscle_group, day_type, bounds=(None, None, No
     clean, err = _bank_validate(tier, muscle_group, day_type, bounds)
     if err:
         return False, err
+    meta, err = _bank_clean_meta(notes, is_barbell, reps_only, is_timed, cardio_metrics)
+    if err:
+        return False, err
+    scope = bank_scope_for_profile(profile_id)
     conn = get_db()
     try:
-        cur = conn.execute(
-            'INSERT INTO exercises (name, tier, muscle_group, day_type, reps_min, reps_max, sets_min, sets_max) '
-            'VALUES (?,?,?,?,?,?,?,?)',
-            (name, tier, muscle_group.strip(), day_type, *clean)
+        row = conn.execute('SELECT id FROM exercises WHERE name=? COLLATE NOCASE', (name,)).fetchone()
+        if row:
+            ex_id = row['id']
+        else:
+            cur = conn.execute(
+                'INSERT INTO exercises '
+                '(name, tier, muscle_group, day_type, notes, is_barbell, reps_only, is_timed, cardio_metrics, reps_min, reps_max, sets_min, sets_max) '
+                'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                (
+                    name, tier, muscle_group.strip(), day_type,
+                    meta['notes'], meta['is_barbell'], meta['reps_only'],
+                    meta['is_timed'], meta['cardio_metrics'], *clean,
+                )
+            )
+            ex_id = cur.lastrowid
+
+        _upsert_bank_config(
+            conn, scope, ex_id, tier, muscle_group.strip(), day_type,
+            clean[0], clean[1], clean[2], clean[3],
+            meta['notes'], meta['is_barbell'], meta['reps_only'],
+            meta['is_timed'], meta['cardio_metrics'],
+            is_enabled=1
         )
-        _regen_exercise_schemes(conn, cur.lastrowid)
+
+        if scope == _BANK_SCOPE_ARJUN:
+            conn.execute(
+                'UPDATE exercises SET tier=?, muscle_group=?, day_type=?, notes=?, '
+                'is_barbell=?, reps_only=?, is_timed=?, cardio_metrics=?, '
+                'reps_min=?, reps_max=?, sets_min=?, sets_max=? WHERE id=?',
+                (
+                    tier, muscle_group.strip(), day_type, meta['notes'],
+                    meta['is_barbell'], meta['reps_only'], meta['is_timed'],
+                    meta['cardio_metrics'], clean[0], clean[1], clean[2], clean[3], ex_id,
+                )
+            )
+            _regen_exercise_schemes(conn, ex_id)
+        else:
+            # Home-only additions should not automatically appear for Arjun.
+            base = conn.execute(
+                'SELECT tier, muscle_group, day_type, notes, is_barbell, reps_only, is_timed, '
+                'cardio_metrics, reps_min, reps_max, sets_min, sets_max '
+                'FROM exercises WHERE id=?', (ex_id,)
+            ).fetchone()
+            _upsert_bank_config(
+                conn, _BANK_SCOPE_ARJUN, ex_id,
+                base['tier'], base['muscle_group'], base['day_type'],
+                base['reps_min'], base['reps_max'], base['sets_min'], base['sets_max'],
+                base['notes'], base['is_barbell'], base['reps_only'],
+                base['is_timed'], base['cardio_metrics'] or '{}',
+                is_enabled=0
+            )
+
         conn.commit()
         return True, None
     except sqlite3.IntegrityError:
@@ -3845,21 +4100,68 @@ def bank_add_exercise(name, tier, muscle_group, day_type, bounds=(None, None, No
         conn.close()
 
 
-def bank_update_exercise(ex_id, tier, muscle_group, day_type, bounds=(None, None, None, None)):
+def bank_update_exercise(ex_id, tier, muscle_group, day_type,
+                         bounds=(None, None, None, None),
+                         profile_id=1, notes=None, is_barbell=False,
+                         reps_only=False, is_timed=False, cardio_metrics='{}'):
     """Amend an exercise's tier / muscle group / day / scheme bounds. Returns (ok, error)."""
     clean, err = _bank_validate(tier, muscle_group, day_type, bounds)
     if err:
         return False, err
+    meta, err = _bank_clean_meta(notes, is_barbell, reps_only, is_timed, cardio_metrics)
+    if err:
+        return False, err
+    scope = bank_scope_for_profile(profile_id)
     conn = get_db()
     try:
         if not conn.execute('SELECT 1 FROM exercises WHERE id=?', (ex_id,)).fetchone():
             return False, 'Exercise not found.'
-        conn.execute(
-            'UPDATE exercises SET tier=?, muscle_group=?, day_type=?, '
-            'reps_min=?, reps_max=?, sets_min=?, sets_max=? WHERE id=?',
-            (tier, muscle_group.strip(), day_type, *clean, ex_id)
+        _upsert_bank_config(
+            conn, scope, ex_id, tier, muscle_group.strip(), day_type,
+            clean[0], clean[1], clean[2], clean[3],
+            meta['notes'], meta['is_barbell'], meta['reps_only'],
+            meta['is_timed'], meta['cardio_metrics'],
+            is_enabled=1
         )
-        _regen_exercise_schemes(conn, ex_id)
+        if scope == _BANK_SCOPE_ARJUN:
+            conn.execute(
+                'UPDATE exercises SET tier=?, muscle_group=?, day_type=?, notes=?, '
+                'is_barbell=?, reps_only=?, is_timed=?, cardio_metrics=?, '
+                'reps_min=?, reps_max=?, sets_min=?, sets_max=? WHERE id=?',
+                (
+                    tier, muscle_group.strip(), day_type, meta['notes'],
+                    meta['is_barbell'], meta['reps_only'], meta['is_timed'],
+                    meta['cardio_metrics'], clean[0], clean[1], clean[2], clean[3], ex_id,
+                )
+            )
+            _regen_exercise_schemes(conn, ex_id)
+        conn.commit()
+        return True, None
+    finally:
+        conn.close()
+
+
+def bank_set_exercise_enabled(ex_id, profile_id=1, enabled=False):
+    """Enable/disable an exercise for a profile scope. Returns (ok, error)."""
+    scope = bank_scope_for_profile(profile_id)
+    conn = get_db()
+    try:
+        row = conn.execute(
+            'SELECT id, name, tier, muscle_group, day_type, notes, is_barbell, reps_only, '
+            'is_timed, cardio_metrics, reps_min, reps_max, sets_min, sets_max '
+            'FROM exercises WHERE id=?',
+            (ex_id,)
+        ).fetchone()
+        if not row:
+            return False, 'Exercise not found.'
+        _upsert_bank_config(
+            conn, scope, ex_id,
+            row['tier'], row['muscle_group'], row['day_type'],
+            row['reps_min'], row['reps_max'], row['sets_min'], row['sets_max'],
+            row['notes'], row['is_barbell'], row['reps_only'],
+            row['is_timed'], row['cardio_metrics'] or '{}',
+            is_enabled=bool(enabled)
+        )
         conn.commit()
         return True, None
     finally:
@@ -3867,20 +4169,5 @@ def bank_update_exercise(ex_id, tier, muscle_group, day_type, bounds=(None, None
 
 
 def bank_delete_exercise(ex_id):
-    """Delete an exercise. Refuses if it has logged history. Returns (ok, error)."""
-    conn = get_db()
-    try:
-        row = conn.execute('SELECT name FROM exercises WHERE id=?', (ex_id,)).fetchone()
-        if not row:
-            return False, 'Exercise not found.'
-        hist = conn.execute('SELECT COUNT(*) FROM session_lifts WHERE exercise_id=?', (ex_id,)).fetchone()[0]
-        hist += conn.execute('SELECT COUNT(*) FROM session_cardio WHERE exercise_id=?', (ex_id,)).fetchone()[0]
-        if hist:
-            return False, f'“{row["name"]}” has {hist} logged set(s); remove or reassign its history first.'
-        # schemes.exercise_id has no ON DELETE CASCADE — clear it explicitly; the rest cascade.
-        conn.execute('DELETE FROM schemes WHERE exercise_id=?', (ex_id,))
-        conn.execute('DELETE FROM exercises WHERE id=?', (ex_id,))
-        conn.commit()
-        return True, None
-    finally:
-        conn.close()
+    """Legacy compatibility wrapper; Exercise Bank now uses soft-disable."""
+    return bank_set_exercise_enabled(ex_id, profile_id=1, enabled=False)

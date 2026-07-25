@@ -353,81 +353,121 @@
 .tally-btn-secondary { background: none; border: 1px solid var(--border); color: var(--dim); }
 .tally-btn-secondary:active { opacity: .75; }
 
-/* ── Food logger ─────────────────────────────────────────────────── */
-.fl-add-wrap { margin-bottom: 10px; }
-.fl-add-summary {
-    display: block; width: 100%;
-    border: 1px dashed var(--border); border-radius: var(--radius-sm); padding: 10px;
-    text-align: center; color: var(--dim); font-family: var(--font-mono); font-size: 11px;
-    letter-spacing: .04em; cursor: pointer; list-style: none;
+/* ── Food logger (4-column grid) ─────────────────────────────────── */
+.fl-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.fl-col { --meal-col: var(--accent); }
+.fl-col[data-meal="breakfast"] { --meal-col: #f0b45f; }
+.fl-col[data-meal="lunch"]     { --meal-col: #7fb069; }
+.fl-col[data-meal="dinner"]    { --meal-col: #6b93b8; }
+.fl-col[data-meal="snack"]     { --meal-col: #a887b8; }
+.fl-col {
+    display: flex; flex-direction: column;
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md);
+    min-height: 200px;
+}
+.fl-col-header {
+    padding: 10px 12px 8px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+}
+.fl-col-title {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--meal-col);
+}
+.fl-col-entries { flex: 1; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.fl-entry {
+    display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 6px;
+    padding: 6px 4px; border-radius: var(--radius-sm);
+}
+.fl-entry:hover { background: var(--panel-soft); }
+.fl-entry-name { font-family: var(--font-sans); font-size: 12px; color: var(--text-strong);
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fl-entry-kcal { font-family: var(--font-mono); font-size: 11px; color: var(--text-strong); font-weight: 600; white-space: nowrap; }
+.fl-entry-pro  { font-family: var(--font-mono); font-size: 10px; color: var(--dimmer); white-space: nowrap; }
+.fl-del-btn {
+    background: none; border: none; color: var(--dimmer); cursor: pointer;
+    font-size: 12px; padding: 2px 4px; border-radius: var(--radius-sm);
+    opacity: 0; transition: opacity .12s;
     -webkit-tap-highlight-color: transparent;
 }
-.fl-add-summary::-webkit-details-marker { display: none; }
-details[open].fl-add-wrap .fl-add-summary { color: var(--accent); border-color: var(--accent); margin-bottom: 8px; }
-.fl-add-body {
-    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm);
-    padding: 12px; display: flex; flex-direction: column; gap: 8px;
+.fl-entry:hover .fl-del-btn { opacity: 1; }
+.fl-del-btn:active { color: var(--red); }
+.fl-col-footer {
+    padding: 8px 12px; border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
 }
-.fl-meal-row { display: flex; gap: 4px; flex-wrap: wrap; }
-.fl-meal-pill {
-    background: transparent; border: 1px solid var(--border); color: var(--dim);
-    border-radius: var(--radius-sm); cursor: pointer;
-    font-family: var(--font-mono); font-size: 10px; font-weight: 400;
-    letter-spacing: .06em; text-transform: uppercase; padding: 6px 11px;
-    -webkit-tap-highlight-color: transparent; transition: color .12s, border-color .12s, background .12s;
+.fl-footer-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+.fl-footer-value { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--text-strong); }
+.fl-col-footer { border-top-color: color-mix(in srgb, var(--meal-col) 25%, var(--border)); }
+.fl-add-btn {
+    margin: 8px 10px 10px; padding: 6px 0;
+    border: 1px dashed var(--border); border-radius: var(--radius-sm);
+    background: transparent; color: var(--dim);
+    font-family: var(--font-mono); font-size: 11px;
+    cursor: pointer; text-align: center;
+    transition: color .12s, border-color .12s;
+    -webkit-tap-highlight-color: transparent;
 }
-.fl-meal-pill.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.fl-add-btn:hover { color: var(--meal-col); border-color: var(--meal-col); }
+.fl-empty { font-family: var(--font-mono); font-size: 11px; color: var(--dimmer); font-style: italic;
+    text-align: center; padding: 20px 10px; flex: 1; display: flex; align-items: center; justify-content: center; }
+
+/* Quick-add inline input (shown per-column on click) */
+.fl-inline-add {
+    display: none; flex-direction: column; gap: 6px; padding: 8px 10px;
+    border-top: 1px solid var(--border);
+}
+.fl-inline-add.active { display: flex; }
 .fl-input-row { display: flex; gap: 6px; }
 .fl-name-input {
     flex: 1; background: var(--panel-soft); border: 1px solid var(--border);
     border-radius: var(--radius-sm); color: var(--text);
-    font-family: var(--font-sans); font-size: 13px; padding: 9px 10px;
+    font-family: var(--font-sans); font-size: 12px; padding: 8px 10px;
 }
 .fl-name-input::placeholder { color: var(--dimmer); }
 .fl-submit-btn {
     background: var(--accent); color: var(--bg); border: none; border-radius: var(--radius-sm);
-    cursor: pointer; font-family: var(--font-sans); font-size: 13px; font-weight: 600;
-    padding: 0 16px; -webkit-tap-highlight-color: transparent;
+    cursor: pointer; font-family: var(--font-sans); font-size: 12px; font-weight: 600;
+    padding: 0 12px; -webkit-tap-highlight-color: transparent;
 }
 .fl-submit-btn:active { opacity: .85; }
-.fl-hint  { font-family: var(--font-mono); font-size: 10px; color: var(--dim); }
-.fl-error { font-family: var(--font-mono); font-size: 10px; color: var(--red); }
-.fl-recents { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-.fl-recents-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; color: var(--dim); }
+.fl-error { font-family: var(--font-mono); font-size: 10px; color: var(--red); display: none; }
+.fl-recents { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
 .fl-recent-chip {
     background: var(--panel-soft); border: 1px solid var(--border); border-radius: var(--radius-sm);
-    color: var(--dim); cursor: pointer; font-family: var(--font-mono); font-size: 10px;
-    padding: 4px 9px; -webkit-tap-highlight-color: transparent;
+    color: var(--dim); cursor: pointer; font-family: var(--font-mono); font-size: 9px;
+    padding: 3px 7px; -webkit-tap-highlight-color: transparent;
 }
 .fl-recent-chip:active { color: var(--accent); border-color: var(--accent); }
 
-/* Meal group headers */
-.fl-meal-group { margin-bottom: 8px; }
-.fl-meal-header {
-    display: flex; align-items: center; gap: 8px; padding: 8px 0 4px;
+/* Cumulative calorie bar */
+.fl-total-bar {
+    margin-top: 10px; padding: 10px 12px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md);
+}
+.fl-total-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+    margin-bottom: 6px;
+}
+.fl-total-label {
     font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em;
     text-transform: uppercase; color: var(--dim);
 }
-.fl-meal-name { color: var(--accent); }
-.fl-meal-kcal { margin-left: auto; }
-
-/* Food entry rows */
-.fl-entry {
-    display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 6px;
-    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm);
-    padding: 8px 10px; margin-bottom: 4px;
+.fl-total-value {
+    font-family: var(--font-mono); font-size: 14px; font-weight: 700; color: var(--text-strong);
 }
-.fl-entry-name { font-family: var(--font-sans); font-size: 12px; color: var(--text-strong);
-    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fl-entry-kcal { font-family: var(--font-mono); font-size: 11px; color: var(--text-strong); font-weight: 600; white-space: nowrap; }
-.fl-entry-pro  { font-family: var(--font-mono); font-size: 11px; color: var(--green); white-space: nowrap; }
-.fl-del-btn {
-    background: none; border: none; color: var(--dimmer); cursor: pointer;
-    font-size: 13px; padding: 2px 4px; border-radius: var(--radius-sm);
-    -webkit-tap-highlight-color: transparent;
+.fl-total-value .fl-total-goal { font-size: 10px; font-weight: 400; color: var(--dim); }
+.fl-total-track {
+    height: 6px; background: var(--panel-soft); border-radius: 3px; overflow: hidden;
 }
-.fl-del-btn:active { color: var(--red); }
-.fl-empty { font-family: var(--font-mono); font-size: 11px; color: var(--dimmer); text-align: center; padding: 12px 0; }
+.fl-total-fill {
+    height: 100%; border-radius: 3px; transition: width .3s ease;
+    background: linear-gradient(90deg, #f0b45f, #7fb069 45%, #6b93b8 75%, #a887b8);
+}
+.fl-total-fill.over { background: var(--red); }
+.fl-total-fill.protein {
+    background: var(--green, #7fb069);
+}
+.fl-total-bars { display: flex; flex-direction: column; gap: 6px; }
 </style>
 {% endblock %}
 
@@ -582,6 +622,7 @@ details[open].fl-add-wrap .fl-add-summary { color: var(--accent); border-color: 
         <a href="/missions" class="quick-btn">Missions</a>
         <a href="/food"     class="quick-btn">Food</a>
         <a href="/sessions" class="quick-btn">History</a>
+        <a href="/exercise-bank" class="quick-btn">Exercise Bank</a>
     </div>
 </section>
 
@@ -611,33 +652,8 @@ details[open].fl-add-wrap .fl-add-summary { color: var(--accent); border-color: 
 {# ── Food log · today ─────────────────────────────────────────────── #}
 <section class="section">
     <p class="section-title">food · today</p>
-
-    {# Quick add #}
-    <div class="fl-add-wrap">
-        <div class="fl-meal-row" id="fl-meal-row">
-            <button type="button" class="fl-meal-pill" data-meal="breakfast" onclick="flSelectMeal('breakfast')">Breakfast</button>
-            <button type="button" class="fl-meal-pill" data-meal="lunch"     onclick="flSelectMeal('lunch')">Lunch</button>
-            <button type="button" class="fl-meal-pill" data-meal="dinner"    onclick="flSelectMeal('dinner')">Dinner</button>
-            <button type="button" class="fl-meal-pill" data-meal="snack"     onclick="flSelectMeal('snack')">Snack</button>
-        </div>
-        <div class="fl-input-row">
-            <input type="text" id="fl-name" class="fl-name-input" placeholder="e.g. 78g Chicken" autocomplete="off">
-            <button type="button" class="fl-submit-btn" onclick="flAddEntry()">Add</button>
-        </div>
-        {% if recent_foods %}
-        <div class="fl-recents">
-            <span class="fl-recents-label">Recent</span>
-            {% for rf in recent_foods %}
-            <button type="button" class="fl-recent-chip" onclick="flSetName({{ rf | tojson }})">{{ rf }}</button>
-            {% endfor %}
-        </div>
-        {% endif %}
-        <div class="fl-error" id="fl-error" style="display:none"></div>
-    </div>
-
-    {# Meal sections #}
-    <div id="fl-log" class="fl-log"></div>
-    <div id="fl-empty" class="fl-empty" style="display:none">Nothing logged yet.</div>
+    <div id="fl-grid" class="fl-grid"></div>
+    <div id="fl-total-bar" class="fl-total-bar"></div>
 </section>
 
 {# ── Weekly stats ──────────────────────────────────────────────────── #}
@@ -733,71 +749,56 @@ details[open].fl-add-wrap .fl-add-summary { color: var(--accent); border-color: 
     let FL_ENTRIES = {{ food_entries | tojson }};
     const FL_GOALS = { calories: {{ goals.calories or 0 }}, protein_g: {{ goals.protein_g or 0 }} };
     const csrf = () => document.querySelector('meta[name="csrf-token"]')?.content || window._csrf || '';
+    const RECENT_FOODS = {{ recent_foods | tojson }};
 
     const MEAL_ORDER  = ['breakfast', 'lunch', 'dinner', 'snack'];
     const MEAL_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' };
 
-    // ── Quick add ────────────────────────────────────────────────────────
-    let flSelectedMeal = null;
-
-    window.flSelectMeal = function (type) {
-        flSelectedMeal = type;
-        document.querySelectorAll('.fl-meal-pill').forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.meal === type);
-        });
-    };
-
-    window.flSetName = function (name) {
-        const input = document.getElementById('fl-name');
-        input.value = name;
-        input.focus();
-    };
-
-    function flShowError(msg) {
-        const el = document.getElementById('fl-error');
-        el.textContent = msg;
-        el.style.display = '';
-    }
-    function flClearError() {
-        document.getElementById('fl-error').style.display = 'none';
-    }
-
-    window.flAddEntry = async function () {
-        if (!flSelectedMeal) { flShowError('Select a meal type first.'); return; }
-        const input = document.getElementById('fl-name');
-        const name = input.value.trim();
-        if (!name) { flShowError('Enter a food name.'); return; }
-        flClearError();
+    // ── Add entry (per-column) ───────────────────────────────────────────
+    window.flAddEntry = async function (mealType) {
+        const input = document.getElementById('fl-input-' + mealType);
+        const errEl = document.getElementById('fl-error-' + mealType);
+        const name = (input ? input.value : '').trim();
+        if (!name) { if (errEl) { errEl.textContent = 'Enter a food name.'; errEl.style.display = ''; } return; }
+        if (errEl) errEl.style.display = 'none';
         try {
             const res = await fetch('/food/api/entry', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf() },
-                body: JSON.stringify({ date: TODAY, meal_type: flSelectedMeal, name }),
+                body: JSON.stringify({ date: TODAY, meal_type: mealType, name }),
             });
             if (!res.ok) throw new Error('Server error');
             const data = await res.json();
             FL_ENTRIES.push(data.entry);
-            input.value = '';
+            if (input) input.value = '';
             flRender();
+            // Re-open the add panel for this meal after render
+            setTimeout(function() { flToggleAdd(mealType); }, 0);
         } catch (err) {
-            flShowError('Failed to save — try again.');
+            if (errEl) { errEl.textContent = 'Failed to save \u2014 try again.'; errEl.style.display = ''; }
         }
     };
 
-    document.getElementById('fl-name').addEventListener('keydown', e => {
-        if (e.key === 'Enter') { e.preventDefault(); flAddEntry(); }
-    });
+    window.flSetName = function (name, mealType) {
+        const input = document.getElementById('fl-input-' + mealType);
+        if (input) { input.value = name; input.focus(); }
+    };
 
-    function flRender() {
-        const logEl   = document.getElementById('fl-log');
-        const emptyEl = document.getElementById('fl-empty');
-        if (!FL_ENTRIES.length) {
-            logEl.innerHTML = '';
-            emptyEl.style.display = '';
-            return;
+    window.flToggleAdd = function (mealType) {
+        const el = document.getElementById('fl-add-' + mealType);
+        if (!el) return;
+        const isActive = el.classList.contains('active');
+        document.querySelectorAll('.fl-inline-add').forEach(function(a) { a.classList.remove('active'); });
+        if (!isActive) {
+            el.classList.add('active');
+            const input = document.getElementById('fl-input-' + mealType);
+            if (input) setTimeout(function() { input.focus(); }, 50);
         }
-        emptyEl.style.display = 'none';
+    };
 
+    // ── Render 4-column grid ─────────────────────────────────────────────
+    function flRender() {
+        const gridEl = document.getElementById('fl-grid');
         const byMeal = {};
         MEAL_ORDER.forEach(m => { byMeal[m] = []; });
         FL_ENTRIES.forEach(e => {
@@ -806,26 +807,81 @@ details[open].fl-add-wrap .fl-add-summary { color: var(--accent); border-color: 
         });
 
         let html = '';
-        MEAL_ORDER.forEach(mt => {
+        MEAL_ORDER.forEach(function (mt) {
             const rows = byMeal[mt];
-            if (!rows.length) return;
             const mkcal = rows.reduce((s, e) => s + (e.calories || 0), 0);
-            html += `<div class="fl-meal-group">
-                <div class="fl-meal-header">
-                    <span class="fl-meal-name">${MEAL_LABELS[mt]}</span>
-                    <span class="fl-meal-kcal">${Math.round(mkcal)} kcal</span>
-                </div>`;
-            rows.forEach(e => {
-                html += `<div class="fl-entry" data-id="${e.id}">
-                    <span class="fl-entry-name">${flH(e.name)}</span>
-                    <span class="fl-entry-kcal">${Math.round(e.calories || 0)}</span>
-                    <span class="fl-entry-pro">${(e.protein_g || 0).toFixed(1)}g</span>
-                    <button type="button" class="fl-del-btn" onclick="flDelete(${e.id})" aria-label="Delete">✕</button>
-                </div>`;
-            });
+
+            html += '<div class="fl-col" data-meal="' + mt + '">';
+            html += '<div class="fl-col-header"><span class="fl-col-title">' + MEAL_LABELS[mt] + '</span></div>';
+            html += '<div class="fl-col-entries">';
+            if (rows.length) {
+                rows.forEach(function (e) {
+                    html += '<div class="fl-entry" data-id="' + e.id + '">'
+                        + '<span class="fl-entry-name">' + flH(e.name) + '</span>'
+                        + '<span class="fl-entry-kcal">' + Math.round(e.calories || 0) + '</span>'
+                        + '<span class="fl-entry-pro">' + (e.protein_g || 0).toFixed(1) + 'g</span>'
+                        + '<button type="button" class="fl-del-btn" onclick="flDelete(' + e.id + ')" aria-label="Delete">\u2715</button>'
+                        + '</div>';
+                });
+            } else {
+                html += '<div class="fl-empty">Nothing logged</div>';
+            }
+            html += '</div>';
+
+            html += '<div class="fl-col-footer">'
+                + '<span class="fl-footer-label">Total</span>'
+                + '<span class="fl-footer-value">' + Math.round(mkcal) + ' kcal</span>'
+                + '</div>';
+
+            html += '<button type="button" class="fl-add-btn" onclick="flToggleAdd(\'' + mt + '\')">+ add</button>';
+
+            html += '<div class="fl-inline-add" id="fl-add-' + mt + '">'
+                + '<div class="fl-input-row">'
+                + '<input type="text" id="fl-input-' + mt + '" class="fl-name-input" placeholder="e.g. 78g Chicken" autocomplete="off"'
+                + ' onkeydown="if(event.key===\'Enter\'){event.preventDefault();flAddEntry(\'' + mt + '\');}">'
+                + '<button type="button" class="fl-submit-btn" onclick="flAddEntry(\'' + mt + '\')">Add</button>'
+                + '</div>';
+            if (RECENT_FOODS && RECENT_FOODS.length) {
+                html += '<div class="fl-recents">';
+                RECENT_FOODS.slice(0, 5).forEach(function (rf) {
+                    html += '<button type="button" class="fl-recent-chip" onclick="flSetName(' + JSON.stringify(rf) + ',\'' + mt + '\')">' + flH(rf) + '</button>';
+                });
+                html += '</div>';
+            }
+            html += '<div class="fl-error" id="fl-error-' + mt + '"></div>';
+            html += '</div>';
+
             html += '</div>';
         });
-        logEl.innerHTML = html;
+
+        gridEl.innerHTML = html;
+
+        // Cumulative calorie + protein bars
+        var totalCal = FL_ENTRIES.reduce(function(s, e) { return s + (e.calories || 0); }, 0);
+        var totalPro = FL_ENTRIES.reduce(function(s, e) { return s + (e.protein_g || 0); }, 0);
+        var goalCal = FL_GOALS.calories || 0;
+        var goalPro = FL_GOALS.protein_g || 0;
+        var pct = goalCal > 0 ? Math.min(100, (totalCal / goalCal) * 100) : 0;
+        var pctPro = goalPro > 0 ? Math.min(100, (totalPro / goalPro) * 100) : 0;
+        var isOver = goalCal > 0 && totalCal > goalCal;
+        var isOverPro = goalPro > 0 && totalPro > goalPro;
+        var barEl = document.getElementById('fl-total-bar');
+        if (barEl) {
+            barEl.innerHTML = '<div class="fl-total-bars">'
+                + '<div><div class="fl-total-head">'
+                + '<span class="fl-total-label">Total today</span>'
+                + '<span class="fl-total-value">' + Math.round(totalCal).toLocaleString() + ' <span class="fl-total-goal">' + (goalCal ? '/ ' + goalCal.toLocaleString() + ' kcal' : 'kcal') + '</span></span>'
+                + '</div>'
+                + '<div class="fl-total-track"><div class="fl-total-fill' + (isOver ? ' over' : '') + '" style="width:' + pct + '%"></div></div>'
+                + '</div>'
+                + '<div><div class="fl-total-head">'
+                + '<span class="fl-total-label">Protein</span>'
+                + '<span class="fl-total-value">' + Math.round(totalPro) + 'g <span class="fl-total-goal">' + (goalPro ? '/ ' + goalPro + 'g' : '') + '</span></span>'
+                + '</div>'
+                + '<div class="fl-total-track"><div class="fl-total-fill protein' + (isOverPro ? ' over' : '') + '" style="width:' + pctPro + '%"></div></div>'
+                + '</div>'
+                + '</div>';
+        }
     }
 
     window.flDelete = async function (id) {

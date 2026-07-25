@@ -7,7 +7,7 @@ from urllib.parse import quote as _urlquote
 from datetime import date as date_type, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, abort
 from datetime import datetime as _datetime
-from database import init_db, get_db, get_tier1_suggestion, get_tier4_exercises, get_session_cardio, get_t1_last_weights, get_cardio_choices, log_cardio_session, save_session_draft, get_session_draft, clear_session_draft, get_t1_exercises_with_activity, get_muscle_group_activity, get_muscle_swimlane, get_exercise_bank, bank_add_exercise, bank_update_exercise, bank_delete_exercise, get_exercise_decay, get_fatigue_state, adjust_fatigue, get_exercise_muscle_map, FATIGUE_TIER_BASE, get_priority_lifts, set_priority_lift, clear_priority_lift, get_progression, advance_progression, set_progression_weight, get_all_progressions, get_schemes, record_stage_completion, record_exercise_attempt, get_sessions_with_headlines, get_session_detail_with_progression, get_macro_goals, set_macro_goals, sync_food_log_from_library, get_food_log, add_food_entry, log_food_entry, delete_food_entry, get_pending_foods, define_food_item, delete_food_item, get_food_history, get_recent_foods, get_food_library, get_food_components, get_food_component_mode, save_food_components, save_food_components_pct, get_profiles, _parse_qty_name, _parse_gram_prefix, _food_key, log_food_reconciliation, get_food_reconciliations, log_body_weight, get_body_weight, get_body_weight_history, get_pilates_session, get_mission_progress, clear_mission_stage, get_exercise_tallies, bump_exercise_tally, ack_exercise_tally
+from database import init_db, get_db, get_tier1_suggestion, get_tier4_exercises, get_session_cardio, get_t1_last_weights, get_cardio_choices, log_cardio_session, save_session_draft, get_session_draft, clear_session_draft, get_t1_exercises_with_activity, get_muscle_group_activity, get_muscle_swimlane, get_exercise_bank, bank_add_exercise, bank_update_exercise, bank_set_exercise_enabled, bank_scope_for_profile, get_exercise_decay, get_exercise_history_last_5, get_fatigue_state, adjust_fatigue, get_exercise_muscle_map, FATIGUE_TIER_BASE, get_priority_lifts, set_priority_lift, clear_priority_lift, get_progression, advance_progression, set_progression_weight, get_all_progressions, get_schemes, record_stage_completion, record_exercise_attempt, get_sessions_with_headlines, get_session_detail_with_progression, get_macro_goals, set_macro_goals, sync_food_log_from_library, get_food_log, add_food_entry, log_food_entry, delete_food_entry, get_pending_foods, define_food_item, delete_food_item, get_food_history, get_recent_foods, get_food_library, get_food_components, get_food_component_mode, save_food_components, save_food_components_pct, get_profiles, _parse_qty_name, _parse_gram_prefix, _food_key, log_food_reconciliation, get_food_reconciliations, log_body_weight, get_body_weight, get_body_weight_history, get_pilates_session, get_mission_progress, clear_mission_stage, get_exercise_tallies, bump_exercise_tally, ack_exercise_tally
 from swim_routes import bp as swim_bp
 from pilates_routes import bp as pilates_bp
 app = Flask(__name__)
@@ -395,6 +395,8 @@ def dashboard():
           'f': round(r['fat_g'] or 0, 1)}
          for r in food_rows),
         key=lambda x: _meal_rank.get(x['meal'], 4))
+    food_entries = [dict(r) for r in food_rows]
+    recent_foods = get_recent_foods(_profile_id(), limit=8)
     monday = today - timedelta(days=today.weekday())
     week_session_rows = db.execute('SELECT date, type FROM sessions WHERE date BETWEEN ? AND ? AND profile_id = ?', (monday.isoformat(), (monday + timedelta(days=6)).isoformat(), _profile_id())).fetchall()
     db.close()
@@ -416,7 +418,7 @@ def dashboard():
             'is_today': day == today,
             'is_past': day < today,
             'activities': week_activity.get(day_iso, []) })
-    return render_template('dashboard.html', last_session=last_session, weekly_volume=weekly_volume, weekly_swim=weekly_swim, today=today.isoformat(), week_days=week_days, today_weight=today_weight, food_goals=food_goals, food_totals=food_totals, food_items_json=_json.dumps(food_items), swimlane_json=_json.dumps(get_muscle_swimlane(_profile_id())), fatigue_json=_json.dumps(get_fatigue_state(_profile_id())), food_date=food_date, food_prev_date=food_prev_date, food_next_date=food_next_date, food_date_label=food_date_label, food_is_today=food_is_today)
+    return render_template('dashboard.html', last_session=last_session, weekly_volume=weekly_volume, weekly_swim=weekly_swim, today=today.isoformat(), week_days=week_days, today_weight=today_weight, food_goals=food_goals, food_totals=food_totals, food_items_json=_json.dumps(food_items), swimlane_json=_json.dumps(get_muscle_swimlane(_profile_id())), fatigue_json=_json.dumps(get_fatigue_state(_profile_id())), food_date=food_date, food_prev_date=food_prev_date, food_next_date=food_next_date, food_date_label=food_date_label, food_is_today=food_is_today, food_entries=food_entries, recent_foods=recent_foods)
 
 
 @app.route('/session/draft', methods=[ 'POST'])
@@ -548,11 +550,25 @@ def session_new():
     preselect_exid = int(preselect_exid) if str(preselect_exid).isdigit() else None
 
     db = get_db()
+    bank_scope = bank_scope_for_profile(pid)
 
     def _tier_list(tier):
         rows = db.execute(
-            'SELECT id, name, tier, muscle_group, reps_min, sets_min, is_barbell, reps_only '
-            'FROM exercises WHERE tier=? ORDER BY muscle_group, name', (tier,)).fetchall()
+            'SELECT e.id, e.name, '
+            'COALESCE(cfg.tier, e.tier) AS tier, '
+            'COALESCE(cfg.muscle_group, e.muscle_group) AS muscle_group, '
+            'COALESCE(cfg.reps_min, e.reps_min) AS reps_min, '
+            'COALESCE(cfg.sets_min, e.sets_min) AS sets_min, '
+            'COALESCE(cfg.is_barbell, e.is_barbell) AS is_barbell, '
+            'COALESCE(cfg.reps_only, e.reps_only) AS reps_only '
+            'FROM exercises e '
+            'LEFT JOIN exercise_bank_config cfg '
+            'ON cfg.exercise_id = e.id AND cfg.bank_scope = ? '
+            'WHERE COALESCE(cfg.is_enabled, 1) = 1 '
+            'AND COALESCE(cfg.tier, e.tier)=? '
+            'ORDER BY COALESCE(cfg.muscle_group, e.muscle_group), e.name',
+            (bank_scope, tier)
+        ).fetchall()
         return [{'id': r['id'], 'name': r['name'], 'tier': r['tier'],
                  'muscle_group': r['muscle_group'],
                  'sets': r['sets_min'] or 3, 'reps': r['reps_min'] or 8,
@@ -573,7 +589,7 @@ def session_new():
     tier3 = _tier_list(3)
     tier4 = [{'id': e['id'], 'name': e['name'], 'tier': 4,
               'muscle_group': e['muscle_group'], 'metrics': e.get('metrics', {})}
-             for e in get_tier4_exercises()]
+             for e in get_tier4_exercises(pid)]
 
     today_gym_rows = db.execute("""
         SELECT s.id, GROUP_CONCAT(DISTINCT e.name) AS exercise_names
@@ -1010,7 +1026,7 @@ def workout():
         tab = 'exercises'
     (routines, by_muscle, cardio) = _arjun_workout_data()
     priority_json = _json.dumps(get_priority_lifts(_profile_id()))
-    t1_choices_json = _json.dumps([{'id': ex['id'], 'name': ex['name'], 'muscle_group': ex['muscle_group']} for ex in get_tier1_suggestion()])
+    t1_choices_json = _json.dumps([{'id': ex['id'], 'name': ex['name'], 'muscle_group': ex['muscle_group']} for ex in get_tier1_suggestion(_profile_id())])
     return render_template('workout.html', routines=routines, today=today, done=done, tab=tab, by_muscle=by_muscle, cardio=cardio, priority_json=priority_json, t1_choices_json=t1_choices_json)
 
 
@@ -1184,7 +1200,16 @@ def workout_session(session_id):
                     'sets_range': template.get('sets_range', [2, 4]),
                     'sets_logged': sets})
     in_session = {e['exercise_id'] for e in exercises}
-    picker_rows = db.execute('SELECT id, name, muscle_group FROM exercises ORDER BY muscle_group, name').fetchall()
+    bank_scope = bank_scope_for_profile(_profile_id())
+    picker_rows = db.execute(
+        'SELECT e.id, e.name, COALESCE(cfg.muscle_group, e.muscle_group) AS muscle_group '
+        'FROM exercises e '
+        'LEFT JOIN exercise_bank_config cfg '
+        'ON cfg.exercise_id = e.id AND cfg.bank_scope = ? '
+        'WHERE COALESCE(cfg.is_enabled, 1) = 1 '
+        'ORDER BY COALESCE(cfg.muscle_group, e.muscle_group), e.name',
+        (bank_scope,)
+    ).fetchall()
     db.close()
     picker_exs = []
     for r in picker_rows:
@@ -1246,7 +1271,7 @@ def cardio():
                            distance_m=distance, duration_s=duration_s,
                            resistance=resistance, speed=speed)
         return redirect(url_for('dashboard'))
-    return render_template('cardio.html', date_str=date_val, choices=get_cardio_choices())
+    return render_template('cardio.html', date_str=date_val, choices=get_cardio_choices(_profile_id()))
 
 
 @app.route('/session/<int:session_id>')
@@ -1422,7 +1447,7 @@ def analytics():
 
 @app.route('/exercise-bank')
 def exercise_bank():
-    return render_template('exercise_bank.html', bank=get_exercise_bank(), msg=request.args.get('msg'), status=request.args.get('status'))
+    return render_template('exercise_bank.html', bank=get_exercise_bank(_profile_id()), msg=request.args.get('msg'), status=request.args.get('status'))
 
 
 def _bank_bounds_from_form():
@@ -1432,6 +1457,10 @@ def _bank_bounds_from_form():
         return _safe_int(raw, None) if raw else None
 
     return (_v('reps_min'), _v('reps_max'), _v('sets_min'), _v('sets_max'))
+
+
+def _bank_bool_from_form(key):
+    return request.form.get(key) in ('1', 'on', 'true', 'True')
 
 
 def _bank_redirect(ok, err):
@@ -1452,7 +1481,17 @@ def exercise_bank_add():
         _safe_int(request.form.get('sets_min'), None),
         _safe_int(request.form.get('sets_max'), None),
     )
-    ok, err = bank_add_exercise(name, tier, muscle_group, day_type, bounds)
+    notes = request.form.get('notes', '')
+    cardio_metrics = request.form.get('cardio_metrics', '{}')
+    ok, err = bank_add_exercise(
+        name, tier, muscle_group, day_type, bounds,
+        profile_id=_profile_id(),
+        notes=notes,
+        is_barbell=_bank_bool_from_form('is_barbell'),
+        reps_only=_bank_bool_from_form('reps_only'),
+        is_timed=_bank_bool_from_form('is_timed'),
+        cardio_metrics=cardio_metrics,
+    )
     if not ok:
         return redirect(url_for('exercise_bank', msg=err, status='err'))
     return redirect(url_for('exercise_bank'))
@@ -1469,15 +1508,26 @@ def exercise_bank_update(exercise_id):
         _safe_int(request.form.get('sets_min'), None),
         _safe_int(request.form.get('sets_max'), None),
     )
-    ok, err = bank_update_exercise(exercise_id, tier, muscle_group, day_type, bounds)
+    notes = request.form.get('notes', '')
+    cardio_metrics = request.form.get('cardio_metrics', '{}')
+    ok, err = bank_update_exercise(
+        exercise_id, tier, muscle_group, day_type, bounds,
+        profile_id=_profile_id(),
+        notes=notes,
+        is_barbell=_bank_bool_from_form('is_barbell'),
+        reps_only=_bank_bool_from_form('reps_only'),
+        is_timed=_bank_bool_from_form('is_timed'),
+        cardio_metrics=cardio_metrics,
+    )
     if not ok:
         return redirect(url_for('exercise_bank', msg=err, status='err'))
     return redirect(url_for('exercise_bank'))
 
 
-@app.route('/exercise-bank/<int:exercise_id>/delete', methods=[ 'POST'])
-def exercise_bank_delete(exercise_id):
-    (ok, err) = bank_delete_exercise(exercise_id)
+@app.route('/exercise-bank/<int:exercise_id>/enabled', methods=[ 'POST'])
+def exercise_bank_enabled(exercise_id):
+    enabled = _bank_bool_from_form('enabled')
+    (ok, err) = bank_set_exercise_enabled(exercise_id, profile_id=_profile_id(), enabled=enabled)
     return _bank_redirect(ok, err)
 
 
@@ -1924,6 +1974,78 @@ def api_muscle_activity():
 def api_exercise_activity(exercise_id):
     data = get_exercise_decay(exercise_id, 21)
     return _json.dumps(data), 200, {'Content-Type': 'application/json'}
+
+
+@app.route('/api/exercise-history/<int:exercise_id>')
+def api_exercise_history(exercise_id):
+    """Return the last 5 recorded sessions for an exercise with pass/fail status."""
+    db = get_db()
+    ex = db.execute('SELECT id FROM exercises WHERE id = ?', (exercise_id,)).fetchone()
+    db.close()
+    if not ex:
+        return _json.dumps({'error': 'Exercise not found', 'history': []}), 404, {'Content-Type': 'application/json'}
+    data = get_exercise_history_last_5(exercise_id)
+    return _json.dumps(data), 200, {'Content-Type': 'application/json'}
+
+
+# ── Session Templates API ──────────────────────────────────────────
+
+@app.route('/api/templates', methods=['GET'])
+def api_templates_list():
+    pid = _profile_id()
+    db = get_db()
+    rows = db.execute(
+        'SELECT id, name, exercises, created_at, last_used_at FROM session_templates WHERE profile_id=? ORDER BY last_used_at DESC NULLS LAST, created_at DESC',
+        (pid,)).fetchall()
+    db.close()
+    templates = []
+    for r in rows:
+        exs = _json.loads(r['exercises']) if r['exercises'] else []
+        templates.append({'id': r['id'], 'name': r['name'], 'exercise_count': len(exs),
+                          'last_used_at': r['last_used_at'], 'created_at': r['created_at']})
+    return _json.dumps({'templates': templates}), 200, {'Content-Type': 'application/json'}
+
+
+@app.route('/api/templates', methods=['POST'])
+def api_templates_create():
+    pid = _profile_id()
+    data = request.get_json(force=True)
+    name = (data.get('name') or '').strip()
+    exercises = data.get('exercises', [])
+    if not name or not exercises:
+        return _json.dumps({'error': 'Name and exercises required'}), 400, {'Content-Type': 'application/json'}
+    db = get_db()
+    db.execute('INSERT INTO session_templates (profile_id, name, exercises, created_at) VALUES (?,?,?,?)',
+               (pid, name, _json.dumps(exercises), _datetime.utcnow().isoformat() + 'Z'))
+    db.commit()
+    db.close()
+    return _json.dumps({'ok': True}), 201, {'Content-Type': 'application/json'}
+
+
+@app.route('/api/templates/<int:tid>', methods=['DELETE'])
+def api_templates_delete(tid):
+    pid = _profile_id()
+    db = get_db()
+    db.execute('DELETE FROM session_templates WHERE id=? AND profile_id=?', (tid, pid))
+    db.commit()
+    db.close()
+    return _json.dumps({'ok': True}), 200, {'Content-Type': 'application/json'}
+
+
+@app.route('/api/templates/<int:tid>/load', methods=['POST'])
+def api_templates_load(tid):
+    pid = _profile_id()
+    db = get_db()
+    row = db.execute('SELECT exercises FROM session_templates WHERE id=? AND profile_id=?', (tid, pid)).fetchone()
+    if not row:
+        db.close()
+        return _json.dumps({'error': 'Not found'}), 404, {'Content-Type': 'application/json'}
+    db.execute('UPDATE session_templates SET last_used_at=? WHERE id=?',
+               (_datetime.utcnow().isoformat() + 'Z', tid))
+    db.commit()
+    db.close()
+    exercises = _json.loads(row['exercises']) if row['exercises'] else []
+    return _json.dumps({'exercises': exercises}), 200, {'Content-Type': 'application/json'}
 
 
 if __name__ == '__main__':
