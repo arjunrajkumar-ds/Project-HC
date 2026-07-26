@@ -2716,8 +2716,19 @@ def get_session_detail_with_progression(session_id):
 def get_macro_goals(profile_id=1):
     conn = get_db()
     row = conn.execute('SELECT * FROM macro_goals WHERE profile_id = ?', (profile_id,)).fetchone()
+    goals = dict(row) if row else {'calories': 2000, 'protein_g': 150, 'carbs_g': 200, 'fat_g': 70}
+
+    # Dynamic protein goal: 1g per pound of bodyweight from most recent weigh-in
+    latest_weight = conn.execute(
+        "SELECT weight_kg FROM body_weight WHERE profile_id = ? ORDER BY date DESC LIMIT 1",
+        (profile_id,)
+    ).fetchone()
     conn.close()
-    return dict(row) if row else {'calories': 2000, 'protein_g': 150, 'carbs_g': 200, 'fat_g': 70}
+
+    if latest_weight and latest_weight['weight_kg']:
+        goals['protein_g'] = round(latest_weight['weight_kg'] * 2.205)
+
+    return goals
 
 
 def set_macro_goals(calories, protein_g, carbs_g, fat_g, profile_id=1):

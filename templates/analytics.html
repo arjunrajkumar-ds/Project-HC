@@ -43,7 +43,7 @@
 {% block content %}
 <h1>Analytics</h1>
 
-<a href="/exercise-bank" class="btn btn-secondary btn-full" style="margin-bottom:22px; text-decoration:none;">Exercise Bank ›</a>
+<a href="/train" class="btn btn-secondary btn-full" style="margin-bottom:22px; text-decoration:none;">Exercise Bank ›</a>
 
 {# ── 0. Activity Calendar ──────────────────────────────────────────── #}
 <section class="section">
@@ -226,5 +226,72 @@
         volChart.data.labels  = l; volChart.data.datasets[0].data  = v; volChart.update();
         swimChart.data.labels = l; swimChart.data.datasets[0].data = s; swimChart.update();
     }
+</script>
+
+{# ── History Import Widget ────────────────────────────────────────── #}
+<style>
+.import-widget { margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--border); }
+.import-title { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); margin-bottom: 8px; }
+.import-hint { font-family: var(--font-mono); font-size: 9px; color: var(--dimmer); margin-bottom: 8px; line-height: 1.5; }
+.import-textarea {
+    width: 100%; min-height: 120px; resize: vertical;
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md);
+    color: var(--text); font-family: var(--font-mono); font-size: 11px;
+    padding: 10px; line-height: 1.5;
+}
+.import-textarea:focus { outline: none; border-color: var(--accent); }
+.import-actions { display: flex; gap: 8px; margin-top: 8px; }
+.import-btn {
+    background: var(--accent); color: var(--bg); border: none; border-radius: var(--radius-sm);
+    font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+    padding: 8px 14px; cursor: pointer;
+}
+.import-btn.dry { background: var(--panel); color: var(--dim); border: 1px solid var(--border); }
+.import-btn:active { opacity: .85; }
+.import-result { margin-top: 8px; font-family: var(--font-mono); font-size: 10px; color: var(--dim); white-space: pre-wrap; }
+.import-result.ok { color: var(--green, #7fb069); }
+.import-result.err { color: var(--red); }
+</style>
+
+<section class="import-widget">
+    <div class="import-title">Import Training History</div>
+    <div class="import-hint">
+        Format: DD/M/YY on its own line, then exercises below.<br>
+        Lifts: <code>Name - 3x9 @ 30</code> &nbsp; Cardio: <code>Name - 10min @ 7</code><br>
+        Blank lines between days.
+    </div>
+    <textarea class="import-textarea" id="import-text" placeholder="14/7/26
+DB Skullcrusher - 3x9 @ 30
+Stairmaster - 10min @ 7"></textarea>
+    <div class="import-actions">
+        <button class="import-btn dry" onclick="doImport(true)">Dry Run</button>
+        <button class="import-btn" onclick="doImport(false)">Import</button>
+    </div>
+    <div class="import-result" id="import-result"></div>
+</section>
+
+<script>
+async function doImport(dryRun) {
+    const text = document.getElementById('import-text').value.trim();
+    if (!text) return;
+    const el = document.getElementById('import-result');
+    el.className = 'import-result'; el.textContent = 'Processing...';
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content || window._csrf || '';
+    try {
+        const res = await fetch('/api/import-history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+            body: JSON.stringify({ text, dry_run: dryRun })
+        });
+        const contentType = res.headers.get('content-type') || '';
+        const data = contentType.includes('application/json')
+            ? await res.json()
+            : { days: 0, lifts: 0, cardio: 0, errors: [`Server returned ${res.status} (${res.statusText})`] };
+        const hasErr = data.errors && data.errors.length > 0;
+        el.className = 'import-result ' + (hasErr || !res.ok ? 'err' : 'ok');
+        el.textContent = `${!res.ok ? '❌ Error: ' : (dryRun ? '🧪 DRY RUN: ' : '✅ ')}${data.days || 0} days, ${data.lifts || 0} lifts, ${data.cardio || 0} cardio` +
+            (data.errors && data.errors.length ? '\n' + data.errors.join('\n') : '');
+    } catch (e) { el.className = 'import-result err'; el.textContent = 'Request failed: ' + e.message; }
+}
 </script>
 {% endblock %}

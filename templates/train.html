@@ -1,0 +1,381 @@
+{% extends 'base.html' %}
+{% block title %}Train{% endblock %}
+{% block body_class %}pandora{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Header ──────────────────────────────────────────────────── */
+.train-header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.train-title  { font-family: var(--font-sans); font-size: 20px; font-weight: 500; color: var(--text-strong); }
+.train-count  { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
+
+/* ── Tier filter pills ─────────────────────────────────────── */
+.tier-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.tier-pill {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-pill);
+    font-family: var(--font-mono); font-size: 9px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--dim); padding: 5px 12px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent; transition: border-color .12s, color .12s;
+}
+.tier-pill:active { opacity: .8; }
+.tier-pill.active { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+/* ── Group accordion ─────────────────────────────────────────── */
+.g-group { --g-color: var(--accent); margin-bottom: 10px; }
+.g-group[data-group="chest"]      { --g-color: #e07a7a; }
+.g-group[data-group="shoulders"]  { --g-color: #d4a574; }
+.g-group[data-group="back"]       { --g-color: #6b93c9; }
+.g-group[data-group="legs"]       { --g-color: #7fb069; }
+.g-group[data-group="core"]       { --g-color: #a785c2; }
+.g-group[data-group="arms"]       { --g-color: #6bb0a8; }
+.g-group[data-group="stability"]  { --g-color: #8a8a8a; }
+.g-group[data-group="uncategorised"] { --g-color: #c97064; }
+
+.g-head {
+    display: grid; grid-template-columns: 4px 1fr auto auto auto; align-items: center; gap: 8px;
+    width: 100%; background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 12px 14px 12px 10px;
+    cursor: pointer; text-align: left; font-family: inherit; color: var(--text-strong);
+    -webkit-tap-highlight-color: transparent;
+}
+.g-head:active { opacity: .8; }
+.g-stripe { display: block; width: 4px; height: 22px; border-radius: 2px; background: var(--g-color); }
+.g-title  { font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--g-color); }
+.g-count  { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
+.g-info-btn {
+    background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+    color: var(--dim); font-family: var(--font-mono); font-size: 10px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.g-info-btn:active { color: var(--g-color); border-color: var(--g-color); }
+.g-chev   { color: var(--dimmer); font-size: 14px; transition: transform .15s; }
+.g-group.open .g-chev { transform: rotate(90deg); color: var(--g-color); }
+.g-group.open .g-head { border-radius: var(--radius-md) var(--radius-md) 0 0; border-bottom-color: transparent; }
+
+.g-body {
+    display: none; flex-direction: column; gap: 0;
+    border: 1px solid var(--border); border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    overflow: hidden;
+}
+.g-group.open .g-body { display: flex; }
+
+/* ── Function sub-header ───────────────────────────────────── */
+.fn-label {
+    font-family: var(--font-mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--dim); padding: 8px 14px 4px; background: var(--panel-soft);
+    border-bottom: 1px solid var(--border);
+}
+
+/* ── Exercise row ────────────────────────────────────────────── */
+.ex-row {
+    display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px;
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+    background: var(--panel);
+}
+.ex-row:last-child { border-bottom: none; }
+.ex-row.disabled { opacity: .5; }
+
+.ex-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ex-name { font-family: var(--font-sans); font-size: 13px; font-weight: 500; color: var(--text-strong);
+           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ex-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ex-tier-badge {
+    font-family: var(--font-mono); font-size: 8px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; padding: 1px 5px; border-radius: 3px;
+    border: 1px solid var(--border); color: var(--dim);
+}
+.ex-tier-badge.t1 { color: var(--accent); border-color: var(--accent); }
+.ex-tier-badge.t2 { color: var(--green, #7fb069); border-color: var(--green, #7fb069); }
+.ex-tier-badge.t4 { color: #d48a3a; border-color: #d48a3a; }
+.ex-suggestion { font-family: var(--font-mono); font-size: 10px; color: var(--dim); }
+.ex-suggestion.up { color: var(--green, #7fb069); }
+
+.ex-weight { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--text-strong); white-space: nowrap; }
+.ex-weight.none { color: var(--dimmer); font-weight: 400; }
+
+.ex-edit-btn {
+    background: none; border: none; color: var(--dimmer); cursor: pointer;
+    font-size: 12px; padding: 4px; border-radius: var(--radius-sm);
+    -webkit-tap-highlight-color: transparent;
+}
+.ex-edit-btn:active { color: var(--accent); }
+
+.ex-disabled-tag {
+    font-family: var(--font-mono); font-size: 7px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--dimmer); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px;
+}
+
+/* ── Edit panel (inline) ─────────────────────────────────────── */
+.ex-edit-panel {
+    display: none; padding: 10px 14px; background: var(--panel-soft);
+    border-bottom: 1px solid var(--border);
+}
+.ex-edit-panel.open { display: block; }
+.edit-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; }
+.edit-field { display: flex; flex-direction: column; gap: 2px; }
+.edit-field label { font-family: var(--font-mono); font-size: 7px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+.edit-field input, .edit-field select {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text); font-family: var(--font-mono); font-size: 11px;
+    padding: 6px 8px; min-height: 30px;
+}
+.edit-field input:focus, .edit-field select:focus { outline: none; border-color: var(--accent); }
+.edit-save {
+    background: var(--accent); color: var(--bg); border: none; border-radius: var(--radius-sm);
+    font-family: var(--font-mono); font-size: 10px; font-weight: 700; padding: 7px 12px; cursor: pointer;
+}
+.edit-save:active { opacity: .85; }
+.edit-toggle-btn {
+    background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-family: var(--font-mono); font-size: 9px; color: var(--dim); padding: 6px 10px; cursor: pointer;
+}
+.edit-toggle-btn:active { color: var(--accent); border-color: var(--accent); }
+
+/* ── Add exercise panel ──────────────────────────────────────── */
+.add-section {
+    margin-top: 16px; padding: 12px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+}
+.add-toggle {
+    background: none; border: none; color: var(--accent); cursor: pointer;
+    font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding: 0;
+}
+.add-form { display: none; margin-top: 10px; }
+.add-form.open { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+
+/* ── Info sheet ──────────────────────────────────────────────── */
+.info-sheet {
+    display: none; position: fixed; inset: 0; z-index: 200;
+    background: rgba(0,0,0,.6); align-items: flex-end; justify-content: center;
+}
+.info-sheet.open { display: flex; }
+.info-panel {
+    background: var(--panel); border-radius: var(--radius-md) var(--radius-md) 0 0;
+    padding: 20px; width: 100%; max-width: 500px; max-height: 60vh; overflow-y: auto;
+}
+.info-panel-title { font-family: var(--font-mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+.info-panel-close { position: absolute; top: 12px; right: 16px; background: none; border: none; color: var(--dim); font-size: 18px; cursor: pointer; }
+.info-ex-list { display: flex; flex-direction: column; gap: 6px; }
+.info-ex { font-family: var(--font-sans); font-size: 12px; color: var(--text); display: flex; gap: 8px; align-items: baseline; }
+.info-ex-fn { font-family: var(--font-mono); font-size: 9px; color: var(--dim); text-transform: uppercase; }
+
+/* ── Responsive ──────────────────────────────────────────────── */
+@media (min-width: 640px) {
+    .groups-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .groups-grid .g-group { margin-bottom: 0; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="train-header">
+    <div class="train-title">Train</div>
+    <span class="train-count">{{ total_enabled }} exercises</span>
+</div>
+
+<!-- Tier filter pills -->
+<div class="tier-pills">
+    <span class="tier-pill active" data-tier="all">All</span>
+    <span class="tier-pill" data-tier="1">T1</span>
+    <span class="tier-pill" data-tier="2">T2</span>
+    <span class="tier-pill" data-tier="3">T3</span>
+    <span class="tier-pill" data-tier="4">Fa Jin</span>
+</div>
+
+<!-- Groups grid -->
+<div class="groups-grid">
+{% for group in groups %}
+<div class="g-group" data-group="{{ group.key }}">
+    <button type="button" class="g-head" onclick="toggleGroup(event, this)">
+        <span class="g-stripe"></span>
+        <span class="g-title">{{ group.label }}</span>
+        <span class="g-count">{{ group.exercises | length }}</span>
+        <button type="button" class="g-info-btn" onclick="event.stopPropagation(); showInfo('{{ group.key }}', '{{ group.label }}')" title="Info">?</button>
+        <span class="g-chev">›</span>
+    </button>
+    <div class="g-body">
+        {% set ns = namespace(last_fn='__none__') %}
+        {% for ex in group.exercises %}
+            {% if ex.function and ex.function != ns.last_fn %}
+                <div class="fn-label">{{ ex.function }}</div>
+                {% set ns.last_fn = ex.function %}
+            {% elif not ex.function and ns.last_fn != '__none_nofn__' %}
+                {% if ns.last_fn != '__none__' %}
+                    <div class="fn-label">—</div>
+                {% endif %}
+                {% set ns.last_fn = '__none_nofn__' %}
+            {% endif %}
+            <div class="ex-row{% if not ex.is_enabled %} disabled{% endif %}" data-tier="{{ ex.tier }}" data-id="{{ ex.id }}">
+                <div class="ex-main">
+                    <span class="ex-name">{{ ex.name }}{% if not ex.is_enabled %} <span class="ex-disabled-tag">off</span>{% endif %}</span>
+                    <div class="ex-meta">
+                        <span class="ex-tier-badge t{{ ex.tier }}">T{{ ex.tier }}</span>
+                        {% if ex.suggestion and ex.suggestion.action != 'start' %}
+                            <span class="ex-suggestion{% if ex.suggestion.action in ('weight_up', 'reps_up') %} up{% endif %}">{{ ex.suggestion.message }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="ex-weight{% if not ex.weight_kg %} none{% endif %}">
+                    {% if ex.weight_kg %}{{ ex.weight_kg | int if ex.weight_kg == ex.weight_kg | int else ex.weight_kg }}kg{% else %}—{% endif %}
+                </div>
+                <button type="button" class="ex-edit-btn" onclick="toggleEdit({{ ex.id }})" title="Edit">✎</button>
+            </div>
+            <div class="ex-edit-panel" id="edit-{{ ex.id }}">
+                <div class="edit-form">
+                    <div class="edit-field"><label>Tier</label>
+                        <select id="ed-tier-{{ ex.id }}">
+                            <option value="1"{% if ex.tier == 1 %} selected{% endif %}>T1</option>
+                            <option value="2"{% if ex.tier == 2 %} selected{% endif %}>T2</option>
+                            <option value="3"{% if ex.tier == 3 %} selected{% endif %}>T3</option>
+                            <option value="4"{% if ex.tier == 4 %} selected{% endif %}>T4</option>
+                            <option value="5"{% if ex.tier == 5 %} selected{% endif %}>T5</option>
+                        </select></div>
+                    <div class="edit-field"><label>Muscle</label>
+                        <select id="ed-muscle-{{ ex.id }}">
+                            {% for mg in muscle_groups %}
+                            <option value="{{ mg }}"{% if ex.muscle_group == mg %} selected{% endif %}>{{ mg }}</option>
+                            {% endfor %}
+                        </select></div>
+                    <div class="edit-field"><label>Function</label>
+                        <input type="text" id="ed-fn-{{ ex.id }}" value="{{ ex.function or '' }}" placeholder="e.g. press" style="width:80px"></div>
+                    <div class="edit-field"><label>Notes</label>
+                        <input type="text" id="ed-notes-{{ ex.id }}" value="{{ ex.notes or '' }}" placeholder="optional" style="width:120px"></div>
+                    <button type="button" class="edit-save" onclick="saveEdit({{ ex.id }})">Save</button>
+                    <button type="button" class="edit-toggle-btn" onclick="toggleEnabled({{ ex.id }}, {{ 'false' if ex.is_enabled else 'true' }})">
+                        {{ 'Disable' if ex.is_enabled else 'Enable' }}
+                    </button>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+</div>
+
+<!-- Add exercise -->
+<div class="add-section">
+    <button type="button" class="add-toggle" onclick="document.getElementById('add-form').classList.toggle('open')">＋ Add exercise</button>
+    <div class="add-form" id="add-form">
+        <div class="edit-field"><label>Name</label><input type="text" id="add-name" placeholder="e.g. Cable Fly" style="width:150px"></div>
+        <div class="edit-field"><label>Tier</label>
+            <select id="add-tier">
+                <option value="1">T1</option><option value="2" selected>T2</option>
+                <option value="3">T3</option><option value="4">T4</option><option value="5">T5</option>
+            </select></div>
+        <div class="edit-field"><label>Muscle</label>
+            <select id="add-muscle">
+                {% for mg in muscle_groups %}<option value="{{ mg }}">{{ mg }}</option>{% endfor %}
+            </select></div>
+        <div class="edit-field"><label>Function</label><input type="text" id="add-fn" placeholder="optional" style="width:80px"></div>
+        <button type="button" class="edit-save" onclick="addExercise()">Add</button>
+    </div>
+</div>
+
+<!-- Info sheet (bottom sheet) -->
+<div class="info-sheet" id="info-sheet" onclick="if(event.target===this)closeInfo()">
+    <div class="info-panel">
+        <div class="info-panel-title" id="info-title"></div>
+        <div class="info-ex-list" id="info-list"></div>
+    </div>
+</div>
+
+<script>
+function toggleGroup(event, btn) {
+    // Don't toggle if clicking the info button
+    if (event.target.closest('.g-info-btn')) return;
+    btn.closest('.g-group').classList.toggle('open');
+}
+
+// Tier filtering
+document.querySelectorAll('.tier-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+        document.querySelectorAll('.tier-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        const tier = pill.dataset.tier;
+        document.querySelectorAll('.ex-row').forEach(row => {
+            row.style.display = (tier === 'all' || row.dataset.tier === tier) ? '' : 'none';
+        });
+        document.querySelectorAll('.g-group').forEach(g => {
+            const visible = g.querySelectorAll('.ex-row:not([style*="display: none"])').length;
+            g.style.display = visible > 0 ? '' : 'none';
+            g.querySelector('.g-count').textContent = visible;
+        });
+    });
+});
+
+// Edit
+function toggleEdit(id) {
+    document.getElementById('edit-' + id).classList.toggle('open');
+}
+
+async function saveEdit(id) {
+    const data = {
+        tier: parseInt(document.getElementById('ed-tier-' + id).value),
+        muscle_group: document.getElementById('ed-muscle-' + id).value,
+        function: document.getElementById('ed-fn-' + id).value.trim() || null,
+        notes: document.getElementById('ed-notes-' + id).value.trim() || null,
+    };
+    const res = await fetch('/api/gym/exercise/' + id, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    if (res.ok) location.reload();
+    else alert('Save failed');
+}
+
+async function toggleEnabled(id, enabled) {
+    await fetch('/api/gym/exercise/' + id + '/toggle', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled })
+    });
+    location.reload();
+}
+
+// Add
+async function addExercise() {
+    const data = {
+        name: document.getElementById('add-name').value.trim(),
+        tier: parseInt(document.getElementById('add-tier').value),
+        muscle_group: document.getElementById('add-muscle').value,
+        function: document.getElementById('add-fn').value.trim() || null,
+    };
+    if (!data.name) { document.getElementById('add-name').focus(); return; }
+    const res = await fetch('/api/gym/exercise/add', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    if (res.ok) location.reload();
+    else { const d = await res.json(); alert(d.error || 'Add failed'); }
+}
+
+// Info sheet
+const GROUPS = {{ groups | tojson }};
+function showInfo(key, label) {
+    const group = GROUPS.find(g => g.key === key);
+    if (!group) return;
+    document.getElementById('info-title').textContent = label;
+    const list = document.getElementById('info-list');
+    // Group by function
+    const byFn = {};
+    group.exercises.forEach(e => {
+        const fn = e.function || '(general)';
+        if (!byFn[fn]) byFn[fn] = [];
+        byFn[fn].push(e);
+    });
+    let html = '';
+    for (const [fn, exs] of Object.entries(byFn)) {
+        html += '<div class="info-ex-fn">' + fn + '</div>';
+        exs.forEach(e => {
+            html += '<div class="info-ex"><span>T' + e.tier + '</span> <span>' + e.name + '</span>';
+            if (e.notes) html += ' <span style="color:var(--dimmer);font-size:10px">— ' + e.notes + '</span>';
+            html += '</div>';
+        });
+    }
+    list.innerHTML = html;
+    document.getElementById('info-sheet').classList.add('open');
+}
+function closeInfo() { document.getElementById('info-sheet').classList.remove('open'); }
+</script>
+{% endblock %}

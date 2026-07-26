@@ -8,6 +8,15 @@
 .dash-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 4px; gap: 10px; }
 .dash-title  { font-family: var(--font-sans); font-size: 20px; font-weight: 500;
                letter-spacing: -0.01em; color: var(--text-strong); line-height: 1.2; margin-top: 2px; }
+.date-nav {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: transparent;
+    color: var(--dim); text-decoration: none; font-size: 16px; font-weight: 500;
+    vertical-align: middle; margin: 0 4px;
+    -webkit-tap-highlight-color: transparent;
+}
+.date-nav:active { border-color: var(--accent); color: var(--accent); }
 .dash-header-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; margin-top: 2px; }
 .btn-info {
     display: flex; align-items: center; justify-content: center;
@@ -206,14 +215,14 @@
 .quick-btn:active { opacity: .8; }
 
 /* ── Muscle fatigue bars ─────────────────────────────────────────── */
-.fatigue-rows { display: flex; flex-direction: column; gap: 7px; }
-.fat-row { display: flex; align-items: center; gap: 8px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.fatigue-rows { display: flex; flex-direction: column; gap: 5px; }
+.fat-row { display: flex; align-items: center; gap: 6px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .fat-row:active { opacity: .7; }
-.fat-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.fat-label { font-family: var(--font-sans); font-size: 12px; color: var(--text); width: 36px; flex-shrink: 0; }
-.fat-track { flex: 1; height: 5px; background: var(--panel-soft); border-radius: 3px; overflow: hidden; }
+.fat-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.fat-label { font-family: var(--font-mono); font-size: 10px; color: var(--text); width: 32px; flex-shrink: 0; }
+.fat-track { flex: 1; height: 4px; background: var(--panel-soft); border-radius: 2px; overflow: hidden; }
 .fat-fill  { height: 100%; }
-.fat-num { font-family: var(--font-mono); font-size: 11px; width: 22px; text-align: right; }
+.fat-num { font-family: var(--font-mono); font-size: 9px; width: 18px; text-align: right; color: var(--dim); }
 
 /* ── Weekly cooldown grid (kept; restyled dark) ──────────────────── */
 .fg-grid { display: grid; gap: 3px; }
@@ -238,6 +247,25 @@
 .fg-swatch { width: 9px; height: 9px; border-radius: 2px; }
 
 /* ── Weekly stats ────────────────────────────────────────────────── */
+.dash-strip-top { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 10px; }
+.dash-strip-fatigue { flex: 1; min-width: 0; max-width: 280px; }
+.dash-strip-side { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; width: 50px; }
+.mini-stat {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 6px 4px; text-align: center;
+}
+.mini-stat-val {
+    display: block; font-family: var(--font-mono); font-size: 16px; font-weight: 700;
+    color: var(--text-strong); line-height: 1.1;
+}
+.mini-stat-lbl {
+    display: block; font-family: var(--font-mono); font-size: 7px; font-weight: 600;
+    letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-top: 2px;
+}
+.mini-stat.streak .mini-stat-lbl { color: var(--dim); }
+
+.dash-strip-bottom { display: flex; gap: 8px; }
+
 .stats-row { display: flex; gap: 10px; }
 .stat-card { flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 11px; }
 .stat-lbl {
@@ -245,8 +273,26 @@
     text-transform: uppercase; color: var(--dim);
 }
 .stat-lbl.kg   { color: var(--accent); }
-.stat-lbl.swim { color: var(--blue); }
 .stat-val { display: block; font-family: var(--font-mono); font-size: 18px; font-weight: 600; color: var(--text-strong); margin-top: 2px; line-height: 1.1; }
+
+
+/* ── Motivation row ────────────────────────────────────────────────── */
+.moti-card {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 10px 6px; gap: 3px; min-height: 64px;
+}
+.moti-lbl {
+    font-family: var(--font-mono); font-size: 8px; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--dim);
+}
+.cov-ring { display: block; }
+.prot-dots { display: flex; gap: 3px; }
+.prot-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--panel-soft); border: 1px solid var(--border);
+}
+.prot-dot.hit { background: var(--green, #7fb069); border-color: var(--green, #7fb069); }
 
 
 /* ── Last session ────────────────────────────────────────────────── */
@@ -326,7 +372,15 @@
 <div class="dash-header">
     <div>
         <div class="eyebrow">{{ _p[0] }} · {{ _p[2] }} {{ _p[1] }}{% if current_profile %} · {{ current_profile.name | lower }}<a href="/profiles" class="switch-user" title="Switch user (dev)">switch</a>{% endif %}</div>
-        <div class="dash-title">Today.</div>
+        <div class="dash-title">
+            <a href="/?date={{ prev_date }}" class="date-nav" title="Previous day">‹</a>
+            {% if is_today %}
+                Today.
+            {% else %}
+                {{ today | fmt_date }}
+            {% endif %}
+            {% if next_date %}<a href="/?date={{ next_date }}" class="date-nav" title="Next day">›</a>{% endif %}
+        </div>
     </div>
     <div class="dash-header-right">
         <form method="POST" action="/body-weight" class="mini-weight" id="mini-weight">
@@ -499,26 +553,56 @@
 })();
 </script>
 
-{# ── Muscle fatigue (today) ────────────────────────────────────────── #}
-<section class="section">
-    <div class="section-head">
-        <p class="section-title">muscle fatigue · 0 ready → 100 fried</p>
-        <button type="button" class="section-toggle" id="cooldown-toggle"
-                onclick="toggleCooldown()" aria-expanded="false">week ▾</button>
-    </div>
-    <div class="fatigue-rows" id="fatigue-rows"></div>
-</section>
-
-{# ── Weekly stats ──────────────────────────────────────────────────── #}
-<section class="section">
-    <div class="stats-row">
-        <div class="stat-card">
-            <span class="stat-lbl kg">kg lifted</span>
-            <span class="stat-val">{{ '{:,.0f}'.format(weekly_volume) }}</span>
+{# ── Dashboard strip: Fatigue (compact) + T1/T2 + Motivation ─────── #}
+<section class="section dash-strip">
+    <div class="dash-strip-top">
+        <div class="dash-strip-fatigue">
+            <div class="section-head">
+                <p class="section-title">fatigue</p>
+                <button type="button" class="section-toggle" id="cooldown-toggle"
+                        onclick="toggleCooldown()" aria-expanded="false">week ▾</button>
+            </div>
+            <div class="fatigue-rows" id="fatigue-rows"></div>
         </div>
-        <div class="stat-card">
-            <span class="stat-lbl swim">m swum</span>
-            <span class="stat-val">{{ '{:,.0f}'.format(weekly_swim) }}</span>
+        <div class="dash-strip-side">
+            <div class="mini-stat">
+                <span class="mini-stat-val">{{ t1_count }}</span>
+                <span class="mini-stat-lbl">T1</span>
+            </div>
+            <div class="mini-stat">
+                <span class="mini-stat-val">{{ t2_count }}</span>
+                <span class="mini-stat-lbl">T2</span>
+            </div>
+            <div class="mini-stat streak">
+                <span class="mini-stat-val">{{ streak }}</span>
+                <span class="mini-stat-lbl">🔥 streak</span>
+            </div>
+        </div>
+    </div>
+    <div class="dash-strip-bottom">
+        {# T1 coverage ring #}
+        <div class="moti-card moti-ring">
+            {% set pct = ((t1_count / total_t1 * 100) | round | int) if total_t1 > 0 else 0 %}
+            <svg class="cov-ring" viewBox="0 0 36 36" width="40" height="40">
+                <circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--panel-soft)" stroke-width="3"/>
+                <circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--accent)" stroke-width="3"
+                        stroke-dasharray="{{ pct }}, 100"
+                        stroke-linecap="round" transform="rotate(-90 18 18)"/>
+                <text x="18" y="20.5" text-anchor="middle"
+                      font-family="var(--font-mono)" font-size="9" font-weight="700"
+                      fill="var(--text-strong)">{{ pct }}%</text>
+            </svg>
+            <span class="moti-lbl">T1 coverage</span>
+        </div>
+
+        {# Protein hit rate #}
+        <div class="moti-card">
+            <div class="prot-dots">
+                {% for i in range(days_elapsed) %}
+                <span class="prot-dot{% if i < prot_days_hit %} hit{% endif %}"></span>
+                {% endfor %}
+            </div>
+            <span class="moti-lbl">protein {{ prot_days_hit }}/{{ days_elapsed }}d</span>
         </div>
     </div>
 </section>

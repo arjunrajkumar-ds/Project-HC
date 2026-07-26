@@ -1,0 +1,478 @@
+{% extends 'base.html' %}
+{% block title %}Log Training{% endblock %}
+{% block body_class %}pandora{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Header ──────────────────────────────────────────────────── */
+.sl-header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.sl-title  { font-family: var(--font-sans); font-size: 20px; font-weight: 500; color: var(--text-strong); }
+.sl-date   { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
+
+/* ── Accordion groups ────────────────────────────────────────── */
+.pick-group { --g-color: var(--accent); margin-bottom: 8px; }
+.pick-group[data-group="chest"]      { --g-color: #e07a7a; }
+.pick-group[data-group="shoulders"]  { --g-color: #d4a574; }
+.pick-group[data-group="back"]       { --g-color: #6b93c9; }
+.pick-group[data-group="legs"]       { --g-color: #7fb069; }
+.pick-group[data-group="core"]       { --g-color: #a785c2; }
+.pick-group[data-group="arms"]       { --g-color: #6bb0a8; }
+.pick-group[data-group="stability"]  { --g-color: #8a8a8a; }
+
+.pick-head {
+    display: grid; grid-template-columns: 4px 1fr auto auto; align-items: center; gap: 10px;
+    width: 100%; background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 11px 14px 11px 10px;
+    cursor: pointer; text-align: left; font-family: inherit; color: var(--text-strong);
+    -webkit-tap-highlight-color: transparent;
+}
+.pick-head:active { opacity: .8; }
+.pick-stripe { display: block; width: 4px; height: 20px; border-radius: 2px; background: var(--g-color); }
+.pick-title  { font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--g-color); }
+.pick-count  { font-family: var(--font-mono); font-size: 10px; color: var(--dim); }
+.pick-chev   { color: var(--dimmer); font-size: 14px; transition: transform .15s; }
+.pick-group.open .pick-chev { transform: rotate(90deg); color: var(--g-color); }
+.pick-group.open .pick-head { border-radius: var(--radius-md) var(--radius-md) 0 0; border-bottom-color: transparent; }
+
+.pick-body {
+    display: none; flex-direction: column; gap: 0;
+    border: 1px solid var(--border); border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md); overflow: hidden;
+}
+.pick-group.open .pick-body { display: flex; }
+
+.pick-ex {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.pick-ex:last-child { border-bottom: none; }
+.pick-ex:active { background: var(--panel-soft); }
+.pick-ex-name { font-family: var(--font-sans); font-size: 13px; font-weight: 500; color: var(--text-strong); flex: 1; }
+.pick-ex-tier { font-family: var(--font-mono); font-size: 8px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; padding: 2px 5px; border-radius: 3px; border: 1px solid var(--border); color: var(--dim); }
+.pick-ex-tier.t1 { color: var(--accent); border-color: var(--accent); }
+.pick-ex-tier.t2 { color: var(--green, #7fb069); border-color: var(--green, #7fb069); }
+.pick-ex-weight { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
+
+/* ── Active exercise panel ───────────────────────────────────── */
+.active-ex { display: none; margin-bottom: 16px; }
+.active-ex.visible { display: block; }
+
+.ae-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: 14px; margin-bottom: 10px;
+}
+.ae-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.ae-name { font-family: var(--font-sans); font-size: 16px; font-weight: 600; color: var(--text-strong); flex: 1; }
+.ae-close { background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+    color: var(--dim); cursor: pointer; font-size: 14px; }
+.ae-close:active { color: var(--accent); border-color: var(--accent); }
+
+/* History viz */
+.ae-history { margin-bottom: 12px; }
+.ae-hist-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
+.ae-hist-bars { display: flex; align-items: flex-end; gap: 4px; height: 48px; }
+.ae-hist-bar {
+    flex: 1; background: var(--panel-soft); border-radius: 3px 3px 0 0; position: relative;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+    min-width: 0;
+}
+.ae-hist-bar.latest { background: var(--accent); opacity: .8; }
+.ae-hist-detail { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.ae-hist-chip {
+    font-family: var(--font-mono); font-size: 9px; color: var(--dim);
+    background: var(--panel-soft); border-radius: var(--radius-sm); padding: 3px 6px;
+}
+.ae-hist-chip b { color: var(--text-strong); }
+
+/* Suggestion */
+.ae-suggest {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--accent-soft, rgba(212,165,116,.1)); border: 1px solid var(--accent);
+    border-radius: var(--radius-sm); padding: 8px 12px; margin-bottom: 12px;
+}
+.ae-suggest-icon { font-size: 14px; }
+.ae-suggest-text { font-family: var(--font-mono); font-size: 11px; color: var(--accent); font-weight: 600; }
+
+/* Log form */
+.ae-form { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.ae-field { display: flex; flex-direction: column; gap: 3px; }
+.ae-field label { font-family: var(--font-mono); font-size: 8px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+.ae-field input {
+    background: var(--panel-soft); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text-strong); font-family: var(--font-mono); font-size: 14px; font-weight: 600;
+    padding: 8px 10px; width: 70px; text-align: center;
+    -webkit-appearance: none; appearance: none;
+}
+.ae-field input:focus { outline: none; border-color: var(--accent); }
+.ae-log-btn {
+    background: var(--accent); color: var(--bg); border: none; border-radius: var(--radius-sm);
+    font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: .04em;
+    padding: 10px 16px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.ae-log-btn:active { opacity: .85; }
+.ae-result { display: flex; gap: 8px; margin-top: 8px; }
+.ae-result-btn {
+    flex: 1; background: var(--panel-soft); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--dim); padding: 8px; cursor: pointer; text-align: center;
+}
+.ae-result-btn.active { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.ae-result-btn:active { opacity: .7; }
+
+/* Fa Jin suggestion */
+.fajin-suggest {
+    display: none; margin-top: 10px;
+    background: var(--panel); border: 1px dashed var(--border); border-radius: var(--radius-md);
+    padding: 10px 14px;
+}
+.fajin-suggest.visible { display: block; }
+.fajin-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
+.fajin-name { font-family: var(--font-sans); font-size: 13px; font-weight: 500; color: var(--text-strong); }
+.fajin-meta { font-family: var(--font-mono); font-size: 10px; color: var(--dim); margin-top: 2px; }
+
+/* ── Session log (running list) ──────────────────────────────── */
+.session-log { margin-top: 16px; }
+.slog-title { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); margin-bottom: 8px; }
+.slog-entry {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 0; border-bottom: 1px solid var(--border);
+}
+.slog-entry:last-child { border-bottom: none; }
+.slog-name { font-family: var(--font-sans); font-size: 12px; color: var(--text-strong); flex: 1; }
+.slog-detail { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
+.slog-empty { font-family: var(--font-mono); font-size: 11px; color: var(--dimmer); font-style: italic; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sl-header">
+    <div class="sl-title">Log Training</div>
+    <span class="sl-date">{{ today | fmt_date }}</span>
+</div>
+
+{# ── Active exercise (shown after picking) ───────────────────── #}
+<div class="active-ex" id="active-ex">
+    <div class="ae-card">
+        <div class="ae-head">
+            <span class="ae-name" id="ae-name"></span>
+            <button type="button" class="ae-close" onclick="closeExercise()">✕</button>
+        </div>
+        <div class="ae-history" id="ae-history"></div>
+        <div class="ae-suggest" id="ae-suggest" style="display:none">
+            <span class="ae-suggest-icon">↑</span>
+            <span class="ae-suggest-text" id="ae-suggest-text"></span>
+        </div>
+        <div class="ae-form">
+            <div class="ae-field">
+                <label>Weight</label>
+                <input type="number" id="ae-weight" step="0.5" min="0" inputmode="decimal">
+            </div>
+            <div class="ae-field">
+                <label>Reps</label>
+                <input type="number" id="ae-reps" step="1" min="1" inputmode="numeric">
+            </div>
+            <div class="ae-field">
+                <label>Sets</label>
+                <input type="number" id="ae-sets" value="1" step="1" min="1" inputmode="numeric">
+            </div>
+            <button type="button" class="ae-log-btn" onclick="logSet()">Log</button>
+        </div>
+        <div class="ae-result">
+            <button type="button" class="ae-result-btn active" data-val="1" onclick="setResult(this)">✓ Hit</button>
+            <button type="button" class="ae-result-btn" data-val="0" onclick="setResult(this)">✗ Missed</button>
+        </div>
+    </div>
+    <div class="fajin-suggest" id="fajin-suggest">
+        <div class="fajin-label">Fa Jin — finish with</div>
+        <div class="fajin-name" id="fajin-name"></div>
+        <div class="fajin-meta" id="fajin-meta"></div>
+    </div>
+</div>
+
+{# ── Exercise picker (accordion by muscle group) ─────────────── #}
+<div id="exercise-picker">
+{% for group in groups %}
+<div class="pick-group" data-group="{{ group.key }}">
+    <button type="button" class="pick-head" onclick="this.closest('.pick-group').classList.toggle('open')">
+        <span class="pick-stripe"></span>
+        <span class="pick-title">{{ group.label }}</span>
+        <span class="pick-count">{{ group.exercises | length }}</span>
+        <span class="pick-chev">›</span>
+    </button>
+    <div class="pick-body">
+        {% for ex in group.exercises %}
+        <div class="pick-ex" data-id="{{ ex.id }}" data-name="{{ ex.name }}"
+             data-tier="{{ ex.tier }}" data-muscle="{{ ex.muscle_group }}"
+             data-function="{{ ex.function or '' }}"
+             data-weight="{{ ex.weight_kg or '' }}"
+             onclick="pickExercise(this)">
+            <span class="pick-ex-name">{{ ex.name }}</span>
+            <span class="pick-ex-tier t{{ ex.tier }}">T{{ ex.tier }}</span>
+            {% if ex.weight_kg %}<span class="pick-ex-weight">{{ ex.weight_kg | int if ex.weight_kg == (ex.weight_kg | int) else ex.weight_kg }}kg</span>{% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+</div>
+
+{# ── Cardio section ──────────────────────────────────────────── #}
+<div class="pick-group" data-group="cardio" style="--g-color: #d48a3a;">
+    <button type="button" class="pick-head" onclick="this.closest('.pick-group').classList.toggle('open')">
+        <span class="pick-stripe"></span>
+        <span class="pick-title">Cardio</span>
+        <span class="pick-count">{{ cardio_items | length }}</span>
+        <span class="pick-chev">›</span>
+    </button>
+    <div class="pick-body">
+        {% for c in cardio_items %}
+        <div class="pick-ex" data-id="{{ c.id or '' }}" data-name="{{ c.name }}" data-type="cardio" onclick="pickCardio(this)">
+            <span class="pick-ex-name">{{ c.name }}</span>
+            <span class="pick-ex-tier" style="color:#d48a3a;border-color:#d48a3a;">Cardio</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+{# ── Cardio log form (shown when cardio is picked) ──────────── #}
+<div class="active-ex" id="active-cardio">
+    <div class="ae-card">
+        <div class="ae-head">
+            <span class="ae-name" id="ac-name"></span>
+            <button type="button" class="ae-close" onclick="closeCardio()">✕</button>
+        </div>
+        <div class="ae-form">
+            <div class="ae-field">
+                <label>Duration (min)</label>
+                <input type="number" id="ac-duration" step="1" min="1" inputmode="numeric" style="width:80px">
+            </div>
+            <div class="ae-field">
+                <label>Distance (m)</label>
+                <input type="number" id="ac-distance" step="1" min="0" inputmode="numeric" style="width:80px">
+            </div>
+            <button type="button" class="ae-log-btn" onclick="logCardio()">Log</button>
+        </div>
+    </div>
+</div>
+
+{# ── Session log (running list of what's been logged today) ──── #}
+<div class="session-log" id="session-log">
+    <div class="slog-title">session receipt</div>
+    <div id="slog-entries">
+        <div class="slog-empty">Nothing logged yet — pick an exercise or cardio above</div>
+    </div>
+</div>
+
+<script>
+const FAJIN = {{ fajin_map | safe }};
+const CSRF = '{{ csrf_token() }}';
+let currentEx = null;
+let logEntries = [];
+
+function pickExercise(el) {
+    const id = el.dataset.id;
+    const name = el.dataset.name;
+    const tier = el.dataset.tier;
+    const muscle = el.dataset.muscle;
+    const fn = el.dataset.function;
+    const lastWeight = el.dataset.weight;
+
+    currentEx = { id, name, tier, muscle, fn };
+
+    // Show active panel
+    document.getElementById('active-ex').classList.add('visible');
+    document.getElementById('ae-name').textContent = name;
+
+    // Pre-fill weight from last known
+    const weightInput = document.getElementById('ae-weight');
+    if (lastWeight) weightInput.value = lastWeight;
+    else weightInput.value = '';
+    document.getElementById('ae-reps').value = '';
+    document.getElementById('ae-sets').value = '1';
+
+    // Reset result buttons
+    document.querySelectorAll('.ae-result-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('.ae-result-btn[data-val="1"]').classList.add('active');
+
+    // Fetch history
+    fetchHistory(id);
+
+    // Show Fa Jin suggestion
+    showFajin(muscle, fn);
+
+    // Scroll to top
+    document.getElementById('active-ex').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function fetchHistory(exerciseId) {
+    const histEl = document.getElementById('ae-history');
+    const sugEl = document.getElementById('ae-suggest');
+    try {
+        const res = await fetch('/api/gym/history/' + exerciseId);
+        const data = await res.json();
+        if (data.history && data.history.length > 0) {
+            const maxW = Math.max(...data.history.map(h => h.weight_kg || 0));
+            let barsHtml = '<div class="ae-hist-label">last ' + data.history.length + ' sessions</div>';
+            barsHtml += '<div class="ae-hist-bars">';
+            data.history.reverse().forEach((h, i) => {
+                const pct = maxW > 0 ? Math.max(10, (h.weight_kg / maxW) * 100) : 50;
+                const isLatest = i === data.history.length - 1;
+                barsHtml += '<div class="ae-hist-bar' + (isLatest ? ' latest' : '') + '" style="height:' + pct + '%" title="' + h.weight_kg + 'kg × ' + h.sets + '×' + h.reps + '"></div>';
+            });
+            barsHtml += '</div>';
+            barsHtml += '<div class="ae-hist-detail">';
+            const last = data.history[data.history.length - 1];
+            barsHtml += '<span class="ae-hist-chip"><b>' + last.weight_kg + 'kg</b> × ' + last.sets + '×' + last.reps + '</span>';
+            barsHtml += '<span class="ae-hist-chip">' + (last.successful ? '✓ hit' : '✗ missed') + '</span>';
+            barsHtml += '</div>';
+            histEl.innerHTML = barsHtml;
+        } else {
+            histEl.innerHTML = '<div class="ae-hist-label">no history yet</div>';
+        }
+
+        // Show suggestion
+        if (data.suggestion && data.suggestion.action !== 'start') {
+            sugEl.style.display = 'flex';
+            document.getElementById('ae-suggest-text').textContent = data.suggestion.message;
+            // Pre-fill from suggestion
+            if (data.suggestion.weight_kg) document.getElementById('ae-weight').value = data.suggestion.weight_kg;
+            if (data.suggestion.reps) document.getElementById('ae-reps').value = data.suggestion.reps;
+        } else {
+            sugEl.style.display = 'none';
+        }
+    } catch (e) {
+        histEl.innerHTML = '<div class="ae-hist-label">—</div>';
+        sugEl.style.display = 'none';
+    }
+}
+
+function showFajin(muscle, fn) {
+    const el = document.getElementById('fajin-suggest');
+    // Try function-specific match first, then muscle group
+    let match = null;
+    if (fn && FAJIN[muscle + ':' + fn]) {
+        match = FAJIN[muscle + ':' + fn];
+    } else if (FAJIN[muscle]) {
+        match = FAJIN[muscle];
+    }
+    if (match) {
+        el.classList.add('visible');
+        document.getElementById('fajin-name').textContent = match.name;
+        document.getElementById('fajin-meta').textContent = match.muscle + ' · ' + (match.fn || 'general');
+    } else {
+        el.classList.remove('visible');
+    }
+}
+
+function closeExercise() {
+    document.getElementById('active-ex').classList.remove('visible');
+    document.getElementById('fajin-suggest').classList.remove('visible');
+    currentEx = null;
+}
+
+function setResult(btn) {
+    document.querySelectorAll('.ae-result-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+}
+
+async function logSet() {
+    if (!currentEx) return;
+    const weight = parseFloat(document.getElementById('ae-weight').value) || 0;
+    const reps = parseInt(document.getElementById('ae-reps').value) || 0;
+    const sets = parseInt(document.getElementById('ae-sets').value) || 1;
+    const successful = document.querySelector('.ae-result-btn.active')?.dataset.val === '1';
+
+    if (reps <= 0) { document.getElementById('ae-reps').focus(); return; }
+
+    try {
+        const res = await fetch('/api/gym/log-set', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+            body: JSON.stringify({
+                exercise_id: parseInt(currentEx.id),
+                weight_kg: weight, reps, sets, successful
+            })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            // Add to session log
+            logEntries.push({ type: 'gym', name: currentEx.name, weight, reps, sets, successful });
+            renderLog();
+            // Refresh history
+            fetchHistory(currentEx.id);
+        }
+    } catch (e) {
+        console.error('Log failed', e);
+    }
+}
+
+function renderLog() {
+    const el = document.getElementById('slog-entries');
+    if (logEntries.length === 0) {
+        el.innerHTML = '<div class="slog-empty">Nothing logged yet — pick an exercise or cardio above</div>';
+        return;
+    }
+    el.innerHTML = logEntries.map((e, i) => {
+        const num = i + 1;
+        if (e.type === 'cardio') {
+            let detail = '';
+            if (e.duration) detail += e.duration + ' min';
+            if (e.distance) detail += (detail ? ' · ' : '') + e.distance + 'm';
+            return '<div class="slog-entry"><span class="slog-name">' + num + '. ' + e.name + '</span>' +
+                   '<span class="slog-detail" style="color:#d48a3a">' + (detail || 'logged') + '</span></div>';
+        }
+        return '<div class="slog-entry"><span class="slog-name">' + num + '. ' + e.name + '</span>' +
+               '<span class="slog-detail">' + e.weight + 'kg × ' + e.sets + '×' + e.reps +
+               (e.successful ? ' ✓' : ' ✗') + '</span></div>';
+    }).join('');
+}
+
+// ── Cardio ──────────────────────────────────────────────────────
+let currentCardio = null;
+
+function pickCardio(el) {
+    const name = el.dataset.name;
+    const id = el.dataset.id;
+    currentCardio = { name, id };
+    document.getElementById('active-cardio').classList.add('visible');
+    document.getElementById('ac-name').textContent = name;
+    document.getElementById('ac-duration').value = '';
+    document.getElementById('ac-distance').value = '';
+    document.getElementById('active-cardio').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeCardio() {
+    document.getElementById('active-cardio').classList.remove('visible');
+    currentCardio = null;
+}
+
+async function logCardio() {
+    if (!currentCardio) return;
+    const duration = parseInt(document.getElementById('ac-duration').value) || 0;
+    const distance = parseInt(document.getElementById('ac-distance').value) || 0;
+    if (duration <= 0 && distance <= 0) { document.getElementById('ac-duration').focus(); return; }
+
+    try {
+        const res = await fetch('/api/gym/log-cardio', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+            body: JSON.stringify({
+                exercise_name: currentCardio.name,
+                exercise_id: currentCardio.id || null,
+                duration_min: duration,
+                distance_m: distance
+            })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            logEntries.push({ type: 'cardio', name: currentCardio.name, duration, distance });
+            renderLog();
+            closeCardio();
+        }
+    } catch (e) { console.error('Cardio log failed', e); }
+}
+</script>
+{% endblock %}

@@ -379,7 +379,7 @@
             <span class="nav-icon">⌂</span>
             <span class="nav-label">Today</span>
         </a>
-        <a href="/workout" class="nav-item {% if request.path.startswith('/workout') or request.path == '/session/new' or request.path.startswith('/sessions') or (request.path.startswith('/session/') and request.path != '/session/new') or request.path.startswith('/swim') or request.path.startswith('/pilates') %}active{% endif %}">
+        <a href="/session/log" class="nav-item {% if request.path == '/session/log' or request.path == '/train' or request.path.startswith('/workout') or request.path == '/session/new' or request.path.startswith('/sessions') or (request.path.startswith('/session/') and request.path != '/session/new') or request.path.startswith('/swim') or request.path.startswith('/pilates') %}active{% endif %}">
             <span class="nav-icon">◉</span>
             <span class="nav-label">Train</span>
         </a>
