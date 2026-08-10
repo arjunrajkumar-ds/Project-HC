@@ -498,6 +498,36 @@
     </div>
 </div>
 
+{# ── Macros · today ────────────────────────────────────────────────── #}
+{% set cal_goal  = goals.calories  | int %}
+{% set prot_goal = goals.protein_g | int %}
+{% set cal_pct   = [[total_cal  * 100 // cal_goal,  100] | min, 0] | max if cal_goal  else 0 %}
+{% set prot_pct  = [[total_prot * 100 // prot_goal, 100] | min, 0] | max if prot_goal else 0 %}
+<section class="section">
+    <p class="section-title">macros · today</p>
+    <a href="/food" style="text-decoration:none;color:inherit">
+    <div class="macro-grid">
+        <div class="macro-cell">
+            <div class="macro-eyebrow cal">calories</div>
+            <div class="macro-value">{{ total_cal }} <span class="macro-goal">/ {{ cal_goal }} kcal</span></div>
+            <div class="macro-track"><div class="macro-fill cal{% if cal_goal and total_cal > cal_goal %} over{% endif %}" style="width:{{ cal_pct }}%"></div></div>
+        </div>
+        <div class="macro-cell">
+            <div class="macro-eyebrow pro">protein</div>
+            <div class="macro-value">{{ total_prot }} <span class="macro-goal">/ {{ prot_goal }} g</span></div>
+            <div class="macro-track"><div class="macro-fill pro{% if prot_goal and total_prot > prot_goal %} over{% endif %}" style="width:{{ prot_pct }}%"></div></div>
+        </div>
+    </div>
+    </a>
+</section>
+
+{# ── Food log · today ─────────────────────────────────────────────── #}
+<section class="section">
+    <p class="section-title">food · today</p>
+    <div id="fl-grid" class="fl-grid"></div>
+    <div id="fl-total-bar" class="fl-total-bar"></div>
+</section>
+
 {# ── This week ─────────────────────────────────────────────────────── #}
 <section class="section">
     <p class="section-title">this week</p>
@@ -624,36 +654,6 @@
         <a href="/sessions" class="quick-btn">History</a>
         <a href="/exercise-bank" class="quick-btn">Exercise Bank</a>
     </div>
-</section>
-
-{# ── Macros · today ────────────────────────────────────────────────── #}
-{% set cal_goal  = goals.calories  | int %}
-{% set prot_goal = goals.protein_g | int %}
-{% set cal_pct   = [[total_cal  * 100 // cal_goal,  100] | min, 0] | max if cal_goal  else 0 %}
-{% set prot_pct  = [[total_prot * 100 // prot_goal, 100] | min, 0] | max if prot_goal else 0 %}
-<section class="section">
-    <p class="section-title">macros · today</p>
-    <a href="/food" style="text-decoration:none;color:inherit">
-    <div class="macro-grid">
-        <div class="macro-cell">
-            <div class="macro-eyebrow cal">calories</div>
-            <div class="macro-value">{{ total_cal }} <span class="macro-goal">/ {{ cal_goal }} kcal</span></div>
-            <div class="macro-track"><div class="macro-fill cal{% if cal_goal and total_cal > cal_goal %} over{% endif %}" style="width:{{ cal_pct }}%"></div></div>
-        </div>
-        <div class="macro-cell">
-            <div class="macro-eyebrow pro">protein</div>
-            <div class="macro-value">{{ total_prot }} <span class="macro-goal">/ {{ prot_goal }} g</span></div>
-            <div class="macro-track"><div class="macro-fill pro{% if prot_goal and total_prot > prot_goal %} over{% endif %}" style="width:{{ prot_pct }}%"></div></div>
-        </div>
-    </div>
-    </a>
-</section>
-
-{# ── Food log · today ─────────────────────────────────────────────── #}
-<section class="section">
-    <p class="section-title">food · today</p>
-    <div id="fl-grid" class="fl-grid"></div>
-    <div id="fl-total-bar" class="fl-total-bar"></div>
 </section>
 
 {# ── Weekly stats ──────────────────────────────────────────────────── #}

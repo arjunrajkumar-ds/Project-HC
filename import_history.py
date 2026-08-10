@@ -130,11 +130,6 @@ def run_import(text, profile_id=1, dry_run=False):
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
 
-    # Also cache old exercises table (needed for session_lifts / analytics chart)
-    old_ex_cache = {}  # name_lower → id
-    for r in conn.execute("SELECT id, name FROM exercises"):
-        old_ex_cache[r['name'].lower()] = r['id']
-
     # Cache exercise lookups
     gym_ex_cache = {}  # name_lower → id
     for r in conn.execute("SELECT id, name FROM gym_exercises"):
@@ -147,8 +142,7 @@ def run_import(text, profile_id=1, dry_run=False):
     lifts_imported = 0
     cardio_imported = 0
     errors = []
-    # Track sessions created per date (for session_lifts)
-    session_cache = {}  # date_iso → session_id
+    duplicates = 0
 
     for day in days:
         date_iso = day['date'].isoformat()
@@ -159,61 +153,54 @@ def run_import(text, profile_id=1, dry_run=False):
                 name_lower = entry['name'].lower()
                 ex_id = gym_ex_cache.get(name_lower)
                 if not ex_id:
-                    errors.append(f"  ✗ No gym_exercise match: '{entry['name']}' on {date_iso}")
-                    print(errors[-1])
+                    # Auto-create as uncategorised so it appears on the TRAIN page for editing
+                    if not dry_run:
+                        ex_id = conn.execute(
+                            "INSERT INTO gym_exercises (name, tier, muscle_group, function, is_enabled) "
+                            "VALUES (?, 2, 'uncategorised', NULL, 1)",
+                            (entry['name'],)
+                        ).lastrowid
+                        gym_ex_cache[name_lower] = ex_id
+                    else:
+                        errors.append(f"  ⚠ Will create: '{entry['name']}' (uncategorised)")
+                        print(errors[-1])
+                        continue
+                    print(f"  + Created gym_exercise: '{entry['name']}' (uncategorised)")
+
+                # Deduplication: check if this exact entry already exists
+                existing = conn.execute(
+                    "SELECT id FROM gym_progression WHERE exercise_id=? AND weight_kg=? AND sets=? AND reps=? AND DATE(recorded_at)=?",
+                    (ex_id, entry['weight_kg'], entry['sets'], entry['reps'], date_iso)
+                ).fetchone()
+                if existing:
+                    duplicates += 1
+                    print(f"  ⊘ Duplicate skipped: {entry['name']} {entry['sets']}×{entry['reps']} @ {entry['weight_kg']}kg on {date_iso}")
                     continue
 
                 if not dry_run:
-                    # 1. Write to gym_progression (new progression engine)
                     conn.execute(
                         "INSERT INTO gym_progression (exercise_id, weight_kg, sets, reps, successful, recorded_at) "
                         "VALUES (?, ?, ?, ?, 1, ?)",
                         (ex_id, entry['weight_kg'], entry['sets'], entry['reps'], date_iso)
                     )
-
-                    # 2. Write to session_lifts (for analytics volume chart)
-                    old_ex_id = old_ex_cache.get(name_lower)
-                    if not old_ex_id:
-                        # Create in old exercises table too
-                        old_ex_id = conn.execute(
-                            "INSERT INTO exercises (name, tier, muscle_group, day_type) VALUES (?, ?, 'Uncategorised', 'any')",
-                            (entry['name'], 1)
-                        ).lastrowid
-                        old_ex_cache[name_lower] = old_ex_id
-
-                    # Get or create session for this date
-                    if date_iso not in session_cache:
-                        existing = conn.execute(
-                            "SELECT id FROM sessions WHERE date=? AND type='gym' AND profile_id=?",
-                            (date_iso, profile_id)
-                        ).fetchone()
-                        if existing:
-                            session_cache[date_iso] = existing['id']
-                        else:
-                            session_cache[date_iso] = conn.execute(
-                                "INSERT INTO sessions (date, type, profile_id, started_at) VALUES (?, 'gym', ?, ?)",
-                                (date_iso, profile_id, date_iso + 'T00:00:00Z')
-                            ).lastrowid
-
-                    sess_id = session_cache[date_iso]
-                    # Get next set_number for this exercise in this session
-                    max_set = conn.execute(
-                        "SELECT COALESCE(MAX(set_number), 0) AS mx FROM session_lifts WHERE session_id=? AND exercise_id=?",
-                        (sess_id, old_ex_id)
-                    ).fetchone()['mx']
-                    # Insert one row per set
-                    for s in range(1, entry['sets'] + 1):
-                        conn.execute(
-                            "INSERT INTO session_lifts (session_id, exercise_id, set_number, reps, weight_kg) VALUES (?,?,?,?,?)",
-                            (sess_id, old_ex_id, max_set + s, entry['reps'], entry['weight_kg'])
-                        )
-
                 print(f"  ✓ {entry['name']}: {entry['sets']}×{entry['reps']} @ {entry['weight_kg']}kg")
                 lifts_imported += 1
 
             elif entry['type'] == 'cardio':
                 name_lower = entry['name'].lower()
                 ex_id = cardio_ex_cache.get(name_lower)
+
+                # Deduplication: check if cardio with same exercise + date + duration exists
+                if ex_id:
+                    dup_cardio = conn.execute(
+                        "SELECT sc.id FROM session_cardio sc JOIN sessions s ON s.id=sc.session_id WHERE sc.exercise_id=? AND s.date=? AND sc.duration_s=?",
+                        (ex_id, date_iso, entry['duration_min'] * 60)
+                    ).fetchone()
+                    if dup_cardio:
+                        duplicates += 1
+                        print(f"  ⊘ Duplicate skipped: {entry['name']} {entry['duration_min']}min on {date_iso}")
+                        continue
+
                 if not ex_id:
                     # Auto-create the exercise
                     if not dry_run:
@@ -245,9 +232,10 @@ def run_import(text, profile_id=1, dry_run=False):
         conn.commit()
     conn.close()
 
-    summary = {'days': len(days), 'lifts': lifts_imported, 'cardio': cardio_imported, 'errors': errors}
+    summary = {'days': len(days), 'lifts': lifts_imported, 'cardio': cardio_imported, 'duplicates': duplicates, 'errors': errors}
     print(f"\n{'🧪 DRY RUN' if dry_run else '✅'} Done: {summary['days']} days, "
-          f"{summary['lifts']} lifts, {summary['cardio']} cardio, {len(errors)} errors")
+          f"{summary['lifts']} lifts, {summary['cardio']} cardio, "
+          f"{duplicates} duplicates skipped, {len(errors)} errors")
     return summary
 
 

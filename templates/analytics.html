@@ -120,6 +120,8 @@
     const VOLUME_DATA = {{ volume_data | safe }};
     const SWIM_DATA   = {{ swim_data | safe }};
 
+    console.log('[ANALYTICS DEBUG] VOLUME_DATA:', VOLUME_DATA, 'WEEK_LABELS:', WEEK_LABELS);
+
     const _cs = getComputedStyle(document.body);
     const THEME = {
         tick:   (_cs.getPropertyValue('--muted') || '#6B7280').trim(),
@@ -290,6 +292,7 @@ async function doImport(dryRun) {
         const hasErr = data.errors && data.errors.length > 0;
         el.className = 'import-result ' + (hasErr || !res.ok ? 'err' : 'ok');
         el.textContent = `${!res.ok ? '❌ Error: ' : (dryRun ? '🧪 DRY RUN: ' : '✅ ')}${data.days || 0} days, ${data.lifts || 0} lifts, ${data.cardio || 0} cardio` +
+            (data.duplicates ? `, ${data.duplicates} duplicates skipped` : '') +
             (data.errors && data.errors.length ? '\n' + data.errors.join('\n') : '');
     } catch (e) { el.className = 'import-result err'; el.textContent = 'Request failed: ' + e.message; }
 }

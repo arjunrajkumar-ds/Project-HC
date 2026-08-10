@@ -54,7 +54,6 @@ def get_gym_bank():
     for r in rows:
         entry = dict(r)
         entry['engagement'] = json.loads(entry['engagement'] or '{}')
-        entry['suggestion'] = _suggest_next(entry)
         bank.setdefault(entry['tier'], []).append(entry)
     return bank
 
@@ -78,7 +77,6 @@ def get_gym_exercise(exercise_id):
     if row:
         entry = dict(row)
         entry['engagement'] = json.loads(entry['engagement'] or '{}')
-        entry['suggestion'] = _suggest_next(entry)
         return entry
     return None
 
@@ -109,36 +107,22 @@ def get_gym_exercises_by_tier(tier, enabled_only=True):
 
 # ── Progression ──────────────────────────────────────────────────────────────
 
-def log_gym_set(exercise_id, weight_kg, sets, reps, successful=True):
-    """Record a completed set. Returns the suggestion for next attempt."""
+def log_gym_set(exercise_id, weight_kg, reps, sets=1, successful=True, session_id=None):
+    """Record one completed set of N reps at a given weight. No auto-suggestion."""
     conn = _gym_db()
-    conn.execute(
-        "INSERT INTO gym_progression (exercise_id, weight_kg, sets, reps, successful) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (exercise_id, weight_kg, sets, reps, 1 if successful else 0)
+    cur = conn.execute(
+        "INSERT INTO gym_progression (exercise_id, weight_kg, sets, reps, successful, session_id) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (exercise_id, weight_kg, sets, reps, 1 if successful else 0, session_id)
     )
     conn.commit()
-    # Fetch updated exercise for suggestion
-    row = conn.execute("""
-        SELECT ge.*, gp.weight_kg, gp.sets AS last_sets, gp.reps AS last_reps,
-               gp.successful, gp.recorded_at
-        FROM gym_exercises ge
-        LEFT JOIN gym_progression gp ON gp.id = (
-            SELECT id FROM gym_progression
-            WHERE exercise_id = ge.id
-            ORDER BY recorded_at DESC LIMIT 1
-        )
-        WHERE ge.id = ?
-    """, (exercise_id,)).fetchone()
+    new_id = cur.lastrowid
     conn.close()
-    if row:
-        entry = dict(row)
-        return _suggest_next(entry)
-    return None
+    return new_id
 
 
 def get_gym_history(exercise_id, limit=10):
-    """Last N progression entries for an exercise."""
+    """Last N logged sets for an exercise, most recent first."""
     conn = _gym_db()
     rows = conn.execute(
         "SELECT * FROM gym_progression WHERE exercise_id = ? "
@@ -147,6 +131,31 @@ def get_gym_history(exercise_id, limit=10):
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+# ── Sessions ─────────────────────────────────────────────────────────────────
+
+def start_gym_session():
+    """Begin a new workout session. Returns the new session id."""
+    conn = _gym_db()
+    cur = conn.execute("INSERT INTO gym_sessions (performed_at, finished) VALUES (CURRENT_TIMESTAMP, 0)")
+    conn.commit()
+    session_id = cur.lastrowid
+    conn.close()
+    return session_id
+
+
+def end_gym_session(session_id):
+    """Mark a workout session finished. Returns False if it doesn't exist."""
+    conn = _gym_db()
+    cur = conn.execute(
+        "UPDATE gym_sessions SET finished = 1, ended_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (session_id,)
+    )
+    conn.commit()
+    ok = cur.rowcount > 0
+    conn.close()
+    return ok
 
 
 # ── Write / Admin ────────────────────────────────────────────────────────────
@@ -204,60 +213,6 @@ def gym_set_enabled(exercise_id, enabled):
                  (1 if enabled else 0, exercise_id))
     conn.commit()
     conn.close()
-
-
-# ── Progression Suggestion Engine ────────────────────────────────────────────
-
-def _suggest_next(entry):
-    """Simple progression logic.
-
-    Rules:
-    - If no history → suggest starting weight (or 'Start logging')
-    - If last attempt successful AND reps >= reps_max → suggest weight bump
-    - If last attempt successful AND reps < reps_max → suggest rep bump
-    - If last attempt failed → suggest same weight, same reps (retry)
-    """
-    weight = entry.get('weight_kg')
-    last_reps = entry.get('last_reps')
-    last_sets = entry.get('last_sets')
-    successful = entry.get('successful')
-    reps_max = entry.get('reps_max')
-    reps_min = entry.get('reps_min')
-
-    if weight is None or last_reps is None:
-        return {'action': 'start', 'message': 'No history — start logging'}
-
-    if not successful:
-        return {
-            'action': 'retry',
-            'weight_kg': weight,
-            'sets': last_sets,
-            'reps': last_reps,
-            'message': f'Retry: {weight}kg × {last_sets}×{last_reps}'
-        }
-
-    if reps_max and last_reps >= reps_max:
-        # Bump weight: +2.5kg for barbell-style, +1kg for lighter
-        bump = 2.5 if weight >= 20 else 1.0
-        new_weight = weight + bump
-        target_reps = reps_min or last_reps
-        return {
-            'action': 'weight_up',
-            'weight_kg': new_weight,
-            'sets': last_sets,
-            'reps': target_reps,
-            'message': f'↑ Weight: {new_weight}kg × {last_sets}×{target_reps}'
-        }
-
-    # Successful but below reps_max → bump reps
-    new_reps = last_reps + 1
-    return {
-        'action': 'reps_up',
-        'weight_kg': weight,
-        'sets': last_sets,
-        'reps': new_reps,
-        'message': f'↑ Reps: {weight}kg × {last_sets}×{new_reps}'
-    }
 
 
 # ── Engagement Map (replaces hardcoded EXERCISE_MUSCLE_MAP) ──────────────────

@@ -3222,6 +3222,103 @@ def get_body_weight_history(profile_id=1, days=30):
     return [dict(r) for r in rows]
 
 
+# ── Unified crew accountability view ────────────────────────────────────
+
+def get_crew_status(days=7):
+    """Per-profile daily check-in status (weight + food) for the unified
+    'crew roster' landing view, plus a trailing N-day grid for streaks.
+
+    Returns a list of dicts, one per profile, each with:
+      status ('ok' | 'partial' | 'missing'), weight_logged, weight_kg,
+      food_logged, food_cal, food_entries, last_food_at, streak, grid.
+    """
+    from datetime import timedelta
+
+    conn = get_db()
+    profiles = [dict(r) for r in conn.execute('SELECT * FROM profiles ORDER BY id').fetchall()]
+
+    today = date.today()
+    today_iso = today.isoformat()
+    start = today - timedelta(days=days - 1)
+    start_iso = start.isoformat()
+
+    crew = []
+    for p in profiles:
+        pid = p['id']
+
+        weight_row = conn.execute(
+            'SELECT weight_kg FROM body_weight WHERE date=? AND profile_id=?',
+            (today_iso, pid)
+        ).fetchone()
+        food_row = conn.execute(
+            "SELECT COALESCE(SUM(calories),0) AS cal, COUNT(*) AS n, MAX(logged_at) AS last_at "
+            "FROM food_log WHERE date=? AND profile_id=?",
+            (today_iso, pid)
+        ).fetchone()
+
+        weight_logged = weight_row is not None
+        food_logged = food_row['n'] > 0
+
+        if weight_logged and food_logged:
+            status = 'ok'
+        elif weight_logged or food_logged:
+            status = 'partial'
+        else:
+            status = 'missing'
+
+        weight_dates = {r['date'] for r in conn.execute(
+            'SELECT DISTINCT date FROM body_weight WHERE profile_id=? AND date BETWEEN ? AND ?',
+            (pid, start_iso, today_iso)
+        ).fetchall()}
+        food_dates = {r['date'] for r in conn.execute(
+            'SELECT DISTINCT date FROM food_log WHERE profile_id=? AND date BETWEEN ? AND ?',
+            (pid, start_iso, today_iso)
+        ).fetchall()}
+
+        grid = []
+        for i in range(days):
+            day = start + timedelta(days=i)
+            iso = day.isoformat()
+            w = iso in weight_dates
+            f = iso in food_dates
+            day_state = 'full' if (w and f) else ('half' if (w or f) else 'miss')
+            grid.append({
+                'iso': iso,
+                'day_short': day.strftime('%a')[:1],
+                'is_today': day == today,
+                'state': day_state,
+            })
+
+        # Streak = consecutive fully-logged days counting back from today
+        # (or yesterday, if today isn't complete yet), bounded to this window.
+        streak = 0
+        check_day = today if status == 'ok' else today - timedelta(days=1)
+        while check_day >= start:
+            iso = check_day.isoformat()
+            if iso in weight_dates and iso in food_dates:
+                streak += 1
+                check_day -= timedelta(days=1)
+            else:
+                break
+
+        crew.append({
+            'id': pid,
+            'name': p['name'],
+            'status': status,
+            'weight_logged': weight_logged,
+            'weight_kg': weight_row['weight_kg'] if weight_row else None,
+            'food_logged': food_logged,
+            'food_cal': round(food_row['cal']) if food_row else 0,
+            'food_entries': food_row['n'] if food_row else 0,
+            'last_food_at': food_row['last_at'] if food_row else None,
+            'streak': streak,
+            'grid': grid,
+        })
+
+    conn.close()
+    return crew
+
+
 # ── Missions (Gayathri gamified milestones) ─────────────────────────────────
 
 def get_mission_progress(profile_id):
@@ -4075,33 +4172,8 @@ def bank_add_exercise(name, tier, muscle_group, day_type,
             is_enabled=1
         )
 
-        if scope == _BANK_SCOPE_ARJUN:
-            conn.execute(
-                'UPDATE exercises SET tier=?, muscle_group=?, day_type=?, notes=?, '
-                'is_barbell=?, reps_only=?, is_timed=?, cardio_metrics=?, '
-                'reps_min=?, reps_max=?, sets_min=?, sets_max=? WHERE id=?',
-                (
-                    tier, muscle_group.strip(), day_type, meta['notes'],
-                    meta['is_barbell'], meta['reps_only'], meta['is_timed'],
-                    meta['cardio_metrics'], clean[0], clean[1], clean[2], clean[3], ex_id,
-                )
-            )
-            _regen_exercise_schemes(conn, ex_id)
-        else:
-            # Home-only additions should not automatically appear for Arjun.
-            base = conn.execute(
-                'SELECT tier, muscle_group, day_type, notes, is_barbell, reps_only, is_timed, '
-                'cardio_metrics, reps_min, reps_max, sets_min, sets_max '
-                'FROM exercises WHERE id=?', (ex_id,)
-            ).fetchone()
-            _upsert_bank_config(
-                conn, _BANK_SCOPE_ARJUN, ex_id,
-                base['tier'], base['muscle_group'], base['day_type'],
-                base['reps_min'], base['reps_max'], base['sets_min'], base['sets_max'],
-                base['notes'], base['is_barbell'], base['reps_only'],
-                base['is_timed'], base['cardio_metrics'] or '{}',
-                is_enabled=0
-            )
+        # Arjun now uses gym_exercises exclusively — no cross-pollination needed.
+        # Home-scope exercises stay in their own bank only.
 
         conn.commit()
         return True, None
@@ -4134,18 +4206,7 @@ def bank_update_exercise(ex_id, tier, muscle_group, day_type,
             meta['is_timed'], meta['cardio_metrics'],
             is_enabled=1
         )
-        if scope == _BANK_SCOPE_ARJUN:
-            conn.execute(
-                'UPDATE exercises SET tier=?, muscle_group=?, day_type=?, notes=?, '
-                'is_barbell=?, reps_only=?, is_timed=?, cardio_metrics=?, '
-                'reps_min=?, reps_max=?, sets_min=?, sets_max=? WHERE id=?',
-                (
-                    tier, muscle_group.strip(), day_type, meta['notes'],
-                    meta['is_barbell'], meta['reps_only'], meta['is_timed'],
-                    meta['cardio_metrics'], clean[0], clean[1], clean[2], clean[3], ex_id,
-                )
-            )
-            _regen_exercise_schemes(conn, ex_id)
+        # Arjun now uses gym_exercises exclusively — no sync to old exercises table.
         conn.commit()
         return True, None
     finally:

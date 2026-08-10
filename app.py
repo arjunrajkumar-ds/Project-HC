@@ -7,10 +7,10 @@ from urllib.parse import quote as _urlquote
 from datetime import date as date_type, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, abort
 from datetime import datetime as _datetime
-from database import init_db, get_db, get_tier1_suggestion, get_tier4_exercises, get_session_cardio, get_t1_last_weights, get_cardio_choices, log_cardio_session, save_session_draft, get_session_draft, clear_session_draft, get_t1_exercises_with_activity, get_muscle_group_activity, get_muscle_swimlane, bank_scope_for_profile, get_exercise_decay, get_exercise_history_last_5, get_fatigue_state, adjust_fatigue, get_exercise_muscle_map, FATIGUE_TIER_BASE, get_priority_lifts, set_priority_lift, clear_priority_lift, get_progression, advance_progression, set_progression_weight, get_all_progressions, get_schemes, record_stage_completion, record_exercise_attempt, get_sessions_with_headlines, get_session_detail_with_progression, get_macro_goals, set_macro_goals, sync_food_log_from_library, get_food_log, add_food_entry, log_food_entry, delete_food_entry, get_pending_foods, define_food_item, delete_food_item, get_food_history, get_recent_foods, get_food_library, get_food_components, get_food_component_mode, save_food_components, save_food_components_pct, get_profiles, _parse_qty_name, _parse_gram_prefix, _food_key, log_food_reconciliation, get_food_reconciliations, log_body_weight, get_body_weight, get_body_weight_history, get_pilates_session, get_mission_progress, clear_mission_stage, get_exercise_tallies, bump_exercise_tally, ack_exercise_tally
+from database import init_db, get_db, get_session_cardio, get_cardio_choices, log_cardio_session, get_muscle_group_activity, get_muscle_swimlane, bank_scope_for_profile, get_fatigue_state, adjust_fatigue, get_sessions_with_headlines, get_session_detail_with_progression, get_macro_goals, set_macro_goals, sync_food_log_from_library, get_food_log, add_food_entry, log_food_entry, delete_food_entry, get_pending_foods, define_food_item, delete_food_item, get_food_history, get_recent_foods, get_food_library, get_food_components, get_food_component_mode, save_food_components, save_food_components_pct, get_profiles, _parse_qty_name, _parse_gram_prefix, _food_key, log_food_reconciliation, get_food_reconciliations, log_body_weight, get_body_weight, get_body_weight_history, get_pilates_session, get_mission_progress, clear_mission_stage, get_exercise_tallies, bump_exercise_tally, ack_exercise_tally, get_crew_status
 from swim_routes import bp as swim_bp
 from pilates_routes import bp as pilates_bp
-from gym_bank import get_gym_bank, get_gym_exercise, gym_add_exercise, gym_update_exercise, gym_set_enabled, log_gym_set, TIER_LABELS
+from gym_bank import get_gym_bank, get_gym_exercise, gym_add_exercise, gym_update_exercise, gym_set_enabled, log_gym_set, start_gym_session, end_gym_session, TIER_LABELS
 app = Flask(__name__)
 app.secret_key = _os.environ.get('SECRET_KEY', 'gymtracker-local-secret-key')
 app.jinja_env.filters['enumerate'] = enumerate
@@ -182,6 +182,8 @@ _GAYATHRI_STANDALONE = [
     {'category': 'Mobility', 'name': '30s Hip Flexor Stretch',   'timed': True,  'step': 30},
     {'category': 'Cardio', 'name': '1KM Walk', 'timed': False, 'step': 1,
      'desc': '1 lap around the neighbourhood. 10 minutes'},
+    {'category': 'Cardio', 'name': 'YouTube Routine #1', 'timed': False, 'step': 1,
+     'desc': 'Follow-along cardio video'},
 ]
 
 # Missions: milestone movements Gayathri works up to, one stage at a time.
@@ -284,7 +286,7 @@ def get_activity_calendar():
 
 @app.route('/profiles')
 def profiles():
-    return render_template('profiles.html', profiles=get_profiles())
+    return render_template('profiles.html', profiles=get_profiles(), crew=get_crew_status())
 
 
 @app.route('/profiles/select', methods=[ 'POST'])
@@ -370,25 +372,35 @@ def dashboard():
     week_start = (today - timedelta(days=today.weekday())).isoformat()
     db = get_db()
     last_session = db.execute('\n        SELECT s.*,\n               COALESCE(sw_agg.distance_m, 0) AS distance_m,\n               COALESCE(agg.total_sets,   0)   AS total_sets,\n               COALESCE(agg.total_volume, 0.0) AS total_volume,\n               COALESCE(cd.cardio_dist, 0)     AS cardio_dist,\n               COALESCE(cd.cardio_dur,  0)     AS cardio_dur,\n               (SELECT e.name FROM session_cardio sc JOIN exercises e ON e.id = sc.exercise_id\n                WHERE sc.session_id = s.id ORDER BY sc.id LIMIT 1) AS cardio_name\n        FROM sessions s\n        LEFT JOIN (\n            SELECT session_id, SUM(distance_m) AS distance_m\n            FROM swim_logs GROUP BY session_id\n        ) sw_agg ON sw_agg.session_id = s.id\n        LEFT JOIN (\n            SELECT session_id,\n                   COUNT(*)              AS total_sets,\n                   SUM(reps * weight_kg) AS total_volume\n            FROM session_lifts\n            GROUP BY session_id\n        ) agg ON agg.session_id = s.id\n        LEFT JOIN (\n            SELECT session_id, SUM(distance_m) AS cardio_dist, SUM(duration_s) AS cardio_dur\n            FROM session_cardio GROUP BY session_id\n        ) cd ON cd.session_id = s.id\n        ORDER BY s.date DESC, s.id DESC\n        LIMIT 1\n    ').fetchone()
-    weekly_volume = db.execute("\n        SELECT COALESCE(SUM(sl.reps * sl.weight_kg), 0) AS vol\n        FROM session_lifts sl\n        JOIN sessions s ON s.id = sl.session_id\n        WHERE s.type = 'gym' AND s.date >= ? AND s.profile_id = ?\n    ", (week_start, _profile_id())).fetchone()['vol']
+    # Weekly volume from gym_progression (Arjun's new system)
+    weekly_volume = db.execute("""
+        SELECT COALESCE(SUM(gp.weight_kg * gp.sets * gp.reps), 0) AS vol
+        FROM gym_progression gp
+        WHERE DATE(gp.recorded_at) >= ?
+    """, (week_start,)).fetchone()['vol']
     weekly_swim = db.execute('\n        SELECT COALESCE(SUM(sw.distance_m), 0) AS dist\n        FROM swim_logs sw\n        JOIN sessions s ON s.id = sw.session_id\n        WHERE s.date >= ? AND s.profile_id = ?\n    ', (week_start, _profile_id())).fetchone()['dist']
-    # T1/T2 activity this week: count distinct exercises hit at each tier
+    # T1/T2 activity this week from gym_progression
     t1_count = db.execute("""
-        SELECT COUNT(DISTINCT sl.exercise_id) AS c
-        FROM session_lifts sl
-        JOIN sessions s ON s.id = sl.session_id
-        JOIN gym_exercises ge ON LOWER(ge.name) = (SELECT LOWER(e.name) FROM exercises e WHERE e.id = sl.exercise_id)
-        WHERE s.date >= ? AND s.profile_id = ? AND ge.tier = 1
-    """, (week_start, _profile_id())).fetchone()['c']
+        SELECT COUNT(DISTINCT gp.exercise_id) AS c
+        FROM gym_progression gp
+        JOIN gym_exercises ge ON ge.id = gp.exercise_id
+        WHERE DATE(gp.recorded_at) >= ? AND ge.tier = 1
+    """, (week_start,)).fetchone()['c']
     t2_count = db.execute("""
-        SELECT COUNT(DISTINCT sl.exercise_id) AS c
-        FROM session_lifts sl
-        JOIN sessions s ON s.id = sl.session_id
-        JOIN gym_exercises ge ON LOWER(ge.name) = (SELECT LOWER(e.name) FROM exercises e WHERE e.id = sl.exercise_id)
-        WHERE s.date >= ? AND s.profile_id = ? AND ge.tier = 2
-    """, (week_start, _profile_id())).fetchone()['c']
-    t1_exercises = get_t1_exercises_with_activity()
-    prs = db.execute('\n        SELECT e.name, sl.weight_kg, sl.reps, s.date\n        FROM session_lifts sl\n        JOIN exercises e ON e.id = sl.exercise_id\n        JOIN sessions  s ON s.id = sl.session_id\n        WHERE s.profile_id = ?\n        ORDER BY sl.weight_kg DESC\n        LIMIT 5\n    ', (_profile_id(),)).fetchall()
+        SELECT COUNT(DISTINCT gp.exercise_id) AS c
+        FROM gym_progression gp
+        JOIN gym_exercises ge ON ge.id = gp.exercise_id
+        WHERE DATE(gp.recorded_at) >= ? AND ge.tier = 2
+    """, (week_start,)).fetchone()['c']
+    # PRs from gym_progression
+    prs = db.execute("""
+        SELECT ge.name, gp.weight_kg, gp.reps, gp.recorded_at AS date
+        FROM gym_progression gp
+        JOIN gym_exercises ge ON ge.id = gp.exercise_id
+        WHERE gp.weight_kg > 0
+        ORDER BY gp.weight_kg DESC
+        LIMIT 5
+    """).fetchall()
     today_weight = get_body_weight(today.isoformat(), _profile_id())
     food_goals = get_macro_goals(_profile_id())
     # Date being viewed on the "cumulative calories" chart — independent of `today`,
@@ -488,213 +500,9 @@ def dashboard():
     return render_template('dashboard.html', last_session=last_session, weekly_volume=weekly_volume, weekly_swim=weekly_swim, t1_count=t1_count, t2_count=t2_count, total_t1=total_t1, streak=streak, prot_days_hit=prot_days_hit, prot_goal=prot_goal, days_elapsed=days_elapsed, today=today.isoformat(), is_today=is_today, prev_date=prev_date, next_date=next_date, week_days=week_days, today_weight=today_weight, food_goals=food_goals, food_totals=food_totals, food_items_json=_json.dumps(food_items), swimlane_json=_json.dumps(get_muscle_swimlane(_profile_id())), fatigue_json=_json.dumps(get_fatigue_state(_profile_id())), food_date=food_date, food_prev_date=food_prev_date, food_next_date=food_next_date, food_date_label=food_date_label, food_is_today=food_is_today, food_entries=food_entries, recent_foods=recent_foods)
 
 
-@app.route('/session/draft', methods=[ 'POST'])
-def session_draft_save():
-    data = request.get_json(silent=True) or {}
-    date_val = _validate_date(data.get('date', ''))
-    payload = data.get('payload')
-    if isinstance(payload, str) or len(payload) > 2000000:
-        return (_json.dumps({
-            'error': 'bad payload' }), 400, {
-            'Content-Type': 'application/json' })
-    save_session_draft(_profile_id(), date_val, payload)
-    return (_json.dumps({
-        'ok': True }), 200, {
-        'Content-Type': 'application/json' })
-
-
-@app.route('/session/draft/clear', methods=[ 'POST'])
-def session_draft_clear():
-    data = request.get_json(silent=True) or {}
-    date_val = _validate_date(data.get('date', ''))
-    clear_session_draft(_profile_id(), date_val)
-    return (_json.dumps({
-        'ok': True }), 200, {
-        'Content-Type': 'application/json' })
-
-
-@app.route('/session/new', methods=['GET', 'POST'])
+@app.route('/session/new')
 def session_new():
-    """Arjun's gym-session builder. Reconstructed (clean, functional) after the
-    original was lost; mirrors the fields session_new.html posts."""
-    pid = _profile_id()
-
-    if request.method == 'POST':
-        date_val = _validate_date(request.form.get('date', ''))
-        db = get_db()
-
-        # Continue an existing session, or start a new one.
-        continue_id = request.form.get('continue_session_id', '').strip()
-        if continue_id.isdigit() and db.execute(
-                'SELECT id FROM sessions WHERE id=? AND type="gym" AND profile_id=?',
-                (int(continue_id), pid)).fetchone():
-            sess_id = int(continue_id)
-            offsets = {r['exercise_id']: r['mx'] for r in db.execute(
-                'SELECT exercise_id, MAX(set_number) AS mx FROM session_lifts WHERE session_id=? GROUP BY exercise_id',
-                (sess_id,)).fetchall()}
-        else:
-            sess_id = db.execute(
-                'INSERT INTO sessions (date, type, notes, started_at, profile_id) VALUES (?,?,?,?,?)',
-                (date_val, 'gym', None, _datetime.utcnow().isoformat() + 'Z', pid)).lastrowid
-            offsets = {}
-
-        any_lifts = False
-        idx = 0
-        while True:
-            ex_field = request.form.get(f'exercise_id_{idx}')
-            if ex_field is None:
-                # allow gaps in indices up to a sane cap
-                idx += 1
-                if idx > 200:
-                    break
-                continue
-            ex_str = (ex_field or '').strip()
-            if not ex_str.isdigit():
-                idx += 1
-                if idx > 200:
-                    break
-                continue
-            exercise_id = int(ex_str)
-            scheme_id = _safe_int(request.form.get(f'scheme_id_{idx}'), 0) or None
-            weight = _safe_float(request.form.get(f'prog_weight_{idx}'), 0.0)
-            sets_done = _safe_int(request.form.get(f'ex_tally_{idx}'), 0)
-            last_reps = _safe_int(request.form.get(f'ex_last_reps_{idx}'), 0)
-            result = (request.form.get(f'ex_result_{idx}') or '').strip()
-
-            base_set = offsets.get(exercise_id, 0)
-            for s in range(1, max(sets_done, 0) + 1):
-                db.execute(
-                    'INSERT INTO session_lifts (session_id, exercise_id, set_number, reps, weight_kg) VALUES (?,?,?,?,?)',
-                    (sess_id, exercise_id, base_set + s, last_reps, weight))
-                any_lifts = True
-
-            # progression bookkeeping (best-effort; never blocks the save)
-            if result in ('pass', 'fail') and scheme_id:
-                try:
-                    record_exercise_attempt(exercise_id, scheme_id, result, sets_done,
-                                            date_val, conn=db, weight_kg=weight)
-                    if result == 'pass':
-                        record_stage_completion(exercise_id, scheme_id, conn=db)
-                except Exception:
-                    pass
-            idx += 1
-            if idx > 200:
-                break
-
-        # Cardio / warm-up blocks
-        for key in request.form.keys():
-            m = _re.match(r'cardio_exercise_id_(.+)', key)
-            if not m:
-                continue
-            sfx = m.group(1)
-            cstr = (request.form.get(key) or '').strip()
-            if not cstr.isdigit():
-                continue
-            cid = int(cstr)
-            distance = _safe_float(request.form.get(f'cardio_distance_{sfx}'), None)
-            dur_min = _safe_float(request.form.get(f'cardio_duration_{sfx}'), None)
-            duration_s = int(dur_min * 60) if dur_min else None
-            resistance = _safe_float(request.form.get(f'cardio_resistance_{sfx}'), None)
-            speed = _safe_float(request.form.get(f'cardio_speed_{sfx}'), None)
-            try:
-                log_cardio_session(pid, date_val, cid, distance_m=distance,
-                                   duration_s=duration_s, resistance=resistance, speed=speed)
-            except Exception:
-                pass
-
-        db.execute('UPDATE sessions SET ended_at=? WHERE id=? AND ended_at IS NULL',
-                   (_datetime.utcnow().isoformat() + 'Z', sess_id))
-        db.commit()
-        db.close()
-        clear_session_draft(pid, date_val)
-        if not any_lifts:
-            return redirect(url_for('workout'))
-        return redirect(url_for('session_detail', session_id=sess_id))
-
-    # ── GET: build the builder context ──
-    session_date = _validate_date(request.args.get('date', ''))
-    preselect_exid = request.args.get('exercise_id', '')
-    preselect_exid = int(preselect_exid) if str(preselect_exid).isdigit() else None
-
-    db = get_db()
-    bank_scope = bank_scope_for_profile(pid)
-
-    def _tier_list(tier):
-        rows = db.execute(
-            'SELECT e.id, e.name, '
-            'COALESCE(cfg.tier, e.tier) AS tier, '
-            'COALESCE(cfg.muscle_group, e.muscle_group) AS muscle_group, '
-            'COALESCE(cfg.reps_min, e.reps_min) AS reps_min, '
-            'COALESCE(cfg.sets_min, e.sets_min) AS sets_min, '
-            'COALESCE(cfg.is_barbell, e.is_barbell) AS is_barbell, '
-            'COALESCE(cfg.reps_only, e.reps_only) AS reps_only '
-            'FROM exercises e '
-            'LEFT JOIN exercise_bank_config cfg '
-            'ON cfg.exercise_id = e.id AND cfg.bank_scope = ? '
-            'WHERE COALESCE(cfg.is_enabled, 1) = 1 '
-            'AND COALESCE(cfg.tier, e.tier)=? '
-            'ORDER BY COALESCE(cfg.muscle_group, e.muscle_group), e.name',
-            (bank_scope, tier)
-        ).fetchall()
-        return [{'id': r['id'], 'name': r['name'], 'tier': r['tier'],
-                 'muscle_group': r['muscle_group'],
-                 'sets': r['sets_min'] or 3, 'reps': r['reps_min'] or 8,
-                 'weight_kg': 0,
-                 'is_barbell': bool(r['is_barbell']),
-                 'reps_only':  bool(r['reps_only'])} for r in rows]
-
-    tier1 = _tier_list(1)
-    _t1_act = {r['id']: r for r in get_t1_exercises_with_activity()}
-    _t1_last = get_t1_last_weights()
-    for ex in tier1:
-        act = _t1_act.get(ex['id']) or {}
-        lw  = _t1_last.get(ex['id']) or {}
-        ex['days_since']  = act.get('days_since')
-        ex['last_weight'] = lw.get('last_weight')
-        ex['is_pr']       = bool(lw.get('is_pr'))
-    tier2 = _tier_list(2)
-    tier3 = _tier_list(3)
-    tier4 = [{'id': e['id'], 'name': e['name'], 'tier': 4,
-              'muscle_group': e['muscle_group'], 'metrics': e.get('metrics', {})}
-             for e in get_tier4_exercises(pid)]
-
-    today_gym_rows = db.execute("""
-        SELECT s.id, GROUP_CONCAT(DISTINCT e.name) AS exercise_names
-        FROM sessions s
-        LEFT JOIN session_lifts sl ON sl.session_id = s.id
-        LEFT JOIN exercises e ON e.id = sl.exercise_id
-        WHERE s.date = ? AND s.type = 'gym' AND s.profile_id = ?
-        GROUP BY s.id ORDER BY s.id DESC
-    """, (session_date, pid)).fetchall()
-    today_sessions = [dict(r) for r in today_gym_rows]
-
-    continue_session = None
-    continue_arg = request.args.get('continue', '').strip()
-    if continue_arg.isdigit():
-        cs = db.execute('SELECT id FROM sessions WHERE id=? AND date=? AND type="gym" AND profile_id=?',
-                        (int(continue_arg), session_date, pid)).fetchone()
-        if cs:
-            continue_session = {'id': cs['id']}
-    db.close()
-
-    draft = get_session_draft(pid, session_date)
-
-    return render_template('session_new.html',
-        session_date=session_date,
-        preselect_exid=_json.dumps(preselect_exid),
-        draft_payload=_json.dumps(draft or {}),
-        progs_json=_json.dumps(get_all_progressions()),
-        tier1_json=_json.dumps(tier1),
-        tier2_json=_json.dumps(tier2),
-        tier3_json=_json.dumps(tier3),
-        tier4_json=_json.dumps(tier4),
-        schemes_json=_json.dumps({t: get_schemes(t) for t in (1, 2, 3)}),
-        fatigue_json=_json.dumps(get_fatigue_state(pid)),
-        ex_muscles_json=_json.dumps(get_exercise_muscle_map()),
-        tier_base_json=_json.dumps(FATIGUE_TIER_BASE),
-        priority_json=_json.dumps(get_priority_lifts(pid)),
-        today_sessions=today_sessions,
-        continue_session=continue_session)
+    return redirect(url_for('session_log'))
 
 
 def _gayathri_item_shape(name, timed, default=None, desc='', location='home'):
@@ -1024,68 +832,6 @@ def workout_tally_ack():
         return {'ok': True}
     ack_exercise_tally(_profile_id(), row['id'])
     return {'ok': True}
-
-
-def _arjun_workout_data():
-    '''Build Train-screen data for the Arjun profile from his real exercise
-    library. Arjun has no routines — the Exercises tab is the entire Train UI.
-    Returns ({}, by_muscle, cardio).'''
-    db = get_db()
-    rows = [dict(r) for r in db.execute('SELECT id, name, tier, muscle_group, day_type, is_timed, is_barbell, reps_min, reps_max, sets_min, sets_max FROM exercises').fetchall()]
-    db.close()
-    
-    def shape(r):
-        timed = bool(r['is_timed'])
-        rmin = r['reps_min'] if r['reps_min'] is not None else (20 if timed else 5)
-        rmax = r['reps_max'] if r['reps_max'] is not None else (45 if timed else 12)
-        smin = r['sets_min'] if r['sets_min'] is not None else 2
-        smax = r['sets_max'] if r['sets_max'] is not None else 5
-        reps = r['reps_min'] if r['reps_min'] is not None else (30 if timed else 8)
-        sets = r['sets_min'] if r['sets_min'] is not None else 3
-        return {
-            'name': r['name'],
-            'muscle_group': r['muscle_group'],
-            'reps': reps,
-            'sets': sets,
-            'timed': timed,
-            'reps_range': [
-                rmin,
-                rmax],
-            'sets_range': [
-                smin,
-                smax],
-            'location': 'home' }
-
-    _MG_ORDER = [
-        'Chest',
-        'Back',
-        'Upper Back',
-        'Shoulders',
-        'Biceps',
-        'Triceps',
-        'Legs',
-        'Posterior Chain',
-        'Core',
-        'Mobility']
-    by_muscle = { }
-    for r in rows:
-        mg = r['muscle_group']
-        if mg == 'Cardio':
-            continue
-        by_muscle.setdefault(mg, []).append(shape(r))
-    by_muscle = {mg: by_muscle[mg] for mg in _MG_ORDER if mg in by_muscle} | {mg: v for mg, v in by_muscle.items() if mg not in _MG_ORDER}
-    cardio = [{'name': r['name'], 'desc': ''} for r in rows if r['muscle_group'] == 'Cardio']
-    return ({ }, by_muscle, cardio)
-
-
-@app.route('/workout')
-def workout():
-    # ── Gayathri / Raj: tap-to-log lives on the home dashboard now ────────────────
-    if _profile_id() in (2, 3):
-        return redirect(url_for('dashboard'))
-
-    # ── Arjun: new exercise-first session logging flow ──
-    return redirect(url_for('session_log'))
 
 
 @app.route('/workout/log', methods=[ 'POST'])
@@ -1534,12 +1280,12 @@ def _build_fajin_map():
     from gym_bank import _gym_db
     conn = _gym_db()
     rows = conn.execute(
-        "SELECT name, muscle_group, function FROM gym_exercises WHERE tier = 4 AND is_enabled = 1"
+        "SELECT id, name, muscle_group, function FROM gym_exercises WHERE tier = 4 AND is_enabled = 1"
     ).fetchall()
     conn.close()
     fajin = {}
     for r in rows:
-        entry = {'name': r['name'], 'muscle': r['muscle_group'], 'fn': r['function'] or ''}
+        entry = {'id': r['id'], 'name': r['name'], 'muscle': r['muscle_group'], 'fn': r['function'] or ''}
         # Map by muscle_group:function (specific) and muscle_group (general)
         if r['function']:
             fajin[f"{r['muscle_group']}:{r['function']}"] = entry
@@ -1552,70 +1298,95 @@ def _build_fajin_map():
 @app.route('/session/log')
 def session_log():
     """New gym session logging screen — exercise-first, accordion picker."""
+    import traceback
     if _profile_id() in (2, 3):
         return redirect(url_for('dashboard'))
 
-    bank = get_gym_bank()
-    all_exercises = []
-    for tier_list in bank.values():
-        all_exercises.extend(tier_list)
+    try:
+        bank = get_gym_bank()
+        all_exercises = []
+        for tier_list in bank.values():
+            all_exercises.extend(tier_list)
 
-    # Only show enabled, non-Fa-Jin exercises in the picker (T1/T2/T3)
-    pickable = [e for e in all_exercises if e.get('is_enabled') and e['tier'] in (1, 2, 3)]
+        # Only show enabled, non-Fa-Jin exercises in the picker (T1/T2/T3)
+        pickable = [e for e in all_exercises if e.get('is_enabled') and e['tier'] in (1, 2, 3)]
 
-    groups = []
-    for key in _GYM_GROUP_ORDER:
-        exs = [e for e in pickable if e['muscle_group'] == key]
-        if exs:
-            exs.sort(key=lambda e: (e['tier'], e.get('function') or 'zzz', e['name']))
-            groups.append({
-                'key': key,
-                'label': _GYM_GROUP_LABELS.get(key, key.title()),
-                'exercises': exs,
-            })
+        groups = []
+        for key in _GYM_GROUP_ORDER:
+            exs = [e for e in pickable if e['muscle_group'] == key]
+            if exs:
+                exs.sort(key=lambda e: (e['tier'], e.get('function') or 'zzz', e['name']))
+                groups.append({
+                    'key': key,
+                    'label': _GYM_GROUP_LABELS.get(key, key.title()),
+                    'exercises': exs,
+                })
 
-    fajin_map = _build_fajin_map()
-    today = date_type.today().isoformat()
+        fajin_map = _build_fajin_map()
+        today = date_type.today().isoformat()
 
-    # Cardio items from the existing exercises table (tier 4, Cardio group)
-    cardio_choices = get_cardio_choices(_profile_id())
-    cardio_items = [{'id': c['id'], 'name': c['name'],
-                     'metrics': c.get('cardio_metrics', '{}')}
-                    for c in cardio_choices]
-    # Ensure "Kicks + Run" is available
-    if not any(c['name'] == 'Kicks + Run' for c in cardio_items):
-        cardio_items.append({'id': None, 'name': 'Kicks + Run', 'metrics': '{"time":true,"distance":"m"}'})
+        # Cardio items from the existing exercises table (tier 4, Cardio group)
+        cardio_choices = get_cardio_choices(_profile_id())
+        cardio_items = [{'id': c['id'], 'name': c['name'],
+                         'metrics': c.get('cardio_metrics', '{}')}
+                        for c in cardio_choices]
+        # Ensure "Kicks + Run" is available
+        if not any(c['name'] == 'Kicks + Run' for c in cardio_items):
+            cardio_items.append({'id': None, 'name': 'Kicks + Run', 'metrics': '{"time":true,"distance":"m"}'})
 
-    return render_template('session_log.html', groups=groups, today=today,
-                           cardio_items=cardio_items,
-                           fajin_map=_json.dumps(fajin_map))
+        return render_template('session_log.html', groups=groups, today=today,
+                               cardio_items=cardio_items,
+                               fajin_map=_json.dumps(fajin_map))
+    except Exception as e:
+        traceback.print_exc()
+        return f"<pre>Error loading session log:\n{traceback.format_exc()}</pre>", 500
 
 
 @app.route('/api/gym/history/<int:exercise_id>')
 def api_gym_history(exercise_id):
-    """Return last 5 progression entries + suggestion for an exercise."""
-    from gym_bank import get_gym_history, get_gym_exercise
-    history = get_gym_history(exercise_id, limit=5)
-    ex = get_gym_exercise(exercise_id)
-    suggestion = ex.get('suggestion') if ex else None
-    return {'history': history, 'suggestion': suggestion}
+    """Return the last several logged sets for an exercise (for list + chart)."""
+    from gym_bank import get_gym_history
+    history = get_gym_history(exercise_id, limit=8)
+    return {'history': history}
+
+
+@app.route('/api/gym/session/start', methods=['POST'])
+def api_gym_session_start():
+    """Start a new workout session. Returns the new session id."""
+    session_id = start_gym_session()
+    return {'ok': True, 'session_id': session_id}
+
+
+@app.route('/api/gym/session/end', methods=['POST'])
+def api_gym_session_end():
+    """End a workout session."""
+    data = request.get_json(silent=True) or {}
+    session_id = _safe_int(data.get('session_id'), 0)
+    if not session_id:
+        return {'ok': False, 'error': 'Missing session_id'}, 400
+    ok = end_gym_session(session_id)
+    if not ok:
+        return {'ok': False, 'error': 'Session not found'}, 404
+    return {'ok': True}
 
 
 @app.route('/api/gym/log-set', methods=['POST'])
 def api_gym_log_set():
-    """Log a gym set and return updated suggestion."""
+    """Log one set of N reps at a given weight, against an active session."""
     data = request.get_json(silent=True) or {}
     exercise_id = _safe_int(data.get('exercise_id'), 0)
     weight_kg = _safe_float(data.get('weight_kg'), 0.0)
     reps = _safe_int(data.get('reps'), 0)
-    sets = _safe_int(data.get('sets'), 1)
     successful = bool(data.get('successful', True))
+    session_id = _safe_int(data.get('session_id'), 0) or None
 
     if not exercise_id or reps <= 0:
         return {'ok': False, 'error': 'Invalid data'}, 400
+    if not session_id:
+        return {'ok': False, 'error': 'No active session — start a session first'}, 400
 
-    suggestion = log_gym_set(exercise_id, weight_kg, sets, reps, successful)
-    return {'ok': True, 'suggestion': suggestion}
+    log_id = log_gym_set(exercise_id, weight_kg, reps, sets=1, successful=successful, session_id=session_id)
+    return {'ok': True, 'id': log_id}
 
 
 @app.route('/api/gym/log-cardio', methods=['POST'])
@@ -1677,8 +1448,27 @@ def analytics():
     today = date_type.today()
     db = get_db()
     pid = _profile_id()
-    prs = db.execute('\n        SELECT e.name, e.muscle_group, e.tier,\n               sl.weight_kg AS best_weight, sl.reps, s.date\n        FROM session_lifts sl\n        JOIN exercises e ON e.id = sl.exercise_id\n        JOIN sessions  s ON s.id = sl.session_id\n        WHERE s.profile_id = ?\n          AND (sl.exercise_id, sl.weight_kg) IN (\n            SELECT sl2.exercise_id, MAX(sl2.weight_kg)\n            FROM session_lifts sl2\n            JOIN sessions s2 ON s2.id = sl2.session_id\n            WHERE s2.profile_id = ?\n            GROUP BY sl2.exercise_id\n        )\n        GROUP BY sl.exercise_id\n        ORDER BY sl.weight_kg DESC\n    ', (pid, pid)).fetchall()
-    prog_rows = db.execute('\n        SELECT e.name, s.date, MAX(sl.weight_kg) AS max_weight\n        FROM session_lifts sl\n        JOIN exercises e ON e.id = sl.exercise_id\n        JOIN sessions  s ON s.id = sl.session_id\n        WHERE s.profile_id = ?\n        GROUP BY e.id, s.date\n        ORDER BY e.name, s.date\n    ', (pid,)).fetchall()
+    # PRs from gym_progression
+    prs = db.execute('''
+        SELECT ge.name, ge.muscle_group, ge.tier,
+               gp.weight_kg AS best_weight, gp.reps, gp.recorded_at AS date
+        FROM gym_progression gp
+        JOIN gym_exercises ge ON ge.id = gp.exercise_id
+        WHERE gp.weight_kg = (
+            SELECT MAX(gp2.weight_kg) FROM gym_progression gp2
+            WHERE gp2.exercise_id = gp.exercise_id
+        )
+        GROUP BY gp.exercise_id
+        ORDER BY gp.weight_kg DESC
+    ''').fetchall()
+    # Progression history from gym_progression
+    prog_rows = db.execute('''
+        SELECT ge.name, gp.recorded_at AS date, gp.weight_kg AS max_weight
+        FROM gym_progression gp
+        JOIN gym_exercises ge ON ge.id = gp.exercise_id
+        WHERE gp.weight_kg > 0
+        ORDER BY ge.name, gp.recorded_at
+    ''').fetchall()
     progression = { }
     for r in prog_rows:
         name = r['name']
@@ -1696,11 +1486,17 @@ def analytics():
         ws = today - timedelta(days=today.weekday()) - timedelta(weeks=i)
         we = ws + timedelta(days=6)
         week_labels.append(ws.strftime('%b %-d'))
-        vol = db.execute("\n            SELECT COALESCE(SUM(sl.reps * sl.weight_kg), 0) AS v\n            FROM session_lifts sl\n            JOIN sessions s ON s.id = sl.session_id\n            WHERE s.type = 'gym' AND s.date BETWEEN ? AND ? AND s.profile_id = ?\n        ", (ws.isoformat(), we.isoformat(), pid)).fetchone()['v']
+        # Volume from gym_progression
+        vol = db.execute("""
+            SELECT COALESCE(SUM(gp.weight_kg * gp.sets * gp.reps), 0) AS v
+            FROM gym_progression gp
+            WHERE DATE(gp.recorded_at) BETWEEN ? AND ?
+        """, (ws.isoformat(), we.isoformat())).fetchone()['v']
         volume_data.append(round(float(vol), 1))
         dist = db.execute('\n            SELECT COALESCE(SUM(sw.distance_m), 0) AS d\n            FROM swim_logs sw\n            JOIN sessions s ON s.id = sw.session_id\n            WHERE s.date BETWEEN ? AND ? AND s.profile_id = ?\n        ', (ws.isoformat(), we.isoformat(), pid)).fetchone()['d']
         swim_data.append(int(dist))
     db.close()
+
     return render_template('analytics.html', prs=prs, progression_json=_json.dumps(progression), exercise_names=exercise_names, week_labels=_json.dumps(week_labels), volume_data=_json.dumps(volume_data), swim_data=_json.dumps(swim_data), heatmap_json=_json.dumps(get_activity_calendar()))
 
 
@@ -1708,75 +1504,6 @@ def analytics():
 @app.route('/exercise-bank')
 def exercise_bank():
     return redirect(url_for('train'))
-
-
-@app.route('/progression/arc')
-def progression_arc():
-    return render_template('progression_arc.html')
-
-
-@app.route('/progression/api/arc')
-def progression_arc_api():
-    db = get_db()
-    rows = db.execute('\n        SELECT p.exercise_id, p.weight_kg,\n               e.name, e.tier, e.muscle_group, e.reps_only,\n               s.id AS scheme_id, s.reps, s.sets, s.progression_order\n        FROM progression p\n        JOIN exercises e ON e.id = p.exercise_id\n        JOIN schemes   s ON s.id = p.scheme_id\n        ORDER BY e.tier, e.name\n    ').fetchall()
-    totals = {r['tier']: r['n'] for r in db.execute('SELECT tier, COUNT(*) AS n FROM schemes GROUP BY tier').fetchall()}
-    scheme_rows = db.execute('SELECT id, tier, reps, sets, progression_order FROM schemes ORDER BY tier, progression_order').fetchall()
-    db.close()
-    schemes_by_tier = { }
-    for sr in scheme_rows:
-        t = str(sr['tier'])
-        schemes_by_tier.setdefault(t, []).append({
-            'id': sr['id'],
-            'reps': sr['reps'],
-            'sets': sr['sets'],
-            'progression_order': sr['progression_order'],
-            'label': f'''{sr['sets']}×{sr['reps']}''' })
-    exercises = []
-    for r in rows:
-        tier = r['tier']
-        total = totals.get(tier, 0)
-        cur = r['progression_order']
-        exercises.append({
-            'id': r['exercise_id'],
-            'name': r['name'],
-            'tier': tier,
-            'muscle_group': r['muscle_group'],
-            'reps_only': bool(r['reps_only']),
-            'weight_kg': r['weight_kg'],
-            'current_scheme': {
-                'id': r['scheme_id'],
-                'reps': r['reps'],
-                'sets': r['sets'],
-                'progression_order': cur,
-                'label': f'''{r['sets']}×{r['reps']}''' },
-            'total_stages': total,
-            'cycle_complete': cur >= total })
-    return (_json.dumps({
-        'exercises': exercises,
-        'schemes': schemes_by_tier }), 200, {
-        'Content-Type': 'application/json' })
-
-
-@app.route('/progression')
-def progression():
-    items = get_all_progressions()
-    return render_template('progression.html', items=items)
-
-
-@app.route('/progression/advance', methods=[ 'POST'])
-def progression_advance():
-    data = request.get_json()
-    result = advance_progression(int(data['exercise_id']), int(data['tier']))
-    return (_json.dumps(result), 200, {
-        'Content-Type': 'application/json' })
-
-
-@app.route('/progression/set-weight', methods=[ 'POST'])
-def progression_set_weight():
-    data = request.get_json()
-    result = set_progression_weight(int(data['exercise_id']), float(data['weight_kg']), int(data['tier']), scheme_id=data.get('scheme_id'))
-    return (_json.dumps(result), 200, {
-        'Content-Type': 'application/json' })
 
 
 @app.route('/food/shared')
@@ -2148,26 +1875,6 @@ def api_muscle_activity():
     data = get_muscle_group_activity(21)
     return _json.dumps(data), 200, {'Content-Type': 'application/json'}
 
-
-@app.route('/api/exercise-activity/<int:exercise_id>')
-def api_exercise_activity(exercise_id):
-    data = get_exercise_decay(exercise_id, 21)
-    return _json.dumps(data), 200, {'Content-Type': 'application/json'}
-
-
-@app.route('/api/exercise-history/<int:exercise_id>')
-def api_exercise_history(exercise_id):
-    """Return the last 5 recorded sessions for an exercise with pass/fail status."""
-    db = get_db()
-    ex = db.execute('SELECT id FROM exercises WHERE id = ?', (exercise_id,)).fetchone()
-    db.close()
-    if not ex:
-        return _json.dumps({'error': 'Exercise not found', 'history': []}), 404, {'Content-Type': 'application/json'}
-    data = get_exercise_history_last_5(exercise_id)
-    return _json.dumps(data), 200, {'Content-Type': 'application/json'}
-
-
-# ── Session Templates API ──────────────────────────────────────────
 
 @app.route('/api/templates', methods=['GET'])
 def api_templates_list():

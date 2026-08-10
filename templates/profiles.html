@@ -1,64 +1,179 @@
 {% extends 'base.html' %}
-{% block title %}Who's tracking?{% endblock %}
+{% block title %}Crew{% endblock %}
 {% block body_class %}pandora{% endblock %}
 
 {% block extra_css %}
 <style>
 .profiles-page {
     display: flex; flex-direction: column; align-items: center;
-    padding-top: 48px;
+    padding-top: 40px;
 }
-.profiles-page h1 { margin-bottom: 36px; text-align: center; }
+.profiles-page h1 { margin-bottom: 4px; text-align: center; }
+.profiles-sub {
+    font-size: 0.82rem; color: var(--dim); text-align: center; margin-bottom: 26px;
+}
 
-.profile-cards {
-    display: flex; flex-direction: column; gap: 14px; width: 100%;
+/* ── today summary strip ─────────────────────────────────────────── */
+.summary-strip { display: flex; gap: 8px; width: 100%; margin-bottom: 22px; }
+.summary-pill {
+    flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 10px 8px; text-align: center;
 }
+.summary-pill .n { font-size: 1.25rem; font-weight: 800; color: var(--text); }
+.summary-pill .n.warn { color: var(--push-fg); }
+.summary-pill .l {
+    display: block; font-size: 0.62rem; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--dim); margin-top: 2px;
+}
+
+/* ── roster (form buttons, still select the profile on tap) ─────────── */
+.profile-cards { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+
 .profile-card-btn {
     width: 100%; background: var(--surface); border: 1px solid var(--border);
-    border-radius: 16px; padding: 20px 24px;
-    display: flex; align-items: center; gap: 18px;
-    cursor: pointer; font-family: inherit; text-align: left;
+    border-radius: 16px; padding: 16px 18px;
+    display: block; cursor: pointer; font-family: inherit; text-align: left;
     -webkit-tap-highlight-color: transparent;
 }
-.profile-card-btn:active { opacity: .75; }
+.profile-card-btn:active { opacity: .8; }
+.profile-card-btn.status-partial { background: var(--core-bg); border-color: #F3DDA0; }
+.profile-card-btn.status-missing { background: var(--push-bg); border-color: #F3B4B4; }
+
+.card-top { display: flex; align-items: center; gap: 14px; }
 
 .profile-avatar {
-    width: 52px; height: 52px; border-radius: 50%;
-    background: var(--accent); color: var(--bg);
+    width: 46px; height: 46px; border-radius: 50%;
+    background: var(--accent); color: #fff;
     display: flex; align-items: center; justify-content: center;
-    font-size: 1.5rem; font-weight: 800; flex-shrink: 0;
+    font-size: 1.3rem; font-weight: 800; flex-shrink: 0;
 }
 .profile-avatar.g { background: #7c3aed; }
+.profile-avatar.r { background: #B45309; }
 
-.profile-info { flex: 1; }
+.profile-info { flex: 1; min-width: 0; }
 .profile-card-name {
-    font-size: 1.15rem; font-weight: 800; color: var(--text); display: block;
+    font-size: 1.05rem; font-weight: 800; color: var(--text); display: flex;
+    align-items: center; gap: 6px;
 }
-.profile-card-sub {
-    font-size: 0.75rem; color: var(--dim); margin-top: 3px; display: block;
+.streak-flame { font-size: 0.75rem; font-weight: 700; color: var(--dim); }
+.profile-card-sub { font-size: 0.75rem; color: var(--dim); margin-top: 2px; display: block; }
+
+.status-chip {
+    font-size: 0.62rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+    padding: 4px 9px; border-radius: 7px; white-space: nowrap; flex-shrink: 0;
 }
-.profile-card-chevron { color: var(--dim); font-size: 1.1rem; }
+.status-chip.ok { background: var(--accent-light); color: var(--accent-text); }
+.status-chip.partial { background: #FDECC8; color: #92400E; }
+.status-chip.missing { background: #FBD5D5; color: #991B1B; }
+
+/* metric slots */
+.metric-row { display: flex; gap: 8px; margin-top: 12px; }
+.metric-slot {
+    flex: 1; border-radius: 10px; padding: 8px 10px;
+    border: 1px solid var(--border); background: var(--surface-2);
+    display: flex; align-items: center; gap: 8px;
+}
+.metric-slot.empty { border: 1px dashed #C9C4B8; background: transparent; }
+.metric-icon { font-size: 0.9rem; width: 16px; text-align: center; flex-shrink: 0; }
+.metric-label {
+    display: block; font-size: 0.6rem; text-transform: uppercase; letter-spacing: .04em; color: var(--dim);
+}
+.metric-value { font-size: 0.78rem; font-weight: 700; margin-top: 1px; color: var(--text); }
+.metric-value.empty { color: var(--push-fg); }
+
+/* streak grid */
+.mini-grid { display: flex; gap: 3px; margin-top: 12px; }
+.mini-grid .dot {
+    flex: 1; height: 14px; border-radius: 4px;
+}
+.mini-grid .dot.full { background: var(--accent); }
+.mini-grid .dot.half { background: var(--core-bg); border: 1px solid var(--core-fg); }
+.mini-grid .dot.miss { background: var(--push-bg); border: 1px solid var(--push-fg); }
+.mini-grid .dot.today { box-shadow: 0 0 0 1.5px var(--accent); }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="profiles-page">
-    <h1>Who's tracking?</h1>
+    <h1>Crew check-in</h1>
+    <div class="profiles-sub">Tap your name to open your dashboard</div>
+
+    {% set ok_count = crew | selectattr('status', 'equalto', 'ok') | list | length %}
+    {% set missing_count = crew | rejectattr('status', 'equalto', 'ok') | list | length %}
+    {% set weight_count = crew | selectattr('weight_logged') | list | length %}
+    {% set food_count = crew | selectattr('food_logged') | list | length %}
+
+    <div class="summary-strip">
+        <div class="summary-pill">
+            <span class="n">{{ weight_count }}/{{ crew|length }}</span>
+            <span class="l">Weight logged</span>
+        </div>
+        <div class="summary-pill">
+            <span class="n">{{ food_count }}/{{ crew|length }}</span>
+            <span class="l">Food logged</span>
+        </div>
+        <div class="summary-pill">
+            <span class="n {% if missing_count > 0 %}warn{% endif %}">{{ missing_count }}</span>
+            <span class="l">Needs check-in</span>
+        </div>
+    </div>
+
     <div class="profile-cards">
         {% for p in profiles %}
+        {% set c = (crew | selectattr('id', 'equalto', p.id) | list | first) %}
         <form method="POST" action="/profiles/select" style="width:100%">
             <input type="hidden" name="profile_id" value="{{ p.id }}">
-            <button type="submit" class="profile-card-btn">
-                <div class="profile-avatar {% if loop.index > 1 %}g{% endif %}">{{ p.name[0] }}</div>
-                <div class="profile-info">
-                    <span class="profile-card-name">{{ p.name }}</span>
-                    {% if p.id == 1 %}
-                    <span class="profile-card-sub">Gym · Swim · Food</span>
-                    {% else %}
-                    <span class="profile-card-sub">Food</span>
+            <button type="submit" class="profile-card-btn {% if c %}status-{{ c.status }}{% endif %}">
+                <div class="card-top">
+                    <div class="profile-avatar {% if p.id == 2 %}g{% elif p.id == 3 %}r{% endif %}">{{ p.name[0] }}</div>
+                    <div class="profile-info">
+                        <span class="profile-card-name">
+                            {{ p.name }}
+                            {% if c and c.streak > 0 %}<span class="streak-flame">🔥{{ c.streak }}</span>{% endif %}
+                        </span>
+                        <span class="profile-card-sub">
+                            {% if p.id == 1 %}Gym · Swim · Food{% else %}Food{% endif %}
+                        </span>
+                    </div>
+                    {% if c %}
+                        {% if c.status == 'ok' %}<span class="status-chip ok">All logged</span>
+                        {% elif c.status == 'partial' %}<span class="status-chip partial">Partial today</span>
+                        {% else %}<span class="status-chip missing">Needs check-in</span>{% endif %}
                     {% endif %}
                 </div>
-                <span class="profile-card-chevron">›</span>
+
+                {% if c %}
+                <div class="metric-row">
+                    <div class="metric-slot {% if not c.weight_logged %}empty{% endif %}">
+                        <span class="metric-icon">⚖️</span>
+                        <div>
+                            <span class="metric-label">Weight</span>
+                            {% if c.weight_logged %}
+                            <span class="metric-value">{{ '%.1f'|format(c.weight_kg) }} kg</span>
+                            {% else %}
+                            <span class="metric-value empty">Not logged</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="metric-slot {% if not c.food_logged %}empty{% endif %}">
+                        <span class="metric-icon">🍽️</span>
+                        <div>
+                            <span class="metric-label">Food</span>
+                            {% if c.food_logged %}
+                            <span class="metric-value">{{ c.food_cal }} kcal · {{ c.food_entries }} item{{ 's' if c.food_entries != 1 else '' }}</span>
+                            {% else %}
+                            <span class="metric-value empty">Not logged</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mini-grid">
+                    {% for day in c.grid %}
+                    <div class="dot {{ day.state }} {% if day.is_today %}today{% endif %}" title="{{ day.iso }}"></div>
+                    {% endfor %}
+                </div>
+                {% endif %}
             </button>
         </form>
         {% endfor %}

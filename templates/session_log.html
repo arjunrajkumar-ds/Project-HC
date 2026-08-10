@@ -9,6 +9,24 @@
 .sl-title  { font-family: var(--font-sans); font-size: 20px; font-weight: 500; color: var(--text-strong); }
 .sl-date   { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
 
+/* ── Session bar ─────────────────────────────────────────────── */
+.sess-bar {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: 10px 12px;
+}
+.sess-status { flex: 1; font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
+.sess-bar.active .sess-status { color: var(--accent); font-weight: 600; }
+.sess-btn {
+    border: none; border-radius: var(--radius-sm); font-family: var(--font-mono);
+    font-size: 11px; font-weight: 700; letter-spacing: .04em; padding: 8px 14px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.sess-btn.sess-start { background: var(--accent); color: var(--bg); }
+.sess-btn.sess-end { background: var(--panel-soft); border: 1px solid var(--border); color: var(--dim); }
+.sess-btn:active { opacity: .8; }
+.sess-btn:disabled { opacity: .5; cursor: default; }
+
 /* ── Accordion groups ────────────────────────────────────────── */
 .pick-group { --g-color: var(--accent); margin-bottom: 8px; }
 .pick-group[data-group="chest"]      { --g-color: #e07a7a; }
@@ -70,31 +88,21 @@
     color: var(--dim); cursor: pointer; font-size: 14px; }
 .ae-close:active { color: var(--accent); border-color: var(--accent); }
 
-/* History viz */
+/* History table */
 .ae-history { margin-bottom: 12px; }
 .ae-hist-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
-.ae-hist-bars { display: flex; align-items: flex-end; gap: 4px; height: 48px; }
-.ae-hist-bar {
-    flex: 1; background: var(--panel-soft); border-radius: 3px 3px 0 0; position: relative;
-    display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
-    min-width: 0;
-}
-.ae-hist-bar.latest { background: var(--accent); opacity: .8; }
-.ae-hist-detail { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
-.ae-hist-chip {
-    font-family: var(--font-mono); font-size: 9px; color: var(--dim);
-    background: var(--panel-soft); border-radius: var(--radius-sm); padding: 3px 6px;
-}
-.ae-hist-chip b { color: var(--text-strong); }
 
-/* Suggestion */
-.ae-suggest {
-    display: flex; align-items: center; gap: 8px;
-    background: var(--accent-soft, rgba(212,165,116,.1)); border: 1px solid var(--accent);
-    border-radius: var(--radius-sm); padding: 8px 12px; margin-bottom: 12px;
+/* Recent entries list */
+.ae-hist-list { display: flex; flex-direction: column; gap: 0; margin-top: 8px; }
+.ae-hist-row {
+    display: flex; align-items: center; gap: 8px; padding: 5px 0;
+    border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px;
 }
-.ae-suggest-icon { font-size: 14px; }
-.ae-suggest-text { font-family: var(--font-mono); font-size: 11px; color: var(--accent); font-weight: 600; }
+.ae-hist-row:last-child { border-bottom: none; }
+.ae-hist-row-date { color: var(--dimmer); flex: 1; }
+.ae-hist-row-detail { color: var(--text-strong); font-weight: 600; }
+.ae-hist-row-result { width: 14px; text-align: center; }
+.ae-hist-row-result.miss { color: var(--dim); }
 
 /* Log form */
 .ae-form { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
@@ -124,14 +132,21 @@
 
 /* Fa Jin suggestion */
 .fajin-suggest {
-    display: none; margin-top: 10px;
-    background: var(--panel); border: 1px dashed var(--border); border-radius: var(--radius-md);
-    padding: 10px 14px;
+    display: none; margin-bottom: 12px;
+    background: var(--panel); border: 1px solid var(--border); border-left: 3px solid #d48a3a;
+    border-radius: var(--radius-md); padding: 10px 14px;
 }
 .fajin-suggest.visible { display: block; }
 .fajin-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
 .fajin-name { font-family: var(--font-sans); font-size: 13px; font-weight: 500; color: var(--text-strong); }
 .fajin-meta { font-family: var(--font-mono); font-size: 10px; color: var(--dim); margin-top: 2px; }
+.fajin-log-btn {
+    margin-top: 8px; background: none; border: 1px solid #d48a3a; border-radius: var(--radius-sm);
+    color: #d48a3a; font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+    letter-spacing: .04em; text-transform: uppercase; padding: 6px 12px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.fajin-log-btn:active { opacity: .7; }
 
 /* ── Session log (running list) ──────────────────────────────── */
 .session-log { margin-top: 16px; }
@@ -153,6 +168,12 @@
     <span class="sl-date">{{ today | fmt_date }}</span>
 </div>
 
+<div class="sess-bar" id="sess-bar">
+    <span class="sess-status" id="sess-status">No active session</span>
+    <button type="button" class="sess-btn sess-start" id="sess-start-btn" onclick="startSession()">Start Session</button>
+    <button type="button" class="sess-btn sess-end" id="sess-end-btn" onclick="endSession()" style="display:none">End Session</button>
+</div>
+
 {# ── Active exercise (shown after picking) ───────────────────── #}
 <div class="active-ex" id="active-ex">
     <div class="ae-card">
@@ -161,41 +182,36 @@
             <button type="button" class="ae-close" onclick="closeExercise()">✕</button>
         </div>
         <div class="ae-history" id="ae-history"></div>
-        <div class="ae-suggest" id="ae-suggest" style="display:none">
-            <span class="ae-suggest-icon">↑</span>
-            <span class="ae-suggest-text" id="ae-suggest-text"></span>
-        </div>
         <div class="ae-form">
             <div class="ae-field">
-                <label>Weight</label>
+                <label>Weight (kg)</label>
                 <input type="number" id="ae-weight" step="0.5" min="0" inputmode="decimal">
             </div>
             <div class="ae-field">
                 <label>Reps</label>
                 <input type="number" id="ae-reps" step="1" min="1" inputmode="numeric">
             </div>
-            <div class="ae-field">
-                <label>Sets</label>
-                <input type="number" id="ae-sets" value="1" step="1" min="1" inputmode="numeric">
-            </div>
-            <button type="button" class="ae-log-btn" onclick="logSet()">Log</button>
+            <button type="button" class="ae-log-btn" id="ae-log-btn" onclick="logSet()">Log Set</button>
         </div>
         <div class="ae-result">
             <button type="button" class="ae-result-btn active" data-val="1" onclick="setResult(this)">✓ Hit</button>
             <button type="button" class="ae-result-btn" data-val="0" onclick="setResult(this)">✗ Missed</button>
         </div>
     </div>
-    <div class="fajin-suggest" id="fajin-suggest">
-        <div class="fajin-label">Fa Jin — finish with</div>
-        <div class="fajin-name" id="fajin-name"></div>
-        <div class="fajin-meta" id="fajin-meta"></div>
-    </div>
+</div>
+
+{# ── Fa Jin warmup suggestion (shown after picking a T1) ─────── #}
+<div class="fajin-suggest" id="fajin-suggest">
+    <div class="fajin-label">Fa Jin warmup — do first</div>
+    <div class="fajin-name" id="fajin-name"></div>
+    <div class="fajin-meta" id="fajin-meta"></div>
+    <button type="button" class="fajin-log-btn" onclick="pickFajin()">Log this</button>
 </div>
 
 {# ── Exercise picker (accordion by muscle group) ─────────────── #}
 <div id="exercise-picker">
 {% for group in groups %}
-<div class="pick-group" data-group="{{ group.key }}">
+<div class="pick-group{% if loop.first %} open{% endif %}" data-group="{{ group.key }}">
     <button type="button" class="pick-head" onclick="this.closest('.pick-group').classList.toggle('open')">
         <span class="pick-stripe"></span>
         <span class="pick-title">{{ group.label }}</span>
@@ -270,38 +286,123 @@
 const FAJIN = {{ fajin_map | safe }};
 const CSRF = '{{ csrf_token() }}';
 let currentEx = null;
+let currentFajin = null;
 let logEntries = [];
+let sessionId = null;
 
+// ── Session lifecycle ────────────────────────────────────────────
+async function startSession() {
+    const btn = document.getElementById('sess-start-btn');
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/gym/session/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF }
+        });
+        const data = await res.json();
+        if (data.ok) {
+            sessionId = data.session_id;
+            updateSessionUI();
+        }
+    } catch (e) {
+        console.error('Start session failed', e);
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function endSession() {
+    if (!sessionId) return;
+    const btn = document.getElementById('sess-end-btn');
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/gym/session/end', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+            body: JSON.stringify({ session_id: sessionId })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            sessionId = null;
+            updateSessionUI();
+        }
+    } catch (e) {
+        console.error('End session failed', e);
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function updateSessionUI() {
+    const bar = document.getElementById('sess-bar');
+    const status = document.getElementById('sess-status');
+    const startBtn = document.getElementById('sess-start-btn');
+    const endBtn = document.getElementById('sess-end-btn');
+    const logBtn = document.getElementById('ae-log-btn');
+
+    if (sessionId) {
+        bar.classList.add('active');
+        status.textContent = 'Session active';
+        startBtn.style.display = 'none';
+        endBtn.style.display = 'inline-block';
+        if (logBtn) { logBtn.disabled = false; logBtn.textContent = 'Log Set'; }
+    } else {
+        bar.classList.remove('active');
+        status.textContent = 'No active session';
+        startBtn.style.display = 'inline-block';
+        endBtn.style.display = 'none';
+        if (logBtn) { logBtn.disabled = true; logBtn.textContent = 'Start a session first'; }
+    }
+}
+
+// ── Exercise picking / logging ───────────────────────────────────
 function pickExercise(el) {
     const id = el.dataset.id;
     const name = el.dataset.name;
     const tier = el.dataset.tier;
     const muscle = el.dataset.muscle;
     const fn = el.dataset.function;
-    const lastWeight = el.dataset.weight;
+    openExercisePanel({ id, name, tier, muscle, fn }, /* showFajinPrompt */ true);
+}
 
+// Called from the "Log this" button on the Fa Jin suggestion — opens the
+// suggested warmup exercise itself for logging, same as picking it directly.
+function pickFajin() {
+    if (!currentFajin) return;
+    openExercisePanel({
+        id: currentFajin.id, name: currentFajin.name, tier: 4,
+        muscle: currentFajin.muscle, fn: currentFajin.fn
+    }, /* showFajinPrompt */ false);
+}
+
+function openExercisePanel(ex, showFajinPrompt) {
+    const { id, name, tier, muscle, fn } = ex;
     currentEx = { id, name, tier, muscle, fn };
 
     // Show active panel
     document.getElementById('active-ex').classList.add('visible');
     document.getElementById('ae-name').textContent = name;
 
-    // Pre-fill weight from last known
-    const weightInput = document.getElementById('ae-weight');
-    if (lastWeight) weightInput.value = lastWeight;
-    else weightInput.value = '';
+    // Always blank — no pre-fill, no auto-increment
+    document.getElementById('ae-weight').value = '';
     document.getElementById('ae-reps').value = '';
-    document.getElementById('ae-sets').value = '1';
 
     // Reset result buttons
     document.querySelectorAll('.ae-result-btn').forEach(b => b.classList.remove('active'));
     document.querySelector('.ae-result-btn[data-val="1"]').classList.add('active');
 
-    // Fetch history
+    updateSessionUI();
+
+    // Fetch history (list only, no suggestion)
     fetchHistory(id);
 
-    // Show Fa Jin suggestion
-    showFajin(muscle, fn);
+    // Show Fa Jin suggestion for the picked exercise (not when logging the
+    // Fa Jin exercise itself — no point suggesting a warmup for a warmup)
+    if (showFajinPrompt) {
+        showFajin(muscle, fn);
+    } else {
+        document.getElementById('fajin-suggest').classList.remove('visible');
+    }
 
     // Scroll to top
     document.getElementById('active-ex').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -309,43 +410,30 @@ function pickExercise(el) {
 
 async function fetchHistory(exerciseId) {
     const histEl = document.getElementById('ae-history');
-    const sugEl = document.getElementById('ae-suggest');
     try {
         const res = await fetch('/api/gym/history/' + exerciseId);
         const data = await res.json();
         if (data.history && data.history.length > 0) {
-            const maxW = Math.max(...data.history.map(h => h.weight_kg || 0));
-            let barsHtml = '<div class="ae-hist-label">last ' + data.history.length + ' sessions</div>';
-            barsHtml += '<div class="ae-hist-bars">';
-            data.history.reverse().forEach((h, i) => {
-                const pct = maxW > 0 ? Math.max(10, (h.weight_kg / maxW) * 100) : 50;
-                const isLatest = i === data.history.length - 1;
-                barsHtml += '<div class="ae-hist-bar' + (isLatest ? ' latest' : '') + '" style="height:' + pct + '%" title="' + h.weight_kg + 'kg × ' + h.sets + '×' + h.reps + '"></div>';
+            const entries = data.history.slice(); // most recent first
+
+            let html = '<div class="ae-hist-label">last ' + entries.length + ' sets</div>';
+            html += '<div class="ae-hist-list">';
+            entries.forEach(h => {
+                const dateStr = (h.recorded_at || '').slice(0, 16).replace('T', ' ');
+                html += '<div class="ae-hist-row">' +
+                    '<span class="ae-hist-row-date">' + dateStr + '</span>' +
+                    '<span class="ae-hist-row-detail">' + h.weight_kg + 'kg × ' + h.reps + '</span>' +
+                    '<span class="ae-hist-row-result' + (h.successful ? '' : ' miss') + '">' + (h.successful ? '✓' : '✗') + '</span>' +
+                    '</div>';
             });
-            barsHtml += '</div>';
-            barsHtml += '<div class="ae-hist-detail">';
-            const last = data.history[data.history.length - 1];
-            barsHtml += '<span class="ae-hist-chip"><b>' + last.weight_kg + 'kg</b> × ' + last.sets + '×' + last.reps + '</span>';
-            barsHtml += '<span class="ae-hist-chip">' + (last.successful ? '✓ hit' : '✗ missed') + '</span>';
-            barsHtml += '</div>';
-            histEl.innerHTML = barsHtml;
+            html += '</div>';
+
+            histEl.innerHTML = html;
         } else {
             histEl.innerHTML = '<div class="ae-hist-label">no history yet</div>';
         }
-
-        // Show suggestion
-        if (data.suggestion && data.suggestion.action !== 'start') {
-            sugEl.style.display = 'flex';
-            document.getElementById('ae-suggest-text').textContent = data.suggestion.message;
-            // Pre-fill from suggestion
-            if (data.suggestion.weight_kg) document.getElementById('ae-weight').value = data.suggestion.weight_kg;
-            if (data.suggestion.reps) document.getElementById('ae-reps').value = data.suggestion.reps;
-        } else {
-            sugEl.style.display = 'none';
-        }
     } catch (e) {
         histEl.innerHTML = '<div class="ae-hist-label">—</div>';
-        sugEl.style.display = 'none';
     }
 }
 
@@ -359,10 +447,12 @@ function showFajin(muscle, fn) {
         match = FAJIN[muscle];
     }
     if (match) {
+        currentFajin = match;
         el.classList.add('visible');
         document.getElementById('fajin-name').textContent = match.name;
         document.getElementById('fajin-meta').textContent = match.muscle + ' · ' + (match.fn || 'general');
     } else {
+        currentFajin = null;
         el.classList.remove('visible');
     }
 }
@@ -371,6 +461,7 @@ function closeExercise() {
     document.getElementById('active-ex').classList.remove('visible');
     document.getElementById('fajin-suggest').classList.remove('visible');
     currentEx = null;
+    currentFajin = null;
 }
 
 function setResult(btn) {
@@ -380,12 +471,16 @@ function setResult(btn) {
 
 async function logSet() {
     if (!currentEx) return;
+    if (!sessionId) { updateSessionUI(); return; }
     const weight = parseFloat(document.getElementById('ae-weight').value) || 0;
     const reps = parseInt(document.getElementById('ae-reps').value) || 0;
-    const sets = parseInt(document.getElementById('ae-sets').value) || 1;
     const successful = document.querySelector('.ae-result-btn.active')?.dataset.val === '1';
 
     if (reps <= 0) { document.getElementById('ae-reps').focus(); return; }
+
+    // Disable button to prevent double-tap
+    const btn = document.getElementById('ae-log-btn');
+    btn.disabled = true; btn.textContent = '...';
 
     try {
         const res = await fetch('/api/gym/log-set', {
@@ -393,19 +488,26 @@ async function logSet() {
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
             body: JSON.stringify({
                 exercise_id: parseInt(currentEx.id),
-                weight_kg: weight, reps, sets, successful
+                weight_kg: weight, reps, successful,
+                session_id: sessionId
             })
         });
         const data = await res.json();
         if (data.ok) {
-            // Add to session log
-            logEntries.push({ type: 'gym', name: currentEx.name, weight, reps, sets, successful });
+            logEntries.push({ type: 'gym', name: currentEx.name, weight, reps, successful });
             renderLog();
-            // Refresh history
             fetchHistory(currentEx.id);
+            // Blank fields again for the next set — no carry-over, no increment
+            document.getElementById('ae-weight').value = '';
+            document.getElementById('ae-reps').value = '';
+            // Flash success
+            btn.textContent = '✓'; setTimeout(() => { btn.textContent = 'Log Set'; btn.disabled = false; }, 600);
+        } else {
+            btn.textContent = '✗'; setTimeout(() => { btn.textContent = 'Log Set'; btn.disabled = false; }, 1000);
         }
     } catch (e) {
         console.error('Log failed', e);
+        btn.textContent = '✗'; setTimeout(() => { btn.textContent = 'Log Set'; btn.disabled = false; }, 1000);
     }
 }
 
@@ -425,7 +527,7 @@ function renderLog() {
                    '<span class="slog-detail" style="color:#d48a3a">' + (detail || 'logged') + '</span></div>';
         }
         return '<div class="slog-entry"><span class="slog-name">' + num + '. ' + e.name + '</span>' +
-               '<span class="slog-detail">' + e.weight + 'kg × ' + e.sets + '×' + e.reps +
+               '<span class="slog-detail">' + e.weight + 'kg × ' + e.reps + ' reps' +
                (e.successful ? ' ✓' : ' ✗') + '</span></div>';
     }).join('');
 }
@@ -474,5 +576,8 @@ async function logCardio() {
         }
     } catch (e) { console.error('Cardio log failed', e); }
 }
+
+// ── Init ──────────────────────────────────────────────────────────
+updateSessionUI();
 </script>
 {% endblock %}
