@@ -446,7 +446,7 @@
 }
 .fl-total-head {
     display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
-    margin-bottom: 6px;
+    margin-bottom: 6px; position: relative;
 }
 .fl-total-label {
     font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em;
@@ -458,6 +458,7 @@
 .fl-total-value .fl-total-goal { font-size: 10px; font-weight: 400; color: var(--dim); }
 .fl-total-track {
     height: 6px; background: var(--panel-soft); border-radius: 3px; overflow: hidden;
+    position: relative;
 }
 .fl-total-fill {
     height: 100%; border-radius: 3px; transition: width .3s ease;
@@ -468,6 +469,46 @@
     background: var(--green, #7fb069);
 }
 .fl-total-bars { display: flex; flex-direction: column; gap: 6px; }
+
+/* ── Bar-increment animation: a light overlay that grows from the old fill
+   to the new one, then fades, plus a floating "+N" badge over the row.   */
+.bar-grow-overlay {
+    position: absolute; top: 0; left: 0; height: 100%;
+    background: rgba(255,255,255,.3);
+    border-radius: inherit;
+    transition: width .6s cubic-bezier(.22,.61,.36,1), opacity .4s ease;
+    pointer-events: none;
+}
+.bar-popup {
+    position: absolute; right: 2px; top: -18px;
+    background: var(--accent); color: var(--bg);
+    font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+    padding: 2px 8px; border-radius: var(--radius-pill);
+    pointer-events: none; z-index: 6; white-space: nowrap;
+    animation: bar-popup-float 3.6s ease forwards;
+}
+@keyframes bar-popup-float {
+    0%   { opacity: 0; transform: translateY(4px) scale(.9); }
+    5%   { opacity: 1; transform: translateY(0) scale(1); }
+    90%  { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-18px) scale(.96); }
+}
+
+/* ── Define-food dialog form bits (dialog chrome shares .tally-dialog) ── */
+.define-form-title { font-size: 0.85rem !important; font-weight: 700 !important; }
+.define-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.define-form-error { font-family: var(--font-mono); font-size: 10px; color: var(--red); display: none; margin-top: -4px; }
+.unit-toggle-row { display: flex; gap: 6px; }
+.unit-btn {
+    flex: 1; background: var(--panel-soft); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--dim); cursor: pointer;
+    font-family: var(--font-mono); font-size: 10px; font-weight: 400;
+    letter-spacing: .04em; text-transform: uppercase;
+    padding: 8px 6px; text-align: center;
+    -webkit-tap-highlight-color: transparent;
+    transition: background .1s, color .1s, border-color .1s;
+}
+.unit-btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 </style>
 {% endblock %}
 
@@ -739,6 +780,49 @@
     <div class="tally-dialog-actions" id="tally-dialog-actions"></div>
   </div>
 </dialog>
+
+{# ── Define-food dialog — shown after logging a food with no macros yet ── #}
+<dialog id="define-food-dialog" class="tally-dialog">
+  <div class="tally-dialog-body">
+    <div id="define-confirm-view">
+      <p id="define-confirm-msg"></p>
+      <div class="tally-dialog-actions">
+        <button type="button" class="tally-btn-secondary" onclick="flCloseDefineDialog()">Not now</button>
+        <button type="button" class="tally-btn-primary" onclick="flShowDefineForm()">Define it</button>
+      </div>
+    </div>
+    <div id="define-form-view" style="display:none">
+      <p class="define-form-title" id="define-form-title"></p>
+      <div class="define-form-grid">
+        <div class="form-group">
+          <label for="df-cal">Calories (kcal)</label>
+          <input type="number" id="df-cal" min="0" step="1" inputmode="decimal" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label for="df-pro">Protein (g)</label>
+          <input type="number" id="df-pro" min="0" step="0.1" inputmode="decimal" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label for="df-carb">Carbs (g)</label>
+          <input type="number" id="df-carb" min="0" step="0.1" inputmode="decimal" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label for="df-fat">Fat (g)</label>
+          <input type="number" id="df-fat" min="0" step="0.1" inputmode="decimal" placeholder="0">
+        </div>
+      </div>
+      <div class="unit-toggle-row">
+        <button type="button" class="unit-btn active" id="df-unit-g" onclick="flSetDefineUnit('g')">per 100g</button>
+        <button type="button" class="unit-btn" id="df-unit-unit" onclick="flSetDefineUnit('unit')">per unit</button>
+      </div>
+      <div class="define-form-error" id="define-form-error"></div>
+      <div class="tally-dialog-actions">
+        <button type="button" class="tally-btn-secondary" onclick="flCloseDefineDialog()">Cancel</button>
+        <button type="button" class="tally-btn-primary" onclick="flSubmitDefineForm()">Save</button>
+      </div>
+    </div>
+  </div>
+</dialog>
 {% endblock %}
 
 {% block extra_js %}
@@ -771,9 +855,11 @@
             const data = await res.json();
             FL_ENTRIES.push(data.entry);
             if (input) input.value = '';
-            flRender();
+            const isDefined = (data.entry.calories || 0) > 0;
+            flRender({ animateEntry: isDefined ? data.entry : null });
             // Re-open the add panel for this meal after render
             setTimeout(function() { flToggleAdd(mealType); }, 0);
+            if (!isDefined) flPromptDefine(data.entry);
         } catch (err) {
             if (errEl) { errEl.textContent = 'Failed to save \u2014 try again.'; errEl.style.display = ''; }
         }
@@ -797,7 +883,11 @@
     };
 
     // ── Render 4-column grid ─────────────────────────────────────────────
-    function flRender() {
+    // `opts.animateEntry` is the entry (with its own calories/protein_g) that
+    // was just added or just had its macros defined — when set, the total
+    // cal/protein bars play a "grow" overlay + "+N" popup for its amount.
+    function flRender(opts) {
+        opts = opts || {};
         const gridEl = document.getElementById('fl-grid');
         const byMeal = {};
         MEAL_ORDER.forEach(m => { byMeal[m] = []; });
@@ -868,21 +958,160 @@
         var barEl = document.getElementById('fl-total-bar');
         if (barEl) {
             barEl.innerHTML = '<div class="fl-total-bars">'
-                + '<div><div class="fl-total-head">'
+                + '<div><div class="fl-total-head" id="fl-cal-head">'
                 + '<span class="fl-total-label">Total today</span>'
                 + '<span class="fl-total-value">' + Math.round(totalCal).toLocaleString() + ' <span class="fl-total-goal">' + (goalCal ? '/ ' + goalCal.toLocaleString() + ' kcal' : 'kcal') + '</span></span>'
                 + '</div>'
-                + '<div class="fl-total-track"><div class="fl-total-fill' + (isOver ? ' over' : '') + '" style="width:' + pct + '%"></div></div>'
+                + '<div class="fl-total-track" id="fl-cal-track"><div class="fl-total-fill' + (isOver ? ' over' : '') + '" style="width:' + pct + '%"></div></div>'
                 + '</div>'
-                + '<div><div class="fl-total-head">'
+                + '<div><div class="fl-total-head" id="fl-pro-head">'
                 + '<span class="fl-total-label">Protein</span>'
                 + '<span class="fl-total-value">' + Math.round(totalPro) + 'g <span class="fl-total-goal">' + (goalPro ? '/ ' + goalPro + 'g' : '') + '</span></span>'
                 + '</div>'
-                + '<div class="fl-total-track"><div class="fl-total-fill protein' + (isOverPro ? ' over' : '') + '" style="width:' + pctPro + '%"></div></div>'
+                + '<div class="fl-total-track" id="fl-pro-track"><div class="fl-total-fill protein' + (isOverPro ? ' over' : '') + '" style="width:' + pctPro + '%"></div></div>'
                 + '</div>'
                 + '</div>';
         }
+
+        if (opts.animateEntry) {
+            const addedCal = opts.animateEntry.calories  || 0;
+            const addedPro = opts.animateEntry.protein_g || 0;
+            if (addedCal > 0 && goalCal > 0) {
+                const newPct = Math.max(0, Math.min(100, (totalCal / goalCal) * 100));
+                const oldPct = Math.max(0, Math.min(100, ((totalCal - addedCal) / goalCal) * 100));
+                flAnimateBarGrowth('fl-cal-track', oldPct, newPct);
+                flShowBarPopup('fl-cal-head', '+' + Math.round(addedCal));
+            }
+            if (addedPro > 0 && goalPro > 0) {
+                const newPctP = Math.max(0, Math.min(100, (totalPro / goalPro) * 100));
+                const oldPctP = Math.max(0, Math.min(100, ((totalPro - addedPro) / goalPro) * 100));
+                flAnimateBarGrowth('fl-pro-track', oldPctP, newPctP);
+                flShowBarPopup('fl-pro-head', '+' + addedPro.toFixed(1) + 'g');
+            }
+        }
     }
+
+    // Grow a translucent overlay from the pre-log fill to the post-log fill,
+    // then fade it out — layered on top of the (already-correct) fill bar so
+    // the visible jump reads as a smooth slide instead of an instant snap.
+    function flAnimateBarGrowth(trackId, oldPct, newPct) {
+        const track = document.getElementById(trackId);
+        if (!track) return;
+        const overlay = document.createElement('div');
+        overlay.className = 'bar-grow-overlay';
+        overlay.style.width = oldPct.toFixed(2) + '%';
+        overlay.style.opacity = '1';
+        track.appendChild(overlay);
+        void overlay.offsetWidth; // force layout so the width change below transitions
+        requestAnimationFrame(function () { overlay.style.width = newPct.toFixed(2) + '%'; });
+        overlay.addEventListener('transitionend', function te(e) {
+            if (e.propertyName && e.propertyName !== 'width') return;
+            overlay.style.opacity = '0';
+            setTimeout(function () { overlay.remove(); }, 420);
+        }, { once: true });
+    }
+
+    // Floating "+N" badge over a total-bar head, matching the row's own animation.
+    function flShowBarPopup(headId, text) {
+        const head = document.getElementById(headId);
+        if (!head) return;
+        const badge = document.createElement('span');
+        badge.className = 'bar-popup';
+        badge.textContent = text;
+        head.appendChild(badge);
+        badge.addEventListener('animationend', function () { badge.remove(); });
+    }
+
+    // ── "Define it now?" flow for foods logged with no macros ────────────
+    const GRAM_RE       = /^(\d+(?:\.\d+)?)\s*(g|ml|kg|lb|oz)\s+(.+)$/i;
+    const QTY_PREFIX_RE = /^(\d+(?:\.\d+)?)\s*x\s+(.+)$/i;
+    const QTY_SUFFIX_RE = /^(.+?)\s+x\s*(\d+(?:\.\d+)?)$/i;
+    function flBaseFoodName(raw) {
+        let s = (raw || '').trim(), m;
+        if ((m = QTY_PREFIX_RE.exec(s)))      s = m[2].trim();
+        else if ((m = QTY_SUFFIX_RE.exec(s))) s = m[1].trim();
+        const gm = GRAM_RE.exec(s);
+        return gm ? gm[3].trim() : s;
+    }
+
+    let defineCtx = null;
+
+    function flPromptDefine(entry) {
+        defineCtx = { baseName: flBaseFoodName(entry.name), entryId: entry.id, unitType: 'g' };
+        const dlg = document.getElementById('define-food-dialog');
+        const msg = document.getElementById('define-confirm-msg');
+        if (!dlg || !msg) return;
+        msg.textContent = '"' + defineCtx.baseName + '" isn’t in your food database yet. Define its macros now?';
+        document.getElementById('define-confirm-view').style.display = '';
+        document.getElementById('define-form-view').style.display = 'none';
+        if (dlg.open) dlg.close();
+        dlg.showModal();
+    }
+
+    window.flCloseDefineDialog = function () {
+        const dlg = document.getElementById('define-food-dialog');
+        if (dlg && dlg.open) dlg.close();
+        defineCtx = null;
+    };
+
+    window.flShowDefineForm = function () {
+        if (!defineCtx) return;
+        document.getElementById('define-confirm-view').style.display = 'none';
+        document.getElementById('define-form-view').style.display = '';
+        document.getElementById('define-form-title').textContent = 'Define “' + defineCtx.baseName + '”';
+        ['df-cal', 'df-pro', 'df-carb', 'df-fat'].forEach(function (id) { document.getElementById(id).value = ''; });
+        window.flSetDefineUnit('g');
+        const errEl = document.getElementById('define-form-error');
+        if (errEl) errEl.style.display = 'none';
+        setTimeout(function () { document.getElementById('df-cal')?.focus(); }, 30);
+    };
+
+    window.flSetDefineUnit = function (u) {
+        if (!defineCtx) return;
+        defineCtx.unitType = u;
+        document.getElementById('df-unit-g').classList.toggle('active', u === 'g');
+        document.getElementById('df-unit-unit').classList.toggle('active', u === 'unit');
+    };
+
+    window.flSubmitDefineForm = async function () {
+        if (!defineCtx) return;
+        const errEl = document.getElementById('define-form-error');
+        const cal  = parseFloat(document.getElementById('df-cal').value)  || 0;
+        const pro  = parseFloat(document.getElementById('df-pro').value)  || 0;
+        const carb = parseFloat(document.getElementById('df-carb').value) || 0;
+        const fat  = parseFloat(document.getElementById('df-fat').value)  || 0;
+        if (cal <= 0 && pro <= 0) {
+            if (errEl) { errEl.textContent = 'Enter at least calories or protein.'; errEl.style.display = ''; }
+            return;
+        }
+        if (errEl) errEl.style.display = 'none';
+        const entryId = defineCtx.entryId;
+        try {
+            const res = await fetch('/food/api/define', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf() },
+                body: JSON.stringify({
+                    name: defineCtx.baseName, calories: cal, protein_g: pro,
+                    carbs_g: carb, fat_g: fat, unit_type: defineCtx.unitType,
+                    entry_id: entryId,
+                }),
+            });
+            if (!res.ok) throw new Error('Server error');
+            const data = await res.json();
+            window.flCloseDefineDialog();
+            if (data.entry) {
+                const idx = FL_ENTRIES.findIndex(function (e) { return e.id === entryId; });
+                if (idx >= 0) {
+                    FL_ENTRIES[idx] = Object.assign({}, FL_ENTRIES[idx], data.entry);
+                    flRender({ animateEntry: (FL_ENTRIES[idx].calories || 0) > 0 ? FL_ENTRIES[idx] : null });
+                    return;
+                }
+            }
+            flRender();
+        } catch (e) {
+            if (errEl) { errEl.textContent = 'Failed to save — try again.'; errEl.style.display = ''; }
+        }
+    };
 
     window.flDelete = async function (id) {
         try {

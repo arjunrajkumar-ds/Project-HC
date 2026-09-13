@@ -4,378 +4,893 @@
 
 {% block extra_css %}
 <style>
-/* ── Header ──────────────────────────────────────────────────── */
-.train-header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
-.train-title  { font-family: var(--font-sans); font-size: 20px; font-weight: 500; color: var(--text-strong); }
-.train-count  { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
+/* ── Live Workout Engine ─────────────────────────────────────────────────── */
+.lw-header { display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:6px; }
+.lw-title  { font-family:var(--font-sans); font-size:20px; font-weight:500; color:var(--text-strong); }
+.lw-sub    { font-family:var(--font-mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); }
 
-/* ── Tier filter pills ─────────────────────────────────────── */
-.tier-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
-.tier-pill {
-    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-pill);
-    font-family: var(--font-mono); font-size: 9px; letter-spacing: .08em; text-transform: uppercase;
-    color: var(--dim); padding: 5px 12px; cursor: pointer;
-    -webkit-tap-highlight-color: transparent; transition: border-color .12s, color .12s;
-}
-.tier-pill:active { opacity: .8; }
-.tier-pill.active { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+/* Muscle accent colours (mirror the old Train palette) */
+.mg { --g:var(--accent); }
+.mg[data-m="chest"]{--g:#e07a7a}.mg[data-m="shoulders"]{--g:#d4a574}.mg[data-m="back"]{--g:#6b93c9}
+.mg[data-m="legs"]{--g:#7fb069}.mg[data-m="core"]{--g:#a785c2}.mg[data-m="arms"]{--g:#6bb0a8}
+.mg[data-m="stability"]{--g:#8a8a8a}.mg[data-m="muay_thai"]{--g:#d1495b}
 
-/* ── Group accordion ─────────────────────────────────────────── */
-.g-group { --g-color: var(--accent); margin-bottom: 10px; }
-.g-group[data-group="chest"]      { --g-color: #e07a7a; }
-.g-group[data-group="shoulders"]  { --g-color: #d4a574; }
-.g-group[data-group="back"]       { --g-color: #6b93c9; }
-.g-group[data-group="legs"]       { --g-color: #7fb069; }
-.g-group[data-group="core"]       { --g-color: #a785c2; }
-.g-group[data-group="arms"]       { --g-color: #6bb0a8; }
-.g-group[data-group="stability"]  { --g-color: #8a8a8a; }
-.g-group[data-group="uncategorised"] { --g-color: #c97064; }
+/* ── Empty state: muscle picker ──────────────────────────────────────────── */
+.empty-wrap { text-align:center; padding:26px 8px 8px; }
+.empty-kicker { font-family:var(--font-mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); margin-bottom:6px; }
+.empty-lead { font-family:var(--font-sans); font-size:17px; color:var(--text-strong); margin-bottom:20px; }
+.picker-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.picker-btn {
+    background:var(--panel); border:1px solid var(--border); border-left:4px solid var(--g);
+    border-radius:var(--radius-md); padding:16px 14px; cursor:pointer; text-align:left;
+    display:flex; flex-direction:column; gap:3px; -webkit-tap-highlight-color:transparent;
+    transition:border-color .12s, transform .06s;
+}
+.picker-btn:active { transform:scale(.98); }
+.picker-btn .pk-name { font-family:var(--font-sans); font-size:15px; font-weight:600; color:var(--text-strong); }
+.picker-btn .pk-meta { font-family:var(--font-mono); font-size:9px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); }
 
-.g-head {
-    display: grid; grid-template-columns: 4px 1fr auto auto auto; align-items: center; gap: 8px;
-    width: 100%; background: var(--panel); border: 1px solid var(--border);
-    border-radius: var(--radius-md); padding: 12px 14px 12px 10px;
-    cursor: pointer; text-align: left; font-family: inherit; color: var(--text-strong);
-    -webkit-tap-highlight-color: transparent;
+/* ── Sticky rest-timer bar ───────────────────────────────────────────────── */
+.rest-bar {
+    position:sticky; top:0; z-index:50; display:none; align-items:center; gap:12px;
+    background:var(--panel); border:1px solid var(--border); border-radius:var(--radius-md);
+    padding:9px 14px; margin:0 0 12px;
 }
-.g-head:active { opacity: .8; }
-.g-stripe { display: block; width: 4px; height: 22px; border-radius: 2px; background: var(--g-color); }
-.g-title  { font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--g-color); }
-.g-count  { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
-.g-info-btn {
-    background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
-    width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
-    color: var(--dim); font-family: var(--font-mono); font-size: 10px; cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-}
-.g-info-btn:active { color: var(--g-color); border-color: var(--g-color); }
-.g-chev   { color: var(--dimmer); font-size: 14px; transition: transform .15s; }
-.g-group.open .g-chev { transform: rotate(90deg); color: var(--g-color); }
-.g-group.open .g-head { border-radius: var(--radius-md) var(--radius-md) 0 0; border-bottom-color: transparent; }
+.rest-bar.on { display:flex; }
+.rest-dot { width:8px; height:8px; border-radius:50%; background:var(--green); animation:restPulse 1.4s ease-in-out infinite; }
+@keyframes restPulse { 0%,100%{opacity:.4} 50%{opacity:1} }
+.rest-label { font-family:var(--font-mono); font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:var(--dim); }
+.rest-time { font-family:var(--font-mono); font-size:20px; font-weight:700; color:var(--text-strong); margin-left:auto; font-variant-numeric:tabular-nums; }
 
-.g-body {
-    display: none; flex-direction: column; gap: 0;
-    border: 1px solid var(--border); border-top: none;
-    border-radius: 0 0 var(--radius-md) var(--radius-md);
-    overflow: hidden;
-}
-.g-group.open .g-body { display: flex; }
+/* ── Muscle section ──────────────────────────────────────────────────────── */
+.mg-sec { margin-bottom:16px; border:1px solid var(--border); border-radius:var(--radius-md); overflow:hidden; }
+.mg-head { display:grid; grid-template-columns:4px 1fr auto; align-items:center; gap:10px; padding:12px 14px 12px 10px; background:var(--panel); }
+.mg-stripe { width:4px; height:20px; border-radius:2px; background:var(--g); }
+.mg-name { font-family:var(--font-mono); font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--g); font-weight:600; }
+.mg-count { font-family:var(--font-mono); font-size:10px; color:var(--dim); }
 
-/* ── Function sub-header ───────────────────────────────────── */
-.fn-label {
-    font-family: var(--font-mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase;
-    color: var(--dim); padding: 8px 14px 4px; background: var(--panel-soft);
-    border-bottom: 1px solid var(--border);
-}
+/* Function checklist */
+.checklist { display:flex; flex-wrap:wrap; gap:6px; padding:0 14px 12px; background:var(--panel); }
+/* Constant (always-on) strips — visually distinct as standing goals */
+.const-head { display:flex; align-items:baseline; gap:8px; margin:20px 0 8px; }
+.const-title { font-family:var(--font-mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); }
+.const-hint { font-family:var(--font-mono); font-size:9px; color:var(--dimmer); }
+.mg-sec.constant { border-style:dashed; opacity:.98; }
+.mg-sec.constant .mg-head { background:var(--panel-soft); }
+/* Standing goals collapse to pills-only; the exercise list + workout-so-far
+   live in .const-body, hidden until the header is tapped. Pills (.checklist)
+   stay outside .const-body so they're always visible. */
+.mg-sec.constant .mg-head { cursor:pointer; -webkit-tap-highlight-color:transparent; grid-template-columns:4px 1fr auto auto; min-height:44px; }
+.mg-sec.constant .mg-head:active { opacity:.85; }
+.const-chev { color:var(--dimmer); font-size:14px; transition:transform .15s; justify-self:end; }
+.mg-sec.constant.open .const-chev { transform:rotate(90deg); color:var(--g); }
+.mg-sec.constant .const-body { display:none; }
+.mg-sec.constant.open .const-body { display:block; }
+.const-badge { font-family:var(--font-mono); font-size:7px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+               color:var(--dim); border:1px solid var(--border); border-radius:3px; padding:1px 5px; margin-left:8px; vertical-align:middle; }
+.chk { display:inline-flex; align-items:center; gap:5px; font-family:var(--font-mono); font-size:10px;
+       letter-spacing:.04em; color:var(--dim); border:1px solid var(--border); border-radius:var(--radius-pill); padding:3px 9px; }
+.chk .box { width:11px; height:11px; border-radius:50%; border:1.5px solid var(--dimmer); display:inline-block; }
+.chk.done { color:var(--g); border-color:var(--g); }
+.chk.done .box { background:var(--g); border-color:var(--g); position:relative; }
+.chk.done .box::after { content:"✓"; position:absolute; inset:0; font-size:8px; color:var(--bg); display:flex; align-items:center; justify-content:center; }
 
-/* ── Exercise row ────────────────────────────────────────────── */
-.ex-row {
-    display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px;
-    padding: 10px 14px; border-bottom: 1px solid var(--border);
-    background: var(--panel);
-}
-.ex-row:last-child { border-bottom: none; }
-.ex-row.disabled { opacity: .5; }
+/* Workout-so-far sets */
+.sofar { padding:0 14px 10px; background:var(--panel); }
+.sofar-ex { margin-top:8px; }
+.sofar-ex-name { font-family:var(--font-sans); font-size:12px; font-weight:600; color:var(--text-strong); margin-bottom:3px; }
+.set-chip { display:inline-flex; align-items:center; gap:4px; font-family:var(--font-mono); font-size:10px;
+            color:var(--text); background:var(--panel-soft); border:1px solid var(--border); border-radius:var(--radius-sm);
+            padding:3px 7px; margin:0 4px 4px 0; }
+.set-chip .n { color:var(--dimmer); }
 
-.ex-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.ex-name { font-family: var(--font-sans); font-size: 13px; font-weight: 500; color: var(--text-strong);
-           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ex-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.ex-tier-badge {
-    font-family: var(--font-mono); font-size: 8px; font-weight: 700; letter-spacing: .06em;
-    text-transform: uppercase; padding: 1px 5px; border-radius: 3px;
-    border: 1px solid var(--border); color: var(--dim);
-}
-.ex-tier-badge.t1 { color: var(--accent); border-color: var(--accent); }
-.ex-tier-badge.t2 { color: var(--green, #7fb069); border-color: var(--green, #7fb069); }
-.ex-tier-badge.t4 { color: #d48a3a; border-color: #d48a3a; }
-.ex-suggestion { font-family: var(--font-mono); font-size: 10px; color: var(--dim); }
-.ex-suggestion.up { color: var(--green, #7fb069); }
+/* Exercise list within a muscle */
+.ex-list { border-top:1px solid var(--border); background:var(--panel-soft); }
+.fn-hd { font-family:var(--font-mono); font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:var(--dim);
+         padding:8px 14px 4px; }
+.ex-row { display:grid; grid-template-columns:1fr auto auto; align-items:center; gap:8px; padding:9px 14px;
+          border-bottom:1px solid var(--border); cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.ex-row:active { background:var(--panel); }
+.ex-row .exn { font-family:var(--font-sans); font-size:13px; color:var(--text-strong); }
+.ex-row .exb { font-family:var(--font-mono); font-size:8px; font-weight:700; text-transform:uppercase; padding:1px 5px;
+               border-radius:3px; border:1px solid var(--border); color:var(--dim); }
+.ex-row .exc { font-family:var(--font-mono); font-size:10px; color:var(--g); font-weight:700; }
+.ex-row .exc.zero { color:var(--dimmer); font-weight:400; }
+.ex-open { color:var(--dimmer); font-size:16px; }
 
-.ex-weight { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--text-strong); white-space: nowrap; }
-.ex-weight.none { color: var(--dimmer); font-weight: 400; }
+/* Add-muscle button */
+.add-muscle { margin:6px 0 18px; }
+.add-muscle button {
+    width:100%; background:var(--panel); border:1px dashed var(--border); border-radius:var(--radius-md);
+    color:var(--dim); font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+    padding:12px; cursor:pointer; -webkit-tap-highlight-color:transparent;
+}
+.add-muscle button:active { border-color:var(--accent); color:var(--accent); }
 
-.ex-edit-btn {
-    background: none; border: none; color: var(--dimmer); cursor: pointer;
-    font-size: 12px; padding: 4px; border-radius: var(--radius-sm);
-    -webkit-tap-highlight-color: transparent;
-}
-.ex-edit-btn:active { color: var(--accent); }
+/* ── Bottom sheet (exercise logger + muscle picker) ──────────────────────── */
+.sheet { display:none; position:fixed; inset:0; z-index:200; background:rgba(0,0,0,.6); align-items:flex-end; justify-content:center; }
+.sheet.on { display:flex; }
+.sheet-panel { background:var(--panel); border-radius:var(--radius-md) var(--radius-md) 0 0; padding:18px 18px calc(18px + var(--sab));
+               width:100%; max-width:520px; max-height:82vh; overflow-y:auto; }
+.sheet-h { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:4px; }
+.sheet-title { font-family:var(--font-sans); font-size:17px; font-weight:600; color:var(--text-strong); }
+.sheet-close { background:none; border:none; color:var(--dim); font-family:var(--font-mono); font-size:18px; cursor:pointer; }
+.sheet-sub { font-family:var(--font-mono); font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim); margin-bottom:14px; }
 
-.ex-disabled-tag {
-    font-family: var(--font-mono); font-size: 7px; letter-spacing: .08em; text-transform: uppercase;
-    color: var(--dimmer); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px;
-}
+/* Reference row (most recent + best) */
+.ref-row { display:flex; gap:10px; margin-bottom:16px; }
+.ref-card { flex:1; background:var(--panel-soft); border:1px solid var(--border); border-radius:var(--radius-sm); padding:9px 11px; }
+.ref-k { font-family:var(--font-mono); font-size:8px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); margin-bottom:3px; }
+.ref-v { font-family:var(--font-mono); font-size:14px; font-weight:700; color:var(--text-strong); }
+.ref-v.dim { color:var(--dimmer); font-weight:400; font-size:12px; }
 
-/* ── Edit panel (inline) ─────────────────────────────────────── */
-.ex-edit-panel {
-    display: none; padding: 10px 14px; background: var(--panel-soft);
-    border-bottom: 1px solid var(--border);
-}
-.ex-edit-panel.open { display: block; }
-.edit-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-end; }
-.edit-field { display: flex; flex-direction: column; gap: 2px; }
-.edit-field label { font-family: var(--font-mono); font-size: 7px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
-.edit-field input, .edit-field select {
-    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm);
-    color: var(--text); font-family: var(--font-mono); font-size: 11px;
-    padding: 6px 8px; min-height: 30px;
-}
-.edit-field input:focus, .edit-field select:focus { outline: none; border-color: var(--accent); }
-.edit-save {
-    background: var(--accent); color: var(--bg); border: none; border-radius: var(--radius-sm);
-    font-family: var(--font-mono); font-size: 10px; font-weight: 700; padding: 7px 12px; cursor: pointer;
-}
-.edit-save:active { opacity: .85; }
-.edit-toggle-btn {
-    background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
-    font-family: var(--font-mono); font-size: 9px; color: var(--dim); padding: 6px 10px; cursor: pointer;
-}
-.edit-toggle-btn:active { color: var(--accent); border-color: var(--accent); }
+/* Working-set form */
+.ws-form { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:14px; }
+.ws-field { display:flex; flex-direction:column; gap:3px; }
+.ws-field label { font-family:var(--font-mono); font-size:8px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); }
+.ws-field input { background:var(--panel-soft); border:1px solid var(--border); border-radius:var(--radius-sm);
+                  color:var(--text); font-family:var(--font-mono); font-size:18px; padding:9px 10px; width:88px; text-align:center; }
+.ws-field input:focus { outline:none; border-color:var(--accent); }
+.step { display:flex; align-items:center; gap:6px; }
+.step button { width:34px; height:38px; border:1px solid var(--border); background:var(--panel-soft); color:var(--text);
+               border-radius:var(--radius-sm); font-size:18px; font-family:var(--font-mono); cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.step button:active { background:var(--panel); }
 
-/* ── Add exercise panel ──────────────────────────────────────── */
-.add-section {
-    margin-top: 16px; padding: 12px; background: var(--panel); border: 1px solid var(--border);
-    border-radius: var(--radius-md);
+/* The big ✓ log button */
+.log-tick {
+    width:100%; background:var(--accent); color:var(--bg); border:none; border-radius:var(--radius-md);
+    font-family:var(--font-mono); font-size:15px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+    padding:15px; cursor:pointer; -webkit-tap-highlight-color:transparent; transition:background .15s, transform .06s;
+    display:flex; align-items:center; justify-content:center; gap:8px;
 }
-.add-toggle {
-    background: none; border: none; color: var(--accent); cursor: pointer;
-    font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding: 0;
-}
-.add-form { display: none; margin-top: 10px; }
-.add-form.open { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.log-tick:active { transform:scale(.99); }
+.log-tick.saving { opacity:.7; }
+.log-tick.failed { background:var(--red); }
+.log-tick.saved  { background:var(--green); }
 
-/* ── Info sheet ──────────────────────────────────────────────── */
-.info-sheet {
-    display: none; position: fixed; inset: 0; z-index: 200;
-    background: rgba(0,0,0,.6); align-items: flex-end; justify-content: center;
-}
-.info-sheet.open { display: flex; }
-.info-panel {
-    background: var(--panel); border-radius: var(--radius-md) var(--radius-md) 0 0;
-    padding: 20px; width: 100%; max-width: 500px; max-height: 60vh; overflow-y: auto;
-}
-.info-panel-title { font-family: var(--font-mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
-.info-panel-close { position: absolute; top: 12px; right: 16px; background: none; border: none; color: var(--dim); font-size: 18px; cursor: pointer; }
-.info-ex-list { display: flex; flex-direction: column; gap: 6px; }
-.info-ex { font-family: var(--font-sans); font-size: 12px; color: var(--text); display: flex; gap: 8px; align-items: baseline; }
-.info-ex-fn { font-family: var(--font-mono); font-size: 9px; color: var(--dim); text-transform: uppercase; }
+.done-next { width:100%; margin-top:10px; background:var(--panel-soft); border:1px solid var(--border);
+             color:var(--text); font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+             padding:11px; border-radius:var(--radius-sm); cursor:pointer; }
 
-/* ── Responsive ──────────────────────────────────────────────── */
-@media (min-width: 640px) {
-    .groups-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .groups-grid .g-group { margin-bottom: 0; }
+/* This-exercise set list inside the sheet */
+.sheet-sets { margin-bottom:14px; }
+.sheet-sets .set-chip .undo { color:var(--red); text-decoration:underline; cursor:pointer; margin-left:3px; }
+
+/* ── Duration timer (time / weight_time) ─────────────────────────────────── */
+.dur-modes { display:flex; gap:8px; margin-bottom:12px; }
+.dur-mode { flex:1; text-align:center; font-family:var(--font-mono); font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+            color:var(--dim); border:1px solid var(--border); border-radius:var(--radius-sm); padding:9px; cursor:pointer; }
+.dur-mode.active { color:var(--accent); border-color:var(--accent); font-weight:700; }
+.dur-display { font-family:var(--font-mono); font-size:44px; font-weight:700; text-align:center; color:var(--text-strong);
+               font-variant-numeric:tabular-nums; margin:6px 0 12px; }
+.dur-display.fire { color:var(--red); animation:durFire .5s ease-in-out 3; }
+@keyframes durFire { 0%,100%{opacity:1} 50%{opacity:.25} }
+.dur-target-row { display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:12px; }
+.dur-target-row input { width:84px; text-align:center; background:var(--panel-soft); border:1px solid var(--border);
+                        border-radius:var(--radius-sm); color:var(--text); font-family:var(--font-mono); font-size:16px; padding:8px; }
+.dur-controls { display:flex; gap:10px; margin-bottom:14px; }
+.dur-controls button { flex:1; font-family:var(--font-mono); font-size:13px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+                       padding:13px; border-radius:var(--radius-sm); border:none; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.dur-start { background:var(--green); color:var(--bg); }
+.dur-stop  { background:var(--red); color:var(--bg); }
+.hidden { display:none !important; }
+
+/* Toast */
+.toast { position:fixed; left:50%; bottom:calc(var(--nav-h) + 20px); transform:translateX(-50%); z-index:300;
+         background:var(--red); color:#fff; font-family:var(--font-mono); font-size:12px; padding:10px 16px; border-radius:var(--radius-sm);
+         opacity:0; pointer-events:none; transition:opacity .2s; }
+.toast.on { opacity:1; }
+
+.manage-link { margin:6px 0 4px; text-align:center; }
+.manage-link a { font-family:var(--font-mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim);
+                 text-decoration:none; border:1px solid var(--border); border-radius:var(--radius-pill); padding:8px 16px; display:inline-block; }
+
+/* ── Fa Jin recommendation popup ─────────────────────────────────────────── */
+.fajin-cta {
+    display:inline-flex; align-items:center; gap:6px; margin-left:auto;
+    background:var(--panel); border:1px solid #d48a3a; border-radius:var(--radius-pill);
+    color:#d48a3a; font-family:var(--font-mono); font-size:9px; font-weight:700;
+    letter-spacing:.1em; text-transform:uppercase; padding:5px 11px; cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
 }
-</style>
+.fajin-cta:active { opacity:.8; }
+.fajin-cta .fj-dot { width:6px; height:6px; border-radius:50%; background:#d48a3a; }
+.fajin-cta.hidden { display:none; }
+
+/* Fa Jin sheet reuses .sheet / .sheet-panel; T4 amber accent + queue meta */
+.fajin-panel { border-top:3px solid #d48a3a; }
+.fajin-kicker { font-family:var(--font-mono); font-size:9px; letter-spacing:.14em; text-transform:uppercase;
+                color:#d48a3a; margin-bottom:4px; }
+.fajin-name { font-family:var(--font-sans); font-size:19px; font-weight:600; color:var(--text-strong); margin-bottom:4px; }
+.fajin-pairs { font-family:var(--font-mono); font-size:10px; color:var(--dim); margin-bottom:14px; }
+.fajin-q { font-family:var(--font-mono); font-size:9px; color:var(--dimmer); margin-left:8px; }
+.fajin-actions { display:flex; gap:10px; align-items:center; margin-top:6px; }
+.fajin-log { flex:1; background:#d48a3a; color:#fff; border:none; border-radius:var(--radius-sm);
+             font-family:var(--font-mono); font-size:12px; font-weight:700; letter-spacing:.04em;
+             padding:13px; min-height:48px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.fajin-log:active { opacity:.85; }
+.fajin-skip { background:none; border:1px solid var(--border); border-radius:var(--radius-sm);
+              color:var(--dim); font-family:var(--font-mono); font-size:11px; letter-spacing:.06em;
+              text-transform:uppercase; padding:13px 16px; min-height:48px; cursor:pointer;
+              -webkit-tap-highlight-color:transparent; }
+.fajin-skip:active { opacity:.8; }
+.fajin-list-item { display:flex; align-items:center; gap:8px; padding:11px 0; border-bottom:1px solid var(--border);
+                   cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.fajin-list-item:last-child { border-bottom:none; }
+.fajin-list-item .fli-name { font-family:var(--font-sans); font-size:14px; color:var(--text-strong); }
+.fajin-list-item .fli-meta { font-family:var(--font-mono); font-size:9px; color:var(--dim); margin-left:auto; text-transform:uppercase; }
+    
+    </style>
 {% endblock %}
 
 {% block content %}
-<div class="train-header">
-    <div class="train-title">Train</div>
-    <span class="train-count">{{ total_enabled }} exercises</span>
+<div class="lw-header">
+    <div class="lw-title">Train</div>
+    <span class="lw-sub" id="lw-status">—</span>
+    <button type="button" class="fajin-cta hidden" id="fajin-cta" onclick="openFajinList()">
+        <span class="fj-dot"></span> Fa Jin</button>
 </div>
 
-<!-- Tier filter pills -->
-<div class="tier-pills">
-    <span class="tier-pill active" data-tier="all">All</span>
-    <span class="tier-pill" data-tier="1">T1</span>
-    <span class="tier-pill" data-tier="2">T2</span>
-    <span class="tier-pill" data-tier="3">T3</span>
-    <span class="tier-pill" data-tier="4">Fa Jin</span>
+<!-- Sticky rest timer -->
+<div class="rest-bar" id="rest-bar">
+    <span class="rest-dot"></span>
+    <span class="rest-label">Rest</span>
+    <span class="rest-time" id="rest-time">0:00</span>
 </div>
 
-<!-- Groups grid -->
-<div class="groups-grid">
-{% for group in groups %}
-<div class="g-group" data-group="{{ group.key }}">
-    <button type="button" class="g-head" onclick="toggleGroup(event, this)">
-        <span class="g-stripe"></span>
-        <span class="g-title">{{ group.label }}</span>
-        <span class="g-count">{{ group.exercises | length }}</span>
-        <button type="button" class="g-info-btn" onclick="event.stopPropagation(); showInfo('{{ group.key }}', '{{ group.label }}')" title="Info">?</button>
-        <span class="g-chev">›</span>
-    </button>
-    <div class="g-body">
-        {% set ns = namespace(last_fn='__none__') %}
-        {% for ex in group.exercises %}
-            {% if ex.function and ex.function != ns.last_fn %}
-                <div class="fn-label">{{ ex.function }}</div>
-                {% set ns.last_fn = ex.function %}
-            {% elif not ex.function and ns.last_fn != '__none_nofn__' %}
-                {% if ns.last_fn != '__none__' %}
-                    <div class="fn-label">—</div>
-                {% endif %}
-                {% set ns.last_fn = '__none_nofn__' %}
-            {% endif %}
-            <div class="ex-row{% if not ex.is_enabled %} disabled{% endif %}" data-tier="{{ ex.tier }}" data-id="{{ ex.id }}">
-                <div class="ex-main">
-                    <span class="ex-name">{{ ex.name }}{% if not ex.is_enabled %} <span class="ex-disabled-tag">off</span>{% endif %}</span>
-                    <div class="ex-meta">
-                        <span class="ex-tier-badge t{{ ex.tier }}">T{{ ex.tier }}</span>
-                        {% if ex.suggestion and ex.suggestion.action != 'start' %}
-                            <span class="ex-suggestion{% if ex.suggestion.action in ('weight_up', 'reps_up') %} up{% endif %}">{{ ex.suggestion.message }}</span>
-                        {% endif %}
-                    </div>
-                </div>
-                <div class="ex-weight{% if not ex.weight_kg %} none{% endif %}">
-                    {% if ex.weight_kg %}{{ ex.weight_kg | int if ex.weight_kg == ex.weight_kg | int else ex.weight_kg }}kg{% else %}—{% endif %}
-                </div>
-                <button type="button" class="ex-edit-btn" onclick="toggleEdit({{ ex.id }})" title="Edit">✎</button>
-            </div>
-            <div class="ex-edit-panel" id="edit-{{ ex.id }}">
-                <div class="edit-form">
-                    <div class="edit-field"><label>Tier</label>
-                        <select id="ed-tier-{{ ex.id }}">
-                            <option value="1"{% if ex.tier == 1 %} selected{% endif %}>T1</option>
-                            <option value="2"{% if ex.tier == 2 %} selected{% endif %}>T2</option>
-                            <option value="3"{% if ex.tier == 3 %} selected{% endif %}>T3</option>
-                            <option value="4"{% if ex.tier == 4 %} selected{% endif %}>T4</option>
-                            <option value="5"{% if ex.tier == 5 %} selected{% endif %}>T5</option>
-                        </select></div>
-                    <div class="edit-field"><label>Muscle</label>
-                        <select id="ed-muscle-{{ ex.id }}">
-                            {% for mg in muscle_groups %}
-                            <option value="{{ mg }}"{% if ex.muscle_group == mg %} selected{% endif %}>{{ mg }}</option>
-                            {% endfor %}
-                        </select></div>
-                    <div class="edit-field"><label>Function</label>
-                        <input type="text" id="ed-fn-{{ ex.id }}" value="{{ ex.function or '' }}" placeholder="e.g. press" style="width:80px"></div>
-                    <div class="edit-field"><label>Notes</label>
-                        <input type="text" id="ed-notes-{{ ex.id }}" value="{{ ex.notes or '' }}" placeholder="optional" style="width:120px"></div>
-                    <button type="button" class="edit-save" onclick="saveEdit({{ ex.id }})">Save</button>
-                    <button type="button" class="edit-toggle-btn" onclick="toggleEnabled({{ ex.id }}, {{ 'false' if ex.is_enabled else 'true' }})">
-                        {{ 'Disable' if ex.is_enabled else 'Enable' }}
-                    </button>
-                </div>
-            </div>
-        {% endfor %}
-    </div>
-</div>
-{% endfor %}
+<!-- Empty state: muscle picker (shown when no sets today) -->
+<div class="empty-wrap hidden" id="empty-state">
+    <div class="empty-kicker">No sets yet today</div>
+    <div class="empty-lead">Pick a muscle to begin.</div>
+    <div class="picker-grid" id="empty-picker"></div>
 </div>
 
-<!-- Add exercise -->
-<div class="add-section">
-    <button type="button" class="add-toggle" onclick="document.getElementById('add-form').classList.toggle('open')">＋ Add exercise</button>
-    <div class="add-form" id="add-form">
-        <div class="edit-field"><label>Name</label><input type="text" id="add-name" placeholder="e.g. Cable Fly" style="width:150px"></div>
-        <div class="edit-field"><label>Tier</label>
-            <select id="add-tier">
-                <option value="1">T1</option><option value="2" selected>T2</option>
-                <option value="3">T3</option><option value="4">T4</option><option value="5">T5</option>
-            </select></div>
-        <div class="edit-field"><label>Muscle</label>
-            <select id="add-muscle">
-                {% for mg in muscle_groups %}<option value="{{ mg }}">{{ mg }}</option>{% endfor %}
-            </select></div>
-        <div class="edit-field"><label>Function</label><input type="text" id="add-fn" placeholder="optional" style="width:80px"></div>
-        <button type="button" class="edit-save" onclick="addExercise()">Add</button>
-    </div>
+<!-- Live workout: rendered muscle sections -->
+<div id="live-root"></div>
+
+<div class="add-muscle hidden" id="add-muscle-wrap">
+    <button type="button" onclick="openMusclePicker()">+ Add muscle group</button>
 </div>
 
-<!-- Info sheet (bottom sheet) -->
-<div class="info-sheet" id="info-sheet" onclick="if(event.target===this)closeInfo()">
-    <div class="info-panel">
-        <div class="info-panel-title" id="info-title"></div>
-        <div class="info-ex-list" id="info-list"></div>
-    </div>
+<!-- Constant strips: arms / core / shoulders — standing goals, always shown -->
+<div id="constant-root"></div>
+
+<div class="manage-link"><a href="/exercise-db">Manage databank →</a></div>
+
+<!-- Exercise logger sheet -->
+<div class="sheet" id="ex-sheet" onclick="if(event.target===this)closeSheet()">
+  <div class="sheet-panel" id="ex-panel"></div>
 </div>
+
+<!-- Muscle picker sheet (add mid-session) -->
+<div class="sheet" id="mp-sheet" onclick="if(event.target===this)closeMusclePicker()">
+  <div class="sheet-panel">
+    <div class="sheet-h"><span class="sheet-title">Add a muscle</span>
+      <button class="sheet-close" onclick="closeMusclePicker()">✕</button></div>
+    <div class="sheet-sub">Add another muscle group to this session</div>
+    <div class="picker-grid" id="mp-grid"></div>
+  </div>
+</div>
+
+<!-- Fa Jin recommendation sheet (contextual, queued, dismissible) -->
+<div class="sheet" id="fajin-sheet" onclick="if(event.target===this)closeFajin()">
+  <div class="sheet-panel fajin-panel" id="fajin-panel"></div>
+</div>
+
+<div class="toast" id="toast"></div>
 
 <script>
-function toggleGroup(event, btn) {
-    // Don't toggle if clicking the info button
-    if (event.target.closest('.g-info-btn')) return;
-    btn.closest('.g-group').classList.toggle('open');
+// ── Server-provided data ──────────────────────────────────────────────────
+const BANK = {{ bank | tojson }};                 // muscle -> function -> exercises
+let LIVE   = {{ live | tojson }};                  // today's rehydrated session
+const TAXONOMY = {{ taxonomy | tojson }};          // {primary:[...], constant:[...]}
+const FAJIN = {{ fajin | tojson }};                // tier-4, recommended contextually
+const PRIMARY  = new Set(TAXONOMY.primary);        // selectable day-drivers
+const CONSTANT = new Set(TAXONOMY.constant);       // always-on standing strips
+const MG_COLORS = {chest:'#e07a7a',shoulders:'#d4a574',back:'#6b93c9',legs:'#7fb069',
+                   core:'#a785c2',arms:'#6bb0a8',stability:'#8a8a8a',muay_thai:'#d1495b'};
+
+// Muscles the user has added this session (persisted set = derived from LIVE;
+// plus any picked-but-empty muscle held client-side until its first set lands).
+let activeMuscles = [];      // ordered list of muscle keys shown as sections
+let openExerciseId = null;   // exercise currently open in the sheet
+
+// ── CSRF-aware POST (matches existing app convention) ─────────────────────
+async function apiPost(url, body) {
+    const res = await fetch(url, {
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-CSRF-Token':window._csrf},
+        body:JSON.stringify(body||{})
+    });
+    let data={}; try { data=await res.json(); } catch(e){}
+    return { ok:res.ok, data };
+}
+async function apiGet(url){ const r=await fetch(url); let d={}; try{d=await r.json();}catch(e){} return {ok:r.ok,data:d}; }
+
+function bankMuscle(key){ return BANK.find(m=>m.key===key); }
+function mgLabel(key){ const m=bankMuscle(key); return m?m.label:(key||'Other'); }
+function fmtWeight(w){ if(w===null||w===undefined) return null; return (w%1===0)?String(w|0):String(w); }
+
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('on');
+    clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('on'),2600); }
+
+// ── Rest timer (count-up, ephemeral, never persisted) ─────────────────────
+let restStart=null, restTick=null;
+function startRest(){
+    restStart=Date.now();
+    document.getElementById('rest-bar').classList.add('on');
+    clearInterval(restTick);
+    renderRest();
+    restTick=setInterval(renderRest,250);
+}
+function renderRest(){
+    if(!restStart) return;
+    const s=Math.floor((Date.now()-restStart)/1000);
+    const m=Math.floor(s/60), ss=String(s%60).padStart(2,'0');
+    document.getElementById('rest-time').textContent = m+':'+ss;
+}
+// Rest bar is ephemeral: on refresh it resets (never restored) — per spec.
+
+// ── Derive active muscles from LIVE, keep any client-added empty muscles ──
+function syncActiveMuscles(){
+    // Day-driver sections = PRIMARY muscles only. Constant muscles (arms/core/
+    // shoulders) render as always-on strips, never as day-drivers, so we filter
+    // them out here even if sets were logged against them.
+    const fromLive = LIVE.muscles.map(m=>m.key).filter(k=>!CONSTANT.has(k));
+    const merged = [...fromLive];
+    activeMuscles.forEach(k=>{ if(!merged.includes(k) && !CONSTANT.has(k)) merged.push(k); });
+    activeMuscles = merged;
 }
 
-// Tier filtering
-document.querySelectorAll('.tier-pill').forEach(pill => {
-    pill.addEventListener('click', () => {
-        document.querySelectorAll('.tier-pill').forEach(p => p.classList.remove('active'));
-        pill.classList.add('active');
-        const tier = pill.dataset.tier;
-        document.querySelectorAll('.ex-row').forEach(row => {
-            row.style.display = (tier === 'all' || row.dataset.tier === tier) ? '' : 'none';
+// ── Render ────────────────────────────────────────────────────────────────
+function render(){
+    syncActiveMuscles();
+    const hasAny = activeMuscles.length>0;
+    document.getElementById('empty-state').classList.toggle('hidden', hasAny);
+    document.getElementById('add-muscle-wrap').classList.toggle('hidden', !hasAny);
+
+    // status line
+    const totalSets = LIVE.sets.length;
+    document.getElementById('lw-status').textContent =
+        hasAny ? (totalSets+' set'+(totalSets===1?'':'s')+' · '+activeMuscles.length+' muscle'+(activeMuscles.length===1?'':'s'))
+               : '—';
+
+    renderConstantStrips();   // arms/core/shoulders — always shown, every session
+
+    if(!hasAny){ renderEmptyPicker(); document.getElementById('live-root').innerHTML=''; return; }
+
+    const root=document.getElementById('live-root');
+    root.innerHTML = activeMuscles.map(k=>renderMuscle(k)).join('');
+}
+
+function renderEmptyPicker(){
+    const grid=document.getElementById('empty-picker');
+    // Only PRIMARY muscles (chest/back/legs) are selectable as the day's muscle.
+    grid.innerHTML = BANK.filter(m=>PRIMARY.has(m.key)).map(m=>pickerBtn(m,'pickMuscle')).join('');
+}
+function pickerBtn(m, fn){
+    const nEx = m.functions.reduce((a,f)=>a+f.exercises.length,0);
+    return `<button class="picker-btn mg" data-m="${m.key}" style="--g:${MG_COLORS[m.key]||'var(--accent)'}" onclick="${fn}('${m.key}')">
+        <span class="pk-name">${m.label}</span>
+        <span class="pk-meta">${m.functions.length} functions · ${nEx} exercises</span></button>`;
+}
+
+function liveMuscle(key){ return LIVE.muscles.find(m=>m.key===key); }
+
+function renderMuscle(key, opts){
+    opts = opts || {};
+    const isConstant = !!opts.isConstant;
+    const bank=bankMuscle(key); if(!bank) return '';
+    const lm=liveMuscle(key);
+    const color=MG_COLORS[key]||'var(--accent)';
+    const sets = lm? lm.sets : [];
+
+    // Checklist: use live checklist if present, else all functions unticked.
+    const checklist = lm ? lm.checklist
+        : bank.functions.map(f=>({key:f.key,label:f.label,done:false}));
+    const doneCount = checklist.filter(c=>c.done).length;
+
+    // Workout-so-far grouped by exercise
+    const byEx={}; sets.forEach(s=>{ (byEx[s.exercise_id]=byEx[s.exercise_id]||[]).push(s); });
+    let sofar='';
+    Object.keys(byEx).forEach(eid=>{
+        const arr=byEx[eid];
+        const chips=arr.map((s,i)=>`<span class="set-chip"><span class="n">${i+1}</span> ${setLabel(s)}</span>`).join('');
+        sofar+=`<div class="sofar-ex"><div class="sofar-ex-name">${arr[0].exercise_name}</div>${chips}</div>`;
+    });
+
+    // Exercise list (grouped by function), with today's count per exercise
+    let list='';
+    bank.functions.forEach(f=>{
+        list+=`<div class="fn-hd">${f.label}</div>`;
+        f.exercises.forEach(e=>{
+            const cnt=(byEx[e.id]||[]).length;
+            list+=`<div class="ex-row" onclick="openExercise(${e.id})">
+                <span class="exn">${e.name}</span>
+                <span class="exc ${cnt?'':'zero'}">${cnt||''}</span>
+                <span class="ex-open">›</span></div>`;
         });
-        document.querySelectorAll('.g-group').forEach(g => {
-            const visible = g.querySelectorAll('.ex-row:not([style*="display: none"])').length;
-            g.style.display = visible > 0 ? '' : 'none';
-            g.querySelector('.g-count').textContent = visible;
-        });
     });
-});
 
-// Edit
-function toggleEdit(id) {
-    document.getElementById('edit-' + id).classList.toggle('open');
-}
+    const chkHtml = checklist.map(c=>
+        `<span class="chk ${c.done?'done':''}"><span class="box"></span>${c.label}</span>`).join('');
 
-async function saveEdit(id) {
-    const data = {
-        tier: parseInt(document.getElementById('ed-tier-' + id).value),
-        muscle_group: document.getElementById('ed-muscle-' + id).value,
-        function: document.getElementById('ed-fn-' + id).value.trim() || null,
-        notes: document.getElementById('ed-notes-' + id).value.trim() || null,
-    };
-    const res = await fetch('/api/gym/exercise/' + id, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-    });
-    if (res.ok) location.reload();
-    else alert('Save failed');
-}
-
-async function toggleEnabled(id, enabled) {
-    await fetch('/api/gym/exercise/' + id + '/toggle', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled })
-    });
-    location.reload();
-}
-
-// Add
-async function addExercise() {
-    const data = {
-        name: document.getElementById('add-name').value.trim(),
-        tier: parseInt(document.getElementById('add-tier').value),
-        muscle_group: document.getElementById('add-muscle').value,
-        function: document.getElementById('add-fn').value.trim() || null,
-    };
-    if (!data.name) { document.getElementById('add-name').focus(); return; }
-    const res = await fetch('/api/gym/exercise/add', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-    });
-    if (res.ok) location.reload();
-    else { const d = await res.json(); alert(d.error || 'Add failed'); }
-}
-
-// Info sheet
-const GROUPS = {{ groups | tojson }};
-function showInfo(key, label) {
-    const group = GROUPS.find(g => g.key === key);
-    if (!group) return;
-    document.getElementById('info-title').textContent = label;
-    const list = document.getElementById('info-list');
-    // Group by function
-    const byFn = {};
-    group.exercises.forEach(e => {
-        const fn = e.function || '(general)';
-        if (!byFn[fn]) byFn[fn] = [];
-        byFn[fn].push(e);
-    });
-    let html = '';
-    for (const [fn, exs] of Object.entries(byFn)) {
-        html += '<div class="info-ex-fn">' + fn + '</div>';
-        exs.forEach(e => {
-            html += '<div class="info-ex"><span>T' + e.tier + '</span> <span>' + e.name + '</span>';
-            if (e.notes) html += ' <span style="color:var(--dimmer);font-size:10px">— ' + e.notes + '</span>';
-            html += '</div>';
-        });
+    const badge = isConstant ? `<span class="const-badge">Always</span>` : '';
+    // Standing goals: header is a tap target that expands .const-body; the pills
+    // (.checklist) stay visible when collapsed. Primaries render as before.
+    if (isConstant) {
+        const head = `<div class="mg-head" onclick="toggleConst('${key}')"><span class="mg-stripe"></span>
+            <span class="mg-name">${bank.label}${badge}</span>
+            <span class="mg-count">${doneCount}/${checklist.length} functions</span>
+            <span class="const-chev">\u203a</span></div>`;
+        return `<section class="mg-sec mg constant" data-m="${key}" style="--g:${color}">
+            ${head}
+            <div class="checklist">${chkHtml}</div>
+            <div class="const-body">
+                ${sofar?`<div class="sofar">${sofar}</div>`:''}
+                <div class="ex-list">${list}</div>
+            </div>
+        </section>`;
     }
-    list.innerHTML = html;
-    document.getElementById('info-sheet').classList.add('open');
+    return `<section class="mg-sec mg" data-m="${key}" style="--g:${color}">
+        <div class="mg-head"><span class="mg-stripe"></span>
+            <span class="mg-name">${bank.label}${badge}</span>
+            <span class="mg-count">${doneCount}/${checklist.length} functions</span></div>
+        <div class="checklist">${chkHtml}</div>
+        ${sofar?`<div class="sofar">${sofar}</div>`:''}
+        <div class="ex-list">${list}</div>
+    </section>`;
 }
-function closeInfo() { document.getElementById('info-sheet').classList.remove('open'); }
+
+// Constant strips — arms/core/shoulders, always rendered every session. Same
+// renderer as a primary muscle (so ticking, workout-so-far and the exercise
+// list behave identically), just flagged constant for the standing-goal look.
+// Tick state derives from LIVE.muscles exactly like primaries -> rehydrate is
+// automatic. Only shows muscles that actually exist in the bank.
+// Open/closed state for the standing-goal strips. Lives in sessionStorage so it
+// survives the innerHTML rebuild on every render() (logging a set, auto-refresh)
+// AND so a save doesn't collapse what you just opened. Default = collapsed.
+const CONST_OPEN_KEY = 'train_const_open';
+function readConstOpen(){ try { return new Set(JSON.parse(sessionStorage.getItem(CONST_OPEN_KEY) || '[]')); } catch(e){ return new Set(); } }
+function writeConstOpen(set){ sessionStorage.setItem(CONST_OPEN_KEY, JSON.stringify([...set])); }
+function applyConstOpenState(){
+    const open = readConstOpen();
+    document.querySelectorAll('.mg-sec.constant').forEach(sec=>{
+        sec.classList.toggle('open', open.has(sec.dataset.m));
+    });
+}
+function toggleConst(key){
+    const open = readConstOpen();
+    if(open.has(key)) open.delete(key); else open.add(key);
+    writeConstOpen(open);
+    const sec = document.querySelector(`.mg-sec.constant[data-m="${key}"]`);
+    if(sec) sec.classList.toggle('open', open.has(key));
+}
+
+function renderConstantStrips(){
+    const root=document.getElementById('constant-root');
+    const keys = TAXONOMY.constant.filter(k=>bankMuscle(k));
+    if(!keys.length){ root.innerHTML=''; return; }
+    const strips = keys.map(k=>renderMuscle(k, {isConstant:true})).join('');
+    root.innerHTML =
+        `<div class="const-head"><span class="const-title">Standing goals</span>
+            <span class="const-hint">hit these every session</span></div>${strips}`;
+    // Re-apply remembered open state after the rebuild (collapsed by default).
+    applyConstOpenState();
+}
+
+function setLabel(s){
+    if(s.tracking_type==='cardio'){
+        const parts=[];
+        if(s.distance_m) parts.push(s.distance_m+'m');
+        if(s.duration_s) parts.push(fmtDur(s.duration_s));
+        if(s.setting) parts.push(s.setting);
+        return parts.join(' · ')||'logged';
+    }
+    if(s.tracking_type==='time') return (s.duration_s||0)+'s';
+    if(s.tracking_type==='weight_time') return (fmtWeight(s.weight_kg)||0)+'kg · '+(s.duration_s||0)+'s';
+    if(s.tracking_type==='reps') return (s.reps||0)+' reps';
+    const w=fmtWeight(s.weight_kg);
+    return (w?w+'kg × ':'')+(s.reps||0);
+}
+
+// ── Muscle picking ─────────────────────────────────────────────────────────
+function pickMuscle(key){ if(!activeMuscles.includes(key)) activeMuscles.push(key); render(); }
+function openMusclePicker(){
+    const grid=document.getElementById('mp-grid');
+    // Only PRIMARY muscles are addable; constant/loggable-only never appear here.
+    grid.innerHTML = BANK.filter(m=>PRIMARY.has(m.key) && !activeMuscles.includes(m.key))
+                         .map(m=>pickerBtn(m,'addMuscle')).join('')
+        || '<div class="lw-sub" style="grid-column:1/-1;text-align:center;padding:14px">All muscles added.</div>';
+    document.getElementById('mp-sheet').classList.add('on');
+}
+function closeMusclePicker(){ document.getElementById('mp-sheet').classList.remove('on'); }
+function addMuscle(key){ pickMuscle(key); closeMusclePicker(); }
+
+// ── Fa Jin recommendation (contextual, queued, dismissible) ────────────────
+// Fired when an exercise is SELECTED (openExercise), before any set is logged.
+// Recommends the Fa Jin that pairs with the selected muscle+function (exact
+// function match first, muscle-level fallback). Log reuses the normal logSet /
+// /api/gym/log-set path. Log or dismiss hides that Fa Jin for the rest of
+// today; a manual "Fa Jin" pill re-opens all Fa Jin, ignoring dismissal.
+const FJ_DISM_KEY = 'train_fajin_dismissed';
+function fjToday(){ return new Date().toISOString().slice(0,10); }
+function fjDismissed(){
+    try {
+        const raw = JSON.parse(sessionStorage.getItem(FJ_DISM_KEY) || '{}');
+        if(raw.date !== fjToday()) return new Set();      // stale -> self-reset
+        return new Set(raw.ids || []);
+    } catch(e){ return new Set(); }
+}
+function fjDismiss(id){
+    const set = fjDismissed(); set.add(id);
+    sessionStorage.setItem(FJ_DISM_KEY, JSON.stringify({date:fjToday(), ids:[...set]}));
+}
+// Fa Jin already logged in today's live session — don't nag to repeat.
+function fjLoggedToday(id){ return (LIVE.sets||[]).some(s=>s.exercise_id===id); }
+
+// Relevant Fa Jin for a muscle+function: exact function match first, then any
+// other Fa Jin for the same muscle. Excludes today-dismissed + already-logged.
+function fajinMatchesFor(muscle, fn){
+    const dism = fjDismissed();
+    const avail = FAJIN.filter(f=>f.muscle_group===muscle && !dism.has(f.id) && !fjLoggedToday(f.id));
+    const exact = avail.filter(f=>f.function===fn);
+    const rest  = avail.filter(f=>f.function!==fn);
+    return [...exact, ...rest];   // queue: best match first
+}
+
+let fjQueue = [];
+function maybeOfferFajin(ex){
+    if(!ex || ex.tier===4) return;               // never recommend a Fa Jin for a Fa Jin
+    const matches = fajinMatchesFor(ex.muscle_group || ex.muscle, ex.function);
+    updateFajinPill();
+    if(!matches.length) return;
+    fjQueue = matches;
+    renderFajinCard(fjQueue[0]);
+    document.getElementById('fajin-sheet').classList.add('on');
+}
+
+function renderFajinCard(f){
+    const remain = fjQueue.length>1 ? `<span class="fajin-q">${fjQueue.length-1} more</span>` : '';
+    const color = MG_COLORS[f.muscle_group] || '#d48a3a';
+    const tt = f.tracking_type || 'weight_reps';
+    const showWeight = (tt==='weight_reps' || tt==='weight_time');
+    const showReps   = (tt==='weight_reps' || tt==='reps');
+    const showDur    = (tt==='time' || tt==='weight_time');
+    let inputs = '<div class="ws-form">';
+    if(showWeight) inputs += `<div class="ws-field"><label>Weight (kg)</label>
+        <div class="step"><button onclick="bump('fj-w',-2.5)">−</button>
+        <input type="number" step="0.5" id="fj-w"><button onclick="bump('fj-w',2.5)">+</button></div></div>`;
+    if(showReps) inputs += `<div class="ws-field"><label>Reps</label>
+        <div class="step"><button onclick="bump('fj-r',-1)">−</button>
+        <input type="number" step="1" id="fj-r"><button onclick="bump('fj-r',1)">+</button></div></div>`;
+    if(showDur) inputs += `<div class="ws-field"><label>Duration (s)</label>
+        <div class="step"><button onclick="bump('fj-d',-5)">−</button>
+        <input type="number" step="5" id="fj-d"><button onclick="bump('fj-d',5)">+</button></div></div>`;
+    inputs += '</div>';
+    document.getElementById('fajin-panel').innerHTML =
+        `<div class="sheet-h"><span class="fajin-kicker">Fa Jin — recommended ${remain}</span>
+            <button class="sheet-close" onclick="closeFajin()">✕</button></div>
+         <div class="fajin-name" style="border-left:3px solid ${color};padding-left:8px">${f.name}</div>
+         <div class="fajin-pairs">pairs with your ${f.function_label||f.muscle_label} work</div>
+         ${inputs}
+         <div class="fajin-actions">
+            <button class="fajin-log" onclick="logFajin(${f.id},'${tt}')">✓ Log Fa Jin</button>
+            <button class="fajin-skip" onclick="skipFajin(${f.id})">Not now</button>
+         </div>`;
+}
+
+async function logFajin(id, tt){
+    const extra = {};
+    if(tt==='time' || tt==='weight_time'){ extra.duration_s = parseInt((document.getElementById('fj-d')||{}).value)||0;
+        if(extra.duration_s<=0){ toast('Enter a duration'); return; } }
+    const body = { exercise_id:id, successful:true };
+    if(tt==='weight_reps' || tt==='weight_time') body.weight_kg = parseFloat((document.getElementById('fj-w')||{}).value)||0;
+    if(tt==='weight_reps' || tt==='reps'){ body.reps = parseInt((document.getElementById('fj-r')||{}).value)||0;
+        if(body.reps<=0){ toast('Enter reps'); return; } }
+    if(extra.duration_s!=null) body.duration_s = extra.duration_s;
+    const r = await apiPost('/api/gym/log-set', body);
+    if(r.ok && r.data.ok){
+        LIVE = r.data.workout_so_far;
+        fjDismiss(id);            // logged -> don't re-offer today
+        toast('Fa Jin logged');
+        render();
+        advanceFajin(id);
+    } else { toast('Save failed — tap again'); }
+}
+
+function skipFajin(id){ fjDismiss(id); advanceFajin(id); }
+
+function advanceFajin(id){
+    fjQueue = fjQueue.filter(f=>f.id!==id);
+    if(fjQueue.length){ renderFajinCard(fjQueue[0]); }
+    else { closeFajin(); }
+    updateFajinPill();
+}
+
+function closeFajin(){ document.getElementById('fajin-sheet').classList.remove('on'); }
+
+// Manual entry: show ALL enabled Fa Jin, ignoring today's dismissal.
+function openFajinList(){
+    if(!FAJIN.length){ toast('No Fa Jin in the bank'); return; }
+    const rows = FAJIN.map(f=>{
+        const color = MG_COLORS[f.muscle_group] || '#d48a3a';
+        return `<div class="fajin-list-item" onclick="openFajinFromList(${f.id})">
+            <span style="width:4px;height:16px;border-radius:2px;background:${color};display:inline-block"></span>
+            <span class="fli-name">${f.name}</span>
+            <span class="fli-meta">${f.muscle_label} · ${f.function_label||''}</span></div>`;
+    }).join('');
+    document.getElementById('fajin-panel').innerHTML =
+        `<div class="sheet-h"><span class="fajin-kicker">Fa Jin</span>
+            <button class="sheet-close" onclick="closeFajin()">✕</button></div>
+         <div class="fajin-pairs">Tap one to log it now</div>${rows}`;
+    document.getElementById('fajin-sheet').classList.add('on');
+}
+function openFajinFromList(id){
+    const f = FAJIN.find(x=>x.id===id); if(!f) return;
+    fjQueue = [f];
+    renderFajinCard(f);
+}
+// The manual pill is always available as long as there's any Fa Jin in the bank.
+function updateFajinPill(){
+    const cta = document.getElementById('fajin-cta');
+    if(cta) cta.classList.toggle('hidden', !FAJIN.length);
+}
+
+// ── Exercise logger sheet ────────────────────────────────────────────────
+function findExercise(id){
+    for(const m of BANK) for(const f of m.functions){
+        const e=f.exercises.find(x=>x.id===id); if(e) return {...e, muscle:m.key, muscle_label:m.label};
+    } return null;
+}
+
+async function openExercise(id){
+    openExerciseId=id;
+    const ex=findExercise(id); if(!ex) return;
+    const panel=document.getElementById('ex-panel');
+    panel.innerHTML=`<div class="sheet-h"><span class="sheet-title">${ex.name}</span>
+        <button class="sheet-close" onclick="closeSheet()">✕</button></div>
+        <div class="sheet-sub">Loading…</div>`;
+    document.getElementById('ex-sheet').classList.add('on');
+
+    const r=await apiGet('/api/gym/exercise/'+id+'/prefill');
+    const tt = r.ok ? r.data.tracking_type : ex.tracking_type;
+    const mr = r.ok ? r.data.most_recent : null;
+    const best = r.ok ? r.data.best_recent : null;
+    renderExerciseSheet(ex, tt, mr, best);
+    // Trigger point (§ selection-time): a T1-T3 exercise was just selected.
+    // Offer the Fa Jin that pairs with its muscle+function, if any remain for
+    // today. Fired on selection, BEFORE any set is logged.
+    maybeOfferFajin(ex);
+}
+
+function refLabel(row, tt){
+    if(!row) return 'none';
+    if(tt==='cardio'){
+        const parts=[];
+        if(row.distance_m) parts.push(row.distance_m+'m');
+        if(row.duration_s) parts.push(fmtDur(row.duration_s));
+        if(row.setting) parts.push(row.setting);
+        return parts.join(' · ')||'none';
+    }
+    if(tt==='time') return (row.duration_s||0)+'s';
+    if(tt==='weight_time') return (fmtWeight(row.weight_kg)||0)+'kg · '+(row.duration_s||0)+'s';
+    if(tt==='reps') return (row.reps||0)+' reps';
+    const w=fmtWeight(row.weight_kg); return (w?w+'kg × ':'')+(row.reps||0)+' reps';
+}
+
+function renderExerciseSheet(ex, tt, mr, best){
+    const cardio = (tt==='cardio');
+    const timed = (tt==='time' || tt==='weight_time');
+    const showWeight = (tt==='weight_reps' || tt==='weight_time');
+    const showReps = (tt==='weight_reps' || tt==='reps');
+    // Cardio field spec lives on the exercise's engagement blob:
+    //   {duration:true, setting:true, distance:'m'}  (distance = Rowing only)
+    const cspec = (ex && ex.engagement) || {};
+    const showDistance = cardio && !!cspec.distance;
+
+    const ref = `<div class="ref-row">
+        <div class="ref-card"><div class="ref-k">Most recent</div>
+            <div class="ref-v ${mr?'':'dim'}">${refLabel(mr,tt)}</div></div>
+        <div class="ref-card"><div class="ref-k">Best recent</div>
+            <div class="ref-v ${best?'':'dim'}">${refLabel(best,tt)}</div></div></div>`;
+
+    // this-session sets for this exercise
+    const mine = LIVE.sets.filter(s=>s.exercise_id===ex.id);
+    const mineHtml = mine.length ? `<div class="sheet-sets">${
+        mine.map((s,i)=>`<span class="set-chip"><span class="n">${i+1}</span> ${setLabel(s)}</span>`).join('')
+    }<span class="set-chip">${mine.length} logged <span class="undo" onclick="undoSet(${ex.id})">undo</span></span></div>` : '';
+
+    let body='';
+    if(cardio){
+        const setVal = mr && mr.setting!=null ? mr.setting : '';
+        const distVal = mr && mr.distance_m!=null ? mr.distance_m : '';
+        body = `
+        <div class="dur-modes">
+            <div class="dur-mode active" id="mode-endure" onclick="setDurMode('endure')">Endure ▲</div>
+            <div class="dur-mode" id="mode-target" onclick="setDurMode('target')">Target ▼</div>
+        </div>
+        <div class="dur-target-row hidden" id="target-row">
+            <span class="lw-sub">Target</span>
+            <input type="number" id="dur-target" value="600"><span class="lw-sub">sec</span>
+        </div>
+        <div class="dur-display" id="dur-display">0:00</div>
+        <div class="dur-controls">
+            <button class="dur-start" id="dur-start" onclick="durStart()">Start</button>
+            <button class="dur-stop hidden" id="dur-stop" onclick="durStop('${ex.id}','${tt}')">Stop</button>
+        </div>
+        <div class="ws-form">
+            ${showDistance?`<div class="ws-field"><label>Distance (m)</label>
+                <div class="step"><button onclick="bump('ws-dist',-100)">−</button>
+                <input type="number" step="50" id="ws-dist" value="${distVal}"><button onclick="bump('ws-dist',100)">+</button></div></div>`:''}
+            <div class="ws-field"><label>Setting</label>
+                <input type="text" id="ws-setting" placeholder="e.g. Level 8" value="${setVal}"></div>
+        </div>
+        <button class="log-tick" id="log-tick" onclick="logCardioManual('${ex.id}')">✓ Log without timer</button>`;
+    } else if(!timed){
+        const wVal = mr && mr.weight_kg!=null ? fmtWeight(mr.weight_kg) : '';
+        const rVal = mr && mr.reps!=null ? mr.reps : '';
+        body = `<div class="ws-form">
+            ${showWeight?`<div class="ws-field"><label>Weight (kg)</label>
+                <div class="step"><button onclick="bump('ws-w',-2.5)">−</button>
+                <input type="number" step="0.5" id="ws-w" value="${wVal}"><button onclick="bump('ws-w',2.5)">+</button></div></div>`:''}
+            ${showReps?`<div class="ws-field"><label>Reps</label>
+                <div class="step"><button onclick="bump('ws-r',-1)">−</button>
+                <input type="number" step="1" id="ws-r" value="${rVal}"><button onclick="bump('ws-r',1)">+</button></div></div>`:''}
+        </div>
+        <button class="log-tick" id="log-tick" onclick="logSet(${ex.id},'${tt}')">✓ Log set</button>`;
+    } else {
+        // Duration timer UI
+        body = `
+        <div class="dur-modes">
+            <div class="dur-mode active" id="mode-endure" onclick="setDurMode('endure')">Endure ▲</div>
+            <div class="dur-mode" id="mode-target" onclick="setDurMode('target')">Target ▼</div>
+        </div>
+        <div class="dur-target-row hidden" id="target-row">
+            <span class="lw-sub">Target</span>
+            <input type="number" id="dur-target" value="60"><span class="lw-sub">sec</span>
+        </div>
+        <div class="dur-display" id="dur-display">0:00</div>
+        <div class="dur-controls">
+            <button class="dur-start" id="dur-start" onclick="durStart()">Start</button>
+            <button class="dur-stop hidden" id="dur-stop" onclick="durStop('${ex.id}','${tt}')">Stop</button>
+        </div>
+        ${showWeight?`<div class="ws-form"><div class="ws-field"><label>Weight (kg)</label>
+            <div class="step"><button onclick="bump('ws-w',-2.5)">−</button>
+            <input type="number" step="0.5" id="ws-w" value="${best&&best.weight_kg!=null?fmtWeight(best.weight_kg):''}">
+            <button onclick="bump('ws-w',2.5)">+</button></div></div></div>`:''}
+        <button class="log-tick" id="log-tick" onclick="logTimedManual(${ex.id},'${tt}')">✓ Log without timer</button>`;
+    }
+
+    document.getElementById('ex-panel').innerHTML =
+        `<div class="sheet-h"><span class="sheet-title">${ex.name}</span>
+            <button class="sheet-close" onclick="closeSheet()">✕</button></div>
+         <div class="sheet-sub">${ex.muscle_label} · ${ex.function_label||''} · T${ex.tier}</div>
+         ${ref}${mineHtml}${body}
+         <button class="done-next" onclick="closeSheet()">Done / Next →</button>`;
+}
+
+function bump(id,delta){ const el=document.getElementById(id); let v=parseFloat(el.value)||0; v=Math.max(0,Math.round((v+delta)*100)/100); el.value=(id==='ws-r')?Math.round(v):v; }
+function closeSheet(){ document.getElementById('ex-sheet').classList.remove('on'); durReset(); openExerciseId=null; }
+
+// ── Duration timer logic ───────────────────────────────────────────────────
+let durMode='endure', durT0=null, durTick=null, durTargetFired=false;
+function setDurMode(m){ durMode=m; durReset();
+    document.getElementById('mode-endure').classList.toggle('active',m==='endure');
+    document.getElementById('mode-target').classList.toggle('active',m==='target');
+    // show target row only in target mode
+    document.getElementById('target-row').classList.toggle('hidden', m!=='target');
+}
+function durDisplay(sec){ const m=Math.floor(sec/60), ss=String(Math.abs(sec%60)).padStart(2,'0'); document.getElementById('dur-display').textContent=m+':'+ss; }
+function durStart(){
+    durTargetFired=false;
+    document.getElementById('dur-display').classList.remove('fire');
+    document.getElementById('dur-start').classList.add('hidden');
+    document.getElementById('dur-stop').classList.remove('hidden');
+    durT0=Date.now(); clearInterval(durTick); durLoop(); durTick=setInterval(durLoop,200);
+}
+function durLoop(){
+    const elapsed=Math.floor((Date.now()-durT0)/1000);
+    if(durMode==='endure'){ durDisplay(elapsed); }
+    else {
+        const target=parseInt(document.getElementById('dur-target').value)||0;
+        const remain=target-elapsed;
+        durDisplay(Math.max(0,remain));
+        if(remain<=0 && !durTargetFired){ durTargetFired=true; fireTargetCue(); }
+    }
+}
+function fireTargetCue(){
+    const d=document.getElementById('dur-display'); d.classList.add('fire');
+    // optional sound
+    try { const ctx=new (window.AudioContext||window.webkitAudioContext)();
+        const o=ctx.createOscillator(), g=ctx.createGain(); o.connect(g); g.connect(ctx.destination);
+        o.frequency.value=880; g.gain.value=0.15; o.start();
+        setTimeout(()=>{o.frequency.value=1320;},180); setTimeout(()=>{o.stop();ctx.close();},420);
+    } catch(e){}
+    if(navigator.vibrate) navigator.vibrate([120,60,120]);
+}
+async function durStop(id,tt){
+    clearInterval(durTick);
+    const elapsed=Math.floor((Date.now()-durT0)/1000);
+    let secs = elapsed;
+    if(durMode==='target'){ secs = parseInt(document.getElementById('dur-target').value)||elapsed; }
+    document.getElementById('dur-stop').classList.add('hidden');
+    document.getElementById('dur-start').classList.remove('hidden');
+    await logSet(id, tt, {duration_s:secs});
+}
+function durReset(){ clearInterval(durTick); durT0=null; durTargetFired=false;
+    const d=document.getElementById('dur-display'); if(d){d.textContent='0:00'; d.classList.remove('fire');}
+    const s=document.getElementById('dur-start'), st=document.getElementById('dur-stop');
+    if(s)s.classList.remove('hidden'); if(st)st.classList.add('hidden');
+}
+function logTimedManual(id,tt){
+    // Log with 0 duration is invalid; require the user to run the timer.
+    toast('Run the timer, then it logs on stop.');
+}
+// Cardio can log without the timer as long as a duration was entered via the
+// target field, or distance/setting alone are meaningful. We still require a
+// duration server-side, so read the target box as the manual duration.
+function logCardioManual(id){
+    const secs = parseInt((document.getElementById('dur-target')||{}).value)||0;
+    if(secs<=0){ toast('Enter a target duration, or use the timer.'); return; }
+    logSet(id, 'cardio', {duration_s:secs});
+}
+function fmtDur(sec){ sec=parseInt(sec)||0; const m=Math.floor(sec/60), s=sec%60; return m+':'+String(s).padStart(2,'0'); }
+
+// ── Logging with failed-state retry (never silently drop a confirmed set) ──
+async function logSet(id, tt, extra){
+    extra = extra || {};
+    const btn=document.getElementById('log-tick');
+    const body={ exercise_id:id, successful:true };
+    if(tt==='weight_reps' || tt==='weight_time'){ body.weight_kg = parseFloat((document.getElementById('ws-w')||{}).value)||0; }
+    if(tt==='weight_reps' || tt==='reps'){ body.reps = parseInt((document.getElementById('ws-r')||{}).value)||0;
+        if(body.reps<=0){ toast('Enter reps'); return; } }
+    if(extra.duration_s!=null){ body.duration_s=extra.duration_s; }
+    if(tt==='cardio'){
+        const dEl=document.getElementById('ws-dist');
+        const sEl=document.getElementById('ws-setting');
+        if(dEl && dEl.value) body.distance_m=parseInt(dEl.value)||0;
+        if(sEl && sEl.value) body.setting=sEl.value.trim();
+    }
+
+    if(btn){ btn.classList.remove('failed','saved'); btn.classList.add('saving'); btn.textContent='Saving…'; }
+    const r=await apiPost('/api/gym/log-set', body);
+    if(r.ok && r.data.ok){
+        LIVE = r.data.workout_so_far;
+        if(btn){ btn.classList.remove('saving'); btn.classList.add('saved'); btn.textContent='✓ Saved'; }
+        startRest();                    // auto-start count-up rest timer
+        render();
+        // keep sheet open for another set; refresh its this-session list
+        const ex=findExercise(id);
+        setTimeout(()=>{ if(openExerciseId===id) reopenSameExercise(id); }, 550);
+    } else {
+        // Explicit failed state + retry — the set is not dropped from intent.
+        if(btn){ btn.classList.remove('saving'); btn.classList.add('failed');
+            btn.textContent='✕ Failed — tap to retry';
+            btn.onclick=()=>logSet(id,tt,extra); }
+        toast('Save failed — retrying is safe, tap again.');
+    }
+}
+async function reopenSameExercise(id){
+    // Re-render the sheet so the working set + this-session list reflect the DB.
+    const ex=findExercise(id); if(!ex) return;
+    const r=await apiGet('/api/gym/exercise/'+id+'/prefill');
+    const tt=r.ok?r.data.tracking_type:ex.tracking_type;
+    renderExerciseSheet(ex, tt, r.ok?r.data.most_recent:null, r.ok?r.data.best_recent:null);
+}
+
+async function undoSet(id){
+    const r=await apiPost('/api/gym/log-set/undo', {exercise_id:id});
+    if(r.ok && r.data.ok){ LIVE=r.data.workout_so_far; render();
+        if(openExerciseId===id) reopenSameExercise(id); }
+}
+
+// ── Init: rehydrate from server ────────────────────────────────────────────
+render();
+updateFajinPill();   // show the manual Fa Jin pill when the bank has any
+if(LIVE.has_sets){
+    // A same-day open session with sets: sections are already rendered.
+    // Rest timer is ephemeral and intentionally NOT restored.
+}
 </script>
 {% endblock %}

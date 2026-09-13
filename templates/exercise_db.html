@@ -1,0 +1,636 @@
+{% extends 'base.html' %}
+{% block title %}Exercise Databank{% endblock %}
+{% block body_class %}pandora{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.db-header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.db-title  { font-family: var(--font-sans); font-size: 20px; font-weight: 500; color: var(--text-strong); }
+.db-count  { font-family: var(--font-mono); font-size: 11px; color: var(--dim); white-space: nowrap; }
+
+/* ── Toolbar: tier pills + search + add ─────────────────────────────────── */
+.db-toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 14px; }
+.tier-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.tier-pill {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-pill);
+    font-family: var(--font-mono); font-size: 9px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--dim); padding: 5px 12px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent; transition: border-color .12s, color .12s;
+}
+.tier-pill:active { opacity: .8; }
+.tier-pill.active { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.db-search {
+    flex: 1 1 130px; min-width: 120px;
+    background: var(--panel-soft); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text); font-family: var(--font-mono); font-size: 12px; padding: 8px 10px; min-height: 38px;
+}
+.db-search:focus { outline: none; border-color: var(--accent); }
+.db-add-btn {
+    background: var(--accent); color: var(--bg); border: none; border-radius: var(--radius-sm);
+    font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: .04em;
+    text-transform: uppercase; padding: 9px 12px; cursor: pointer; white-space: nowrap; min-height: 38px;
+    -webkit-tap-highlight-color: transparent;
+}
+.db-add-btn:active { opacity: .85; }
+
+/* ── Group accordion (mirrors train.html) ───────────────────────────────── */
+.g-group { --g-color: var(--accent); margin-bottom: 10px; }
+.g-group[data-group="chest"]        { --g-color: #e07a7a; }
+.g-group[data-group="shoulders"]    { --g-color: #d4a574; }
+.g-group[data-group="back"]         { --g-color: #6b93c9; }
+.g-group[data-group="legs"]         { --g-color: #7fb069; }
+.g-group[data-group="core"]         { --g-color: #a785c2; }
+.g-group[data-group="arms"]         { --g-color: #6bb0a8; }
+.g-group[data-group="stability"]    { --g-color: #8a8a8a; }
+.g-group[data-group="uncategorised"]{ --g-color: #c97064; }
+.g-group[data-group="muay_thai"]    { --g-color: #d1495b; }
+
+.g-head {
+    display: grid; grid-template-columns: 4px 1fr auto auto; align-items: center; gap: 8px;
+    width: 100%; background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 12px 14px 12px 10px;
+    cursor: pointer; text-align: left; font-family: inherit; color: var(--text-strong);
+    -webkit-tap-highlight-color: transparent;
+}
+.g-head:active { opacity: .8; }
+.g-stripe { display: block; width: 4px; height: 22px; border-radius: 2px; background: var(--g-color); }
+.g-title  { font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--g-color); }
+.g-count  { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
+.g-chev   { color: var(--dimmer); font-size: 14px; transition: transform .15s; }
+.g-group.open .g-chev { transform: rotate(90deg); color: var(--g-color); }
+.g-group.open .g-head { border-radius: var(--radius-md) var(--radius-md) 0 0; border-bottom-color: transparent; }
+
+.g-body {
+    display: none; flex-direction: column; gap: 0;
+    border: 1px solid var(--border); border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md); overflow: hidden;
+}
+.g-group.open .g-body { display: flex; }
+
+/* ── Function sub-header ─────────────────────────────────────────────────── */
+.fn-label {
+    font-family: var(--font-mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--dim); padding: 8px 14px 4px; background: var(--panel-soft);
+    border-bottom: 1px solid var(--border);
+}
+
+/* ── Exercise row ────────────────────────────────────────────────────────── */
+.ex-row {
+    display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 8px;
+    padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--panel);
+}
+.ex-row:last-child { border-bottom: none; }
+.ex-row.disabled { opacity: .5; }
+
+/* reorder arrows */
+.ex-reorder { display: flex; flex-direction: column; gap: 1px; }
+.ex-arrow {
+    background: none; border: none; color: var(--dimmer); cursor: pointer;
+    font-size: 9px; line-height: 1; padding: 2px 3px; border-radius: 3px;
+    -webkit-tap-highlight-color: transparent;
+}
+.ex-arrow:active { color: var(--accent); }
+.ex-arrow:disabled { opacity: .3; cursor: default; }
+
+.ex-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ex-name { font-family: var(--font-sans); font-size: 13px; font-weight: 500; color: var(--text-strong);
+           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ex-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ex-tier-badge {
+    font-family: var(--font-mono); font-size: 8px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; padding: 1px 5px; border-radius: 3px;
+    border: 1px solid var(--border); color: var(--dim);
+}
+.ex-tier-badge.t1 { color: var(--accent); border-color: var(--accent); }
+.ex-tier-badge.t2 { color: var(--green, #7fb069); border-color: var(--green, #7fb069); }
+.ex-tier-badge.t3 { color: var(--blue, #6b93b8); border-color: var(--blue, #6b93b8); }
+.ex-tier-badge.t4 { color: #d48a3a; border-color: #d48a3a; }
+.ex-tier-badge.t5 { color: var(--purple, #a887b8); border-color: var(--purple, #a887b8); }
+.ex-disabled-tag {
+    font-family: var(--font-mono); font-size: 7px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--dimmer); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px;
+}
+.ex-latest { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--text-strong); white-space: nowrap; }
+.ex-latest.none { color: var(--dimmer); font-weight: 400; }
+
+.ex-edit-btn {
+    background: none; border: none; color: var(--dimmer); cursor: pointer;
+    font-size: 12px; padding: 6px; border-radius: var(--radius-sm); min-width: 32px; min-height: 32px;
+    -webkit-tap-highlight-color: transparent;
+}
+.ex-edit-btn:active { color: var(--accent); }
+
+/* ── Inline edit panel ───────────────────────────────────────────────────── */
+.ex-edit-panel { display: none; padding: 10px 14px; background: var(--panel-soft); border-bottom: 1px solid var(--border); }
+.ex-edit-panel.open { display: block; }
+.edit-grid { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.edit-field { display: flex; flex-direction: column; gap: 2px; }
+.edit-field.grow { flex: 1 1 100%; }
+.edit-field label { font-family: var(--font-mono); font-size: 7px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+.edit-field input, .edit-field select {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text); font-family: var(--font-mono); font-size: 11px; padding: 7px 8px; min-height: 34px;
+}
+.edit-field input:focus, .edit-field select:focus { outline: none; border-color: var(--accent); }
+.edit-field input.num { width: 64px; }
+
+.new-fn-row { display: none; flex-wrap: wrap; gap: 8px; align-items: flex-end; width: 100%; margin-top: 4px; }
+.new-fn-row.open { display: flex; }
+
+.edit-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+.btn-sm {
+    border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel);
+    font-family: var(--font-mono); font-size: 10px; font-weight: 600; color: var(--dim);
+    padding: 7px 11px; cursor: pointer; min-height: 34px; -webkit-tap-highlight-color: transparent;
+}
+.btn-sm:active { opacity: .85; }
+.btn-save { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.btn-danger { color: var(--red, #c97064); border-color: rgba(201,112,100,.4); }
+.btn-danger:disabled { opacity: .4; cursor: default; color: var(--dimmer); border-color: var(--border); }
+.btn-confirm { background: var(--red, #c97064); color: var(--bg); border-color: var(--red, #c97064); }
+
+.delete-reason { font-family: var(--font-mono); font-size: 9px; color: var(--dimmer); }
+.row-error { font-family: var(--font-mono); font-size: 10px; color: var(--red, #c97064); margin-top: 6px; display: none; }
+.row-error.show { display: block; }
+
+/* ── Add panel ───────────────────────────────────────────────────────────── */
+.add-section { margin-bottom: 14px; padding: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md); display: none; }
+.add-section.open { display: block; }
+.add-section .fn-title { font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+
+/* ── Archived section ────────────────────────────────────────────────────── */
+.archived-section { margin-top: 18px; }
+.archived-head {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: 11px 14px; cursor: pointer; text-align: left; color: var(--dim);
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    -webkit-tap-highlight-color: transparent;
+}
+.archived-head .g-chev { margin-left: auto; }
+.archived-body { display: none; border: 1px solid var(--border); border-top: none; border-radius: 0 0 var(--radius-md) var(--radius-md); overflow: hidden; }
+.archived-section.open .archived-body { display: block; }
+.archived-section.open .archived-head { border-radius: var(--radius-md) var(--radius-md) 0 0; }
+.archived-section.open .g-chev { transform: rotate(90deg); }
+.arch-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--panel); }
+.arch-row:last-child { border-bottom: none; }
+.arch-hist { font-family: var(--font-mono); font-size: 9px; color: var(--dimmer); white-space: nowrap; }
+
+/* ── Manage link back to train (mono micro-label) ───────────────────────── */
+.db-foot { margin-top: 20px; text-align: center; }
+.db-foot a { font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); text-decoration: none; }
+.db-foot a:active { color: var(--accent); }
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (min-width: 640px) {
+    .groups-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+    .groups-grid .g-group { margin-bottom: 0; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="db-header">
+    <div class="db-title">Exercise Databank</div>
+    <span class="db-count"><span id="active-count">{{ active_total }}</span> active · {{ archived_count }} archived</span>
+</div>
+
+<div class="db-toolbar">
+    <div class="tier-pills">
+        <span class="tier-pill active" data-tier="all">All</span>
+        <span class="tier-pill" data-tier="1">T1</span>
+        <span class="tier-pill" data-tier="2">T2</span>
+        <span class="tier-pill" data-tier="3">T3</span>
+        <span class="tier-pill" data-tier="4">Fa Jin</span>
+        <span class="tier-pill" data-tier="5">T5</span>
+    </div>
+    <input type="text" class="db-search" id="db-search" placeholder="search…" autocomplete="off">
+    <button type="button" class="db-add-btn" onclick="toggleAdd()">＋ Add</button>
+</div>
+
+<!-- Add exercise panel -->
+<div class="add-section" id="add-section">
+    <div class="fn-title">New exercise</div>
+    <div class="edit-grid">
+        <div class="edit-field grow"><label>Name</label><input type="text" id="add-name" placeholder="e.g. Cable Fly"></div>
+        <div class="edit-field"><label>Tier</label>
+            <select id="add-tier">
+                <option value="1">T1</option><option value="2" selected>T2</option>
+                <option value="3">T3</option><option value="4">T4</option><option value="5">T5</option>
+            </select></div>
+        <div class="edit-field"><label>Muscle</label>
+            <select id="add-muscle" onchange="populateFn('add')">
+                {% for mg in muscle_groups %}<option value="{{ mg }}">{{ mg }}</option>{% endfor %}
+            </select></div>
+        <div class="edit-field"><label>Function</label>
+            <select id="add-fn"></select></div>
+        <div class="edit-field"><label>Tracking</label>
+            <select id="add-tracking">
+                <option value="weight_reps">Weight × reps</option>
+                <option value="reps">Reps only</option>
+                <option value="time">Time</option>
+                <option value="weight_time">Weight × time</option>
+            </select></div>
+        <div class="edit-field grow"><label>Notes</label><input type="text" id="add-notes" placeholder="optional"></div>
+    </div>
+    <div class="new-fn-row" id="add-newfn">
+        <div class="edit-field"><label>New fn key</label><input type="text" id="add-newfn-key" placeholder="e.g. rotator" class="num" style="width:100px"></div>
+        <div class="edit-field"><label>New fn label</label><input type="text" id="add-newfn-label" placeholder="Rotator" class="num" style="width:110px"></div>
+    </div>
+    <div class="edit-actions">
+        <button type="button" class="btn-sm btn-save" onclick="addExercise()">Add exercise</button>
+        <button type="button" class="btn-sm" onclick="toggleAdd()">Cancel</button>
+        <span class="row-error" id="add-error"></span>
+    </div>
+</div>
+
+<!-- Muscle groups -->
+<div class="groups-grid">
+{% for group in groups %}
+<div class="g-group" data-group="{{ group.key }}">
+    <button type="button" class="g-head" onclick="toggleGroup(this)">
+        <span class="g-stripe"></span>
+        <span class="g-title">{{ group.label }}</span>
+        <span class="g-count">{{ group.active_count }}</span>
+        <span class="g-chev">›</span>
+    </button>
+    <div class="g-body">
+        {% for fn in group.functions %}
+        <div class="fn-label" data-fn-label>{{ fn.label }}</div>
+        {% for ex in fn.exercises %}
+        <div class="ex-row{% if not ex.is_enabled %} disabled{% endif %}"
+             data-tier="{{ ex.tier }}" data-id="{{ ex.id }}"
+             data-name="{{ ex.name|lower }}" data-fn="{{ fn.label|lower }}"
+             data-muscle="{{ group.key }}" data-fnkey="{{ fn.key or '' }}"
+             data-history="{{ ex.history_count }}">
+            <div class="ex-reorder">
+                <button type="button" class="ex-arrow" onclick="moveRow({{ ex.id }}, -1)" title="Move up">▲</button>
+                <button type="button" class="ex-arrow" onclick="moveRow({{ ex.id }}, 1)" title="Move down">▼</button>
+            </div>
+            <div class="ex-main">
+                <span class="ex-name">{{ ex.name }}{% if not ex.is_enabled %} <span class="ex-disabled-tag">off</span>{% endif %}</span>
+                <div class="ex-meta">
+                    <span class="ex-tier-badge t{{ ex.tier }}">T{{ ex.tier }}</span>
+                </div>
+            </div>
+            {% set L = ex.latest %}
+            <div class="ex-latest{% if not L %} none{% endif %}">
+                {%- if L -%}
+                    {%- if ex.tracking_type == 'time' and L.duration_s -%}{{ L.duration_s }}s
+                    {%- elif ex.tracking_type == 'weight_time' and L.weight_kg -%}{{ L.weight_kg | int if L.weight_kg == L.weight_kg | int else L.weight_kg }}kg · {{ L.duration_s or '—' }}s
+                    {%- elif ex.tracking_type == 'reps' and L.reps -%}{{ L.reps }} reps
+                    {%- elif L.weight_kg -%}{{ L.weight_kg | int if L.weight_kg == L.weight_kg | int else L.weight_kg }}kg × {{ L.reps or '—' }}
+                    {%- elif L.reps -%}{{ L.reps }} reps
+                    {%- else -%}—{%- endif -%}
+                {%- else -%}—{%- endif -%}
+            </div>
+            <button type="button" class="ex-edit-btn" onclick="toggleEdit({{ ex.id }})" title="Edit">✎</button>
+        </div>
+        <!-- inline edit panel -->
+        <div class="ex-edit-panel" id="edit-{{ ex.id }}">
+            <div class="edit-grid">
+                <div class="edit-field grow"><label>Name</label><input type="text" id="ed-name-{{ ex.id }}" value="{{ ex.name }}"></div>
+                <div class="edit-field"><label>Tier</label>
+                    <select id="ed-tier-{{ ex.id }}">
+                        {% for t in [1,2,3,4,5] %}<option value="{{ t }}"{% if ex.tier == t %} selected{% endif %}>T{{ t }}</option>{% endfor %}
+                    </select></div>
+                <div class="edit-field"><label>Muscle</label>
+                    <select id="ed-muscle-{{ ex.id }}" onchange="populateFn('ed', {{ ex.id }})">
+                        {% for mg in muscle_groups %}<option value="{{ mg }}"{% if ex.muscle_group == mg %} selected{% endif %}>{{ mg }}</option>{% endfor %}
+                    </select></div>
+                <div class="edit-field"><label>Function</label>
+                    <select id="ed-fn-{{ ex.id }}" data-current="{{ ex.function or '' }}"></select></div>
+                <div class="edit-field"><label>Tracking</label>
+                    <select id="ed-tracking-{{ ex.id }}">
+                        <option value="weight_reps"{% if ex.tracking_type == 'weight_reps' %} selected{% endif %}>Weight × reps</option>
+                        <option value="reps"{% if ex.tracking_type == 'reps' %} selected{% endif %}>Reps only</option>
+                        <option value="time"{% if ex.tracking_type == 'time' %} selected{% endif %}>Time</option>
+                        <option value="weight_time"{% if ex.tracking_type == 'weight_time' %} selected{% endif %}>Weight × time</option>
+                    </select></div>
+                <div class="edit-field"><label>Reps min</label><input type="text" inputmode="numeric" class="num" id="ed-repsmin-{{ ex.id }}" value="{{ ex.reps_min if ex.reps_min is not none else '' }}"></div>
+                <div class="edit-field"><label>Reps max</label><input type="text" inputmode="numeric" class="num" id="ed-repsmax-{{ ex.id }}" value="{{ ex.reps_max if ex.reps_max is not none else '' }}"></div>
+                <div class="edit-field"><label>Sets</label><input type="text" inputmode="numeric" class="num" id="ed-sets-{{ ex.id }}" value="{{ ex.sets if ex.sets is not none else '' }}"></div>
+                <div class="edit-field grow"><label>Notes</label><input type="text" id="ed-notes-{{ ex.id }}" value="{{ ex.notes or '' }}" placeholder="optional"></div>
+            </div>
+            <div class="new-fn-row" id="ed-newfn-{{ ex.id }}">
+                <div class="edit-field"><label>New fn key</label><input type="text" id="ed-newfn-key-{{ ex.id }}" placeholder="e.g. rotator" style="width:100px"></div>
+                <div class="edit-field"><label>New fn label</label><input type="text" id="ed-newfn-label-{{ ex.id }}" placeholder="Rotator" style="width:110px"></div>
+            </div>
+            <div class="edit-actions">
+                <button type="button" class="btn-sm btn-save" onclick="saveEdit({{ ex.id }})">Save</button>
+                <button type="button" class="btn-sm" onclick="toggleEnabled({{ ex.id }}, {{ 'false' if ex.is_enabled else 'true' }})">{{ 'Disable' if ex.is_enabled else 'Enable' }}</button>
+                <button type="button" class="btn-sm" onclick="archiveExercise({{ ex.id }})">Archive</button>
+                {% if ex.history_count > 0 %}
+                <button type="button" class="btn-sm btn-danger" disabled>Delete</button>
+                <span class="delete-reason">{{ ex.history_count }} logged set{{ 's' if ex.history_count != 1 else '' }} — archive instead</span>
+                {% else %}
+                <button type="button" class="btn-sm btn-danger" id="del-{{ ex.id }}" onclick="confirmDelete({{ ex.id }})">Delete</button>
+                {% endif %}
+                <span class="row-error" id="err-{{ ex.id }}"></span>
+            </div>
+        </div>
+        {% endfor %}
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+</div>
+
+<!-- Archived section -->
+<div class="archived-section" id="archived-section">
+    <button type="button" class="archived-head" onclick="document.getElementById('archived-section').classList.toggle('open')">
+        <span>Archived</span>
+        <span>({{ archived_count }})</span>
+        <span class="g-chev">›</span>
+    </button>
+    <div class="archived-body">
+        {% for ex in archived %}
+        <div class="arch-row" data-id="{{ ex.id }}">
+            <div class="ex-main">
+                <span class="ex-name">{{ ex.name }}</span>
+                <div class="ex-meta">
+                    <span class="ex-tier-badge t{{ ex.tier }}">T{{ ex.tier }}</span>
+                    <span class="arch-hist">{{ ex.muscle_group }}{% if ex.function %} · {{ ex.function }}{% endif %}</span>
+                </div>
+            </div>
+            <span class="arch-hist">{{ ex.history_count }} logged</span>
+            <button type="button" class="btn-sm" onclick="unarchiveExercise({{ ex.id }})">Unarchive</button>
+        </div>
+        {% else %}
+        <div class="arch-row"><span class="arch-hist">Nothing archived.</span></div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="db-foot">
+    <a href="/train">← Back to Train</a>
+</div>
+
+<script>
+// Function metadata by muscle, for dependent selects + "new function" option.
+const FUNCTIONS_BY_MUSCLE = {{ functions_by_muscle | tojson }};
+
+// ── CSRF-aware API helpers (never hand-roll headers per call site) ─────────
+async function apiPost(url, body) {
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window._csrf },
+        body: JSON.stringify(body || {})
+    });
+    let data = {};
+    try { data = await res.json(); } catch (e) {}
+    return { ok: res.ok, status: res.status, data };
+}
+async function apiDelete(url) {
+    const res = await fetch(url, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window._csrf }
+    });
+    let data = {};
+    try { data = await res.json(); } catch (e) {}
+    return { ok: res.ok, status: res.status, data };
+}
+
+// ── Accordion + open-state memory ──────────────────────────────────────────
+const OPEN_KEY = 'exdb_open_groups';
+function readOpen() { try { return JSON.parse(sessionStorage.getItem(OPEN_KEY) || '[]'); } catch (e) { return []; } }
+function writeOpen(list) { sessionStorage.setItem(OPEN_KEY, JSON.stringify(list)); }
+function toggleGroup(btn) {
+    const g = btn.closest('.g-group');
+    g.classList.toggle('open');
+    const key = g.dataset.group;
+    let open = readOpen();
+    if (g.classList.contains('open')) { if (!open.includes(key)) open.push(key); }
+    else { open = open.filter(k => k !== key); }
+    writeOpen(open);
+}
+// Restore open state on load
+document.addEventListener('DOMContentLoaded', () => {
+    const open = readOpen();
+    document.querySelectorAll('.g-group').forEach(g => {
+        if (open.includes(g.dataset.group)) g.classList.add('open');
+    });
+    // Populate every edit panel's function select to its current value
+    document.querySelectorAll('.ex-edit-panel').forEach(panel => {
+        const id = panel.id.replace('edit-', '');
+        populateFn('ed', parseInt(id));
+    });
+    populateFn('add');
+});
+
+// ── Dependent function select ──────────────────────────────────────────────
+function populateFn(scope, id) {
+    const muscleSel = scope === 'add' ? document.getElementById('add-muscle')
+                                      : document.getElementById('ed-muscle-' + id);
+    const fnSel = scope === 'add' ? document.getElementById('add-fn')
+                                  : document.getElementById('ed-fn-' + id);
+    if (!muscleSel || !fnSel) return;
+    const muscle = muscleSel.value;
+    const current = fnSel.dataset.current || '';
+    const fns = FUNCTIONS_BY_MUSCLE[muscle] || [];
+    let html = '';
+    fns.forEach(f => {
+        html += `<option value="${f.key}"${f.key === current ? ' selected' : ''}>${f.label}</option>`;
+    });
+    // Preserve a current key even if it's not (yet) in gym_functions
+    if (current && !fns.some(f => f.key === current)) {
+        html += `<option value="${current}" selected>${current}</option>`;
+    }
+    html += `<option value="__new__">＋ new function…</option>`;
+    fnSel.innerHTML = html;
+    fnSel.onchange = () => {
+        const rowId = scope === 'add' ? 'add-newfn' : 'ed-newfn-' + id;
+        document.getElementById(rowId).classList.toggle('open', fnSel.value === '__new__');
+    };
+    // reset the new-fn reveal
+    const rowId = scope === 'add' ? 'add-newfn' : 'ed-newfn-' + id;
+    const nf = document.getElementById(rowId);
+    if (nf) nf.classList.toggle('open', fnSel.value === '__new__');
+}
+
+// Resolve the chosen function; if "__new__", POST it to /api/gym/functions first.
+async function resolveFunction(scope, id, muscle) {
+    const fnSel = scope === 'add' ? document.getElementById('add-fn')
+                                  : document.getElementById('ed-fn-' + id);
+    if (fnSel.value !== '__new__') return { ok: true, key: fnSel.value || null };
+    const keyEl = document.getElementById(scope === 'add' ? 'add-newfn-key' : 'ed-newfn-key-' + id);
+    const labelEl = document.getElementById(scope === 'add' ? 'add-newfn-label' : 'ed-newfn-label-' + id);
+    const key = (keyEl.value || '').trim().toLowerCase();
+    const label = (labelEl.value || '').trim();
+    if (!key || !label) return { ok: false, error: 'New function needs a key and a label.' };
+    const r = await apiPost('/api/gym/functions', { muscle_group: muscle, key, label });
+    if (!r.ok) return { ok: false, error: (r.data && r.data.error) || 'Could not add function.' };
+    // cache locally so subsequent selects see it
+    FUNCTIONS_BY_MUSCLE[muscle] = FUNCTIONS_BY_MUSCLE[muscle] || [];
+    FUNCTIONS_BY_MUSCLE[muscle].push({ key, label });
+    return { ok: true, key };
+}
+
+// ── Edit ───────────────────────────────────────────────────────────────────
+function toggleEdit(id) { document.getElementById('edit-' + id).classList.toggle('open'); }
+
+function showRowError(id, msg) {
+    const el = document.getElementById('err-' + id);
+    el.textContent = msg; el.classList.add('show');
+}
+
+function numOrNull(v) { v = (v || '').trim(); return v === '' ? null : parseInt(v); }
+
+async function saveEdit(id) {
+    const muscle = document.getElementById('ed-muscle-' + id).value;
+    const fnRes = await resolveFunction('ed', id, muscle);
+    if (!fnRes.ok) { showRowError(id, fnRes.error); return; }
+    const body = {
+        name: document.getElementById('ed-name-' + id).value.trim(),
+        tier: parseInt(document.getElementById('ed-tier-' + id).value),
+        muscle_group: muscle,
+        function: fnRes.key,
+        tracking_type: document.getElementById('ed-tracking-' + id).value,
+        reps_min: numOrNull(document.getElementById('ed-repsmin-' + id).value),
+        reps_max: numOrNull(document.getElementById('ed-repsmax-' + id).value),
+        sets: numOrNull(document.getElementById('ed-sets-' + id).value),
+        notes: document.getElementById('ed-notes-' + id).value.trim() || null,
+    };
+    if (!body.name) { showRowError(id, 'Name is required.'); return; }
+    const r = await apiPost('/api/gym/exercise/' + id, body);
+    if (r.ok) location.reload();
+    else showRowError(id, (r.data && r.data.error) || 'Save failed.');
+}
+
+async function toggleEnabled(id, enabled) {
+    const r = await apiPost('/api/gym/exercise/' + id + '/toggle', { enabled });
+    if (r.ok) location.reload(); else showRowError(id, 'Toggle failed.');
+}
+
+async function archiveExercise(id) {
+    const r = await apiPost('/api/gym/exercise/' + id + '/archive', { archived: true });
+    if (r.ok) location.reload(); else showRowError(id, 'Archive failed.');
+}
+
+async function unarchiveExercise(id) {
+    const r = await apiPost('/api/gym/exercise/' + id + '/archive', { archived: false });
+    if (r.ok) location.reload();
+}
+
+// Inline delete confirm (no browser modal): first click arms, second confirms.
+function confirmDelete(id) {
+    const btn = document.getElementById('del-' + id);
+    if (btn.dataset.armed === '1') { doDelete(id); return; }
+    btn.dataset.armed = '1';
+    btn.textContent = 'Really delete?';
+    btn.classList.add('btn-confirm');
+    setTimeout(() => {
+        if (btn.dataset.armed === '1') {
+            btn.dataset.armed = '0'; btn.textContent = 'Delete'; btn.classList.remove('btn-confirm');
+        }
+    }, 3500);
+}
+async function doDelete(id) {
+    const r = await apiDelete('/api/gym/exercise/' + id);
+    if (r.ok) location.reload();
+    else showRowError(id, (r.data && r.data.error) || 'Delete failed.');
+}
+
+// ── Add ──────────────────────────────────────────────────────────────────────
+function toggleAdd() { document.getElementById('add-section').classList.toggle('open'); }
+
+async function addExercise() {
+    const muscle = document.getElementById('add-muscle').value;
+    const errEl = document.getElementById('add-error');
+    errEl.classList.remove('show');
+    const name = document.getElementById('add-name').value.trim();
+    if (!name) { errEl.textContent = 'Name is required.'; errEl.classList.add('show'); return; }
+    const fnRes = await resolveFunction('add', null, muscle);
+    if (!fnRes.ok) { errEl.textContent = fnRes.error; errEl.classList.add('show'); return; }
+    const body = {
+        name,
+        tier: parseInt(document.getElementById('add-tier').value),
+        muscle_group: muscle,
+        function: fnRes.key,
+        tracking_type: document.getElementById('add-tracking').value,
+        notes: document.getElementById('add-notes').value.trim() || null,
+    };
+    const r = await apiPost('/api/gym/exercise/add', body);
+    if (r.ok) location.reload();
+    else { errEl.textContent = (r.data && r.data.error) || 'Add failed.'; errEl.classList.add('show'); }
+}
+
+// ── Reorder within a function (▲/▼, optimistic with rollback) ───────────────
+async function moveRow(id, dir) {
+    const row = document.querySelector('.ex-row[data-id="' + id + '"]');
+    if (!row) return;
+    const sibling = dir < 0 ? row.previousElementSibling : row.nextElementSibling;
+    // Only swap with an ex-row in the SAME function (skip edit panels + fn labels)
+    let target = sibling;
+    while (target && !target.classList.contains('ex-row')) {
+        target = dir < 0 ? target.previousElementSibling : target.nextElementSibling;
+    }
+    if (!target || target.dataset.fnkey !== row.dataset.fnkey) return; // at edge of function
+    const editPanel = document.getElementById('edit-' + id);
+    // Optimistic DOM move: move row (and its edit panel) past the target block.
+    const parent = row.parentNode;
+    const prevState = parent.innerHTML;
+    if (dir < 0) {
+        parent.insertBefore(row, target);
+        if (editPanel) parent.insertBefore(editPanel, target);
+    } else {
+        const targetPanel = document.getElementById('edit-' + target.dataset.id);
+        const after = (targetPanel || target).nextSibling;
+        parent.insertBefore(row, after);
+        if (editPanel) parent.insertBefore(editPanel, after);
+    }
+    // Collect the new id order for this function within this group body
+    const body = row.closest('.g-body');
+    const ids = [...body.querySelectorAll('.ex-row')]
+        .filter(r => r.dataset.fnkey === row.dataset.fnkey)
+        .map(r => parseInt(r.dataset.id));
+    const r = await apiPost('/api/gym/exercise/reorder', { function: row.dataset.fnkey || null, order: ids });
+    if (!r.ok) { parent.innerHTML = prevState; }  // rollback
+}
+
+// ── Tier pills + live search (compose) ──────────────────────────────────────
+let activeTier = 'all';
+document.querySelectorAll('.tier-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+        document.querySelectorAll('.tier-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        activeTier = pill.dataset.tier;
+        applyFilters();
+    });
+});
+document.getElementById('db-search').addEventListener('input', applyFilters);
+
+function applyFilters() {
+    const q = document.getElementById('db-search').value.trim().toLowerCase();
+    let activeVisible = 0;
+    document.querySelectorAll('.ex-row').forEach(row => {
+        const tierOk = activeTier === 'all' || row.dataset.tier === activeTier;
+        const textOk = !q || row.dataset.name.includes(q) || row.dataset.fn.includes(q) || row.dataset.muscle.includes(q);
+        const show = tierOk && textOk;
+        row.style.display = show ? '' : 'none';
+        if (show) activeVisible++;
+    });
+    // Hide function labels with no visible rows, and groups with no visible rows
+    document.querySelectorAll('.g-group').forEach(g => {
+        let groupVisible = 0;
+        // function labels: a fn-label is followed by its rows until the next fn-label
+        const kids = [...g.querySelector('.g-body').children];
+        let currentLabel = null, labelHasVisible = false;
+        kids.forEach(node => {
+            if (node.hasAttribute('data-fn-label')) {
+                if (currentLabel) currentLabel.style.display = labelHasVisible ? '' : 'none';
+                currentLabel = node; labelHasVisible = false;
+            } else if (node.classList.contains('ex-row')) {
+                if (node.style.display !== 'none') { labelHasVisible = true; groupVisible++; }
+            }
+        });
+        if (currentLabel) currentLabel.style.display = labelHasVisible ? '' : 'none';
+        g.style.display = groupVisible > 0 ? '' : 'none';
+        const c = g.querySelector('.g-count');
+        if (c) c.textContent = groupVisible;
+    });
+    document.getElementById('active-count').textContent = activeVisible;
+}
+</script>
+{% endblock %}

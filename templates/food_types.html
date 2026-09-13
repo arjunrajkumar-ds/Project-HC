@@ -1,0 +1,146 @@
+{% extends 'base.html' %}
+{% block title %}Manage Food Types{% endblock %}
+{% block body_class %}{% if not current_profile or current_profile.id != 2 %}pandora{% endif %}{% endblock %}
+
+{% block extra_css %}
+<style>
+.edit-card {
+    background: var(--surface); border-radius: 16px;
+    padding: 20px; display: flex; flex-direction: column; gap: 16px;
+    margin-bottom: 16px;
+}
+.edit-card-title {
+    font-size: 0.65rem; font-weight: 700; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .08em;
+}
+.ft-error {
+    background: rgba(239,68,68,.12); border: 1px solid #ef4444; border-radius: 10px;
+    padding: 10px 14px; font-size: 0.82rem; color: #ef4444; font-weight: 600; margin-bottom: 16px;
+}
+.ft-list { display: flex; flex-direction: column; gap: 8px; }
+.ft-row {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface-2); border-radius: 10px; padding: 10px 12px;
+}
+.ft-swatch { width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0; border: 1px solid var(--border); }
+.ft-name { flex: 1; font-size: 0.9rem; font-weight: 700; color: var(--text); min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ft-count { font-size: 0.68rem; color: var(--dim); white-space: nowrap; }
+.ft-iconbtn {
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    font-size: 0.95rem; padding: 5px 7px; border-radius: 6px; flex-shrink: 0;
+    min-height: 34px; -webkit-tap-highlight-color: transparent;
+}
+.ft-iconbtn:active { color: var(--accent); }
+.ft-iconbtn.del:active { color: #ef4444; }
+
+.ft-form { display: flex; flex-direction: column; gap: 12px; }
+.ft-form-row { display: flex; gap: 10px; align-items: center; }
+.ft-input {
+    flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); font-family: inherit; font-size: 0.9rem; padding: 10px 12px;
+}
+.ft-color {
+    width: 48px; height: 44px; padding: 2px; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--bg); cursor: pointer; flex-shrink: 0;
+}
+.btn-save {
+    background: var(--accent); border: none; border-radius: 10px;
+    color: var(--bg); cursor: pointer; font-family: inherit;
+    font-size: 0.95rem; font-weight: 800; min-height: 46px; padding: 12px; width: 100%;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-save:active { opacity: .8; }
+.empty { color: var(--dim); font-size: 0.85rem; text-align: center; padding: 12px; }
+
+/* Inline edit form (hidden until "edit" tapped) */
+.ft-edit { display: none; flex-direction: column; gap: 10px; width: 100%; }
+.ft-row.editing .ft-static { display: none; }
+.ft-row.editing .ft-edit { display: flex; }
+.ft-row.editing { flex-direction: column; align-items: stretch; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Header ─────────────────────────────────────────────────────────── #}
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:24px">
+    <a href="/food/database" style="
+        background:var(--surface);border:1px solid var(--border);
+        border-radius:8px;color:var(--muted);font-size:1.1rem;
+        padding:7px 12px;text-decoration:none;flex-shrink:0;
+        -webkit-tap-highlight-color:transparent;
+    ">‹</a>
+    <h1 style="margin:0;flex:1">Food Types</h1>
+</div>
+
+{% if error %}
+<div class="ft-error">{{ error }}</div>
+{% endif %}
+
+{# ── Existing types ─────────────────────────────────────────────────── #}
+<div class="edit-card">
+    <div class="edit-card-title">Your types</div>
+    {% if food_types %}
+    <div class="ft-list">
+        {% for t in food_types %}
+        <div class="ft-row" id="ft-row-{{ t.id }}">
+            <div class="ft-static" style="display:flex;align-items:center;gap:10px;width:100%">
+                <span class="ft-swatch" style="background:{{ t.color }}"></span>
+                <span class="ft-name">{{ t.name }}</span>
+                <span class="ft-count">{{ t.count }} food{{ '' if t.count == 1 else 's' }}</span>
+                <button type="button" class="ft-iconbtn" title="Edit"
+                        onclick="ftEdit({{ t.id }})">✎</button>
+                <form method="POST" action="/food/types/{{ t.id }}/delete" style="display:inline"
+                      onsubmit="return ftConfirmDelete({{ t.id }}, {{ t.count }}, this)">
+                    <button type="submit" class="ft-iconbtn del" title="Remove">✕</button>
+                </form>
+            </div>
+            <form class="ft-edit" method="POST" action="/food/types/{{ t.id }}/edit">
+                <div class="ft-form-row">
+                    <input type="color" class="ft-color" name="color" value="{{ t.color }}">
+                    <input type="text" class="ft-input" name="name" value="{{ t.name | e }}"
+                           autocomplete="off" autocapitalize="words" required>
+                </div>
+                <div class="ft-form-row">
+                    <button type="button" class="ft-input" style="flex:1;cursor:pointer"
+                            onclick="ftCancelEdit({{ t.id }})">Cancel</button>
+                    <button type="submit" class="btn-save" style="flex:1">Save</button>
+                </div>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty">No types yet — add your first one below.</p>
+    {% endif %}
+</div>
+
+{# ── Add new type ───────────────────────────────────────────────────── #}
+<div class="edit-card">
+    <div class="edit-card-title">Add a type</div>
+    <form class="ft-form" method="POST" action="/food/types">
+        <div class="ft-form-row">
+            <input type="color" class="ft-color" name="color" value="#e0723a">
+            <input type="text" class="ft-input" name="name" placeholder="e.g. Chaat"
+                   autocomplete="off" autocapitalize="words" required>
+        </div>
+        <button type="submit" class="btn-save">Add type</button>
+    </form>
+</div>
+
+<script>
+function ftEdit(id) {
+    document.getElementById('ft-row-' + id).classList.add('editing');
+}
+function ftCancelEdit(id) {
+    document.getElementById('ft-row-' + id).classList.remove('editing');
+}
+function ftConfirmDelete(id, count, form) {
+    const msg = count > 0
+        ? `Remove this type? ${count} food${count === 1 ? '' : 's'} will be untagged (the foods themselves are kept).`
+        : 'Remove this type?';
+    return confirm(msg);
+}
+</script>
+{% endblock %}

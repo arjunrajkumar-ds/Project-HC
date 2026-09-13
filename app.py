@@ -7,10 +7,10 @@ from urllib.parse import quote as _urlquote
 from datetime import date as date_type, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, abort
 from datetime import datetime as _datetime
-from database import init_db, get_db, get_session_cardio, get_cardio_choices, log_cardio_session, get_muscle_group_activity, get_muscle_swimlane, bank_scope_for_profile, get_fatigue_state, adjust_fatigue, get_sessions_with_headlines, get_session_detail_with_progression, get_macro_goals, set_macro_goals, sync_food_log_from_library, get_food_log, add_food_entry, log_food_entry, delete_food_entry, get_pending_foods, define_food_item, delete_food_item, get_food_history, get_recent_foods, get_food_library, get_food_components, get_food_component_mode, save_food_components, save_food_components_pct, get_profiles, _parse_qty_name, _parse_gram_prefix, _food_key, log_food_reconciliation, get_food_reconciliations, log_body_weight, get_body_weight, get_body_weight_history, get_pilates_session, get_mission_progress, clear_mission_stage, get_exercise_tallies, bump_exercise_tally, ack_exercise_tally, get_crew_status
+from database import init_db, get_db, get_session_cardio, get_cardio_choices, log_cardio_session, get_muscle_group_activity, get_muscle_swimlane, bank_scope_for_profile, get_fatigue_state, adjust_fatigue, get_sessions_with_headlines, get_session_detail_with_progression, get_macro_goals, set_macro_goals, sync_food_log_from_library, get_food_log, add_food_entry, log_food_entry, delete_food_entry, get_pending_foods, define_food_item, delete_food_item, get_food_history, get_recent_foods, get_food_library, get_food_components, get_food_component_mode, save_food_components, save_food_components_pct, get_profiles, _parse_qty_name, _parse_gram_prefix, _food_key, log_food_reconciliation, get_food_reconciliations, log_body_weight, get_body_weight, get_body_weight_history, get_pilates_session, get_mission_progress, clear_mission_stage, get_exercise_tallies, bump_exercise_tally, ack_exercise_tally, get_crew_status, get_food_types, create_food_type, update_food_type, delete_food_type, count_foods_with_type, get_distinct_source_names, enrich_log_entries
 from swim_routes import bp as swim_bp
 from pilates_routes import bp as pilates_bp
-from gym_bank import get_gym_bank, get_gym_exercise, gym_add_exercise, gym_update_exercise, gym_set_enabled, log_gym_set, start_gym_session, end_gym_session, TIER_LABELS
+from gym_bank import get_gym_bank, get_gym_bank_grouped, get_gym_exercise, gym_add_exercise, gym_update_exercise, gym_set_enabled, gym_archive_exercise, gym_unarchive_exercise, gym_delete_exercise, gym_reorder_function, get_gym_functions, gym_add_function, log_gym_set, get_today_tally, undo_last_today, get_or_create_today_gym_session, get_exercise_prefill, get_live_session_state, apply_session_rollover, TRACKING_TYPES, TIER_LABELS
 app = Flask(__name__)
 app.secret_key = _os.environ.get('SECRET_KEY', 'gymtracker-local-secret-key')
 app.jinja_env.filters['enumerate'] = enumerate
@@ -435,6 +435,7 @@ def dashboard():
          for r in food_rows),
         key=lambda x: _meal_rank.get(x['meal'], 4))
     food_entries = [dict(r) for r in food_rows]
+    enrich_log_entries(food_entries)   # attach source/type/std-serving for the food card
     recent_foods = get_recent_foods(_profile_id(), limit=8)
     monday = today - timedelta(days=today.weekday())
     week_session_rows = db.execute('SELECT date, type FROM sessions WHERE date BETWEEN ? AND ? AND profile_id = ?', (monday.isoformat(), (monday + timedelta(days=6)).isoformat(), _profile_id())).fetchall()
@@ -502,7 +503,7 @@ def dashboard():
 
 @app.route('/session/new')
 def session_new():
-    return redirect(url_for('session_log'))
+    return redirect(url_for('train'))
 
 
 def _gayathri_item_shape(name, timed, default=None, desc='', location='home'):
@@ -1184,57 +1185,154 @@ def session_delete(session_id):
 # Groups exercises by muscle_group with Gayathri-style accordion UI.
 # Replaces the old /exercises and /exercise-bank routes for Arjun's profile.
 
-_GYM_GROUP_ORDER = ['chest', 'shoulders', 'back', 'legs', 'core', 'arms', 'stability']
+_GYM_GROUP_ORDER = ['chest', 'shoulders', 'back', 'legs', 'core', 'arms', 'stability', 'muay_thai', 'cardio']
 _GYM_GROUP_LABELS = {
     'chest': 'Chest', 'shoulders': 'Shoulders', 'back': 'Back',
     'legs': 'Legs', 'core': 'Core', 'arms': 'Arms', 'stability': 'Stability',
+    'muay_thai': 'Muay Thai', 'cardio': 'Cardio',
 }
+# Muay Thai exercises are one-touch loggable straight from the Train page —
+# no separate "start a workout session" step. See api_gym_quick_log below.
+_GYM_ONE_TOUCH_GROUPS = {'muay_thai'}
+
+# ── Muscle taxonomy (static, code-only — NO schema change) ───────────────────
+# Three classes govern how a muscle behaves on the live Train page:
+#   PRIMARY  — selectable as the day's muscle (pick -> function checklist).
+#   CONSTANT — never selectable; always rendered as standing checklist strips
+#              on every session (arms/core/shoulders), full function breakdown.
+#   loggable-only — everything else (stability, muay_thai): not selectable, no
+#              strip, still loggable from the databank. Muay Thai keeps its
+#              existing one-touch flow (_GYM_ONE_TOUCH_GROUPS) untouched.
+_GYM_PRIMARY_MUSCLES = ['chest', 'back', 'legs', 'cardio']
+_GYM_CONSTANT_MUSCLES = ['arms', 'core', 'shoulders']
 
 
 @app.route('/train')
 def train():
-    """GYM exercise bank view — grouped by muscle category, accordion style."""
-    bank = get_gym_bank()
-    # Flatten all exercises, build groups
-    all_exercises = []
-    for tier_list in bank.values():
-        all_exercises.extend(tier_list)
+    """Live workout engine — a "working out right now" surface.
 
-    # Group by muscle_group preserving display order
-    groups = []
-    for key in _GYM_GROUP_ORDER:
-        exs = [e for e in all_exercises if e['muscle_group'] == key]
-        if exs:
-            # Sort within group: by function (nulls last), then name
-            exs.sort(key=lambda e: (e.get('function') or 'zzz', e['name']))
-            groups.append({
-                'key': key,
-                'label': _GYM_GROUP_LABELS.get(key, key.title()),
-                'exercises': exs,
-            })
+    Rewrite of the old browse-and-log Train page. On load we:
+      - apply the lazy ~4 AM roll-over stamp (via get_live_session_state),
+      - rehydrate today's open session (all logged sets + derived muscles +
+        per-muscle function checklist + the current open exercise) so a phone
+        refresh never loses confirmed sets, and
+      - hand the frontend the full muscle -> function -> exercise bank so a new
+        muscle group can be added mid-session without a round-trip.
 
-    # Surface uncategorised: exercises whose muscle_group isn't in the known order
-    known_groups = set(_GYM_GROUP_ORDER)
-    uncategorised = [e for e in all_exercises if e['muscle_group'] not in known_groups]
-    if uncategorised:
-        uncategorised.sort(key=lambda e: e['name'])
-        groups.append({
-            'key': 'uncategorised',
-            'label': 'Uncategorised',
-            'exercises': uncategorised,
-        })
+    Every set is persisted the instant it's logged via /api/gym/log-set; there
+    is no client-only workout state. Muscle groups are DERIVED from the sets
+    logged against the session, not stored on it."""
+    tree = get_gym_bank_grouped()
 
-    total_enabled = sum(1 for e in all_exercises if e.get('is_enabled'))
-    muscle_groups = list(_GYM_GROUP_LABELS.keys())
-    return render_template('train.html', groups=groups, total_enabled=total_enabled,
-                           muscle_groups=muscle_groups)
+    # Flatten bank into a JSON-friendly shape for the live picker. Only enabled,
+    # non-archived, non-Fa-Jin (tier != 4) exercises are loggable in the engine.
+    bank = []
+    for group in tree:
+        functions = []
+        for fn in group['functions']:
+            exs = [
+                {
+                    'id': e['id'], 'name': e['name'], 'tier': e['tier'],
+                    'tracking_type': e.get('tracking_type', 'weight_reps'),
+                    'function': fn['key'], 'function_label': fn['label'],
+                    'engagement': _cardio_spec(e.get('engagement')),
+                    'notes': e.get('notes'),
+                }
+                for e in fn['exercises']
+                if e.get('is_enabled') and not e.get('archived_at') and e['tier'] != 4
+            ]
+            if exs:
+                functions.append({'key': fn['key'], 'label': fn['label'], 'exercises': exs})
+        if functions:
+            bank.append({'key': group['key'], 'label': group['label'], 'functions': functions})
+
+    # Fa Jin (tier 4) exercises are deliberately kept OUT of the main `bank`
+    # picker above. They surface only as a contextual recommendation popup:
+    # when a T1-T3 exercise is selected, the frontend offers the Fa Jin that
+    # pairs with that muscle+function. Hand the frontend a flat lookup here.
+    fajin = []
+    for group in tree:
+        for fn in group['functions']:
+            for e in fn['exercises']:
+                if e['tier'] == 4 and e.get('is_enabled') and not e.get('archived_at'):
+                    fajin.append({
+                        'id': e['id'], 'name': e['name'],
+                        'muscle_group': group['key'], 'muscle_label': group['label'],
+                        'function': fn['key'], 'function_label': fn['label'],
+                        'tracking_type': e.get('tracking_type', 'weight_reps'),
+                    })
+
+    live = get_live_session_state()
+    total_enabled = sum(g['active_count'] for g in tree)
+    taxonomy = {'primary': _GYM_PRIMARY_MUSCLES,
+                'constant': _GYM_CONSTANT_MUSCLES}
+    return render_template('train.html', bank=bank, live=live, fajin=fajin,
+                           taxonomy=taxonomy, total_enabled=total_enabled)
 
 
 @app.route('/api/gym/exercise/<int:exercise_id>', methods=['POST'])
 def api_gym_exercise_update(exercise_id):
-    """Update a gym exercise's metadata."""
+    """Update a gym exercise's metadata. Accepts tracking_type / sort_order /
+    archived_at in addition to the original fields — gym_update_exercise
+    whitelists them and keeps the deprecated is_weighted flag in sync."""
     data = request.get_json(silent=True) or {}
+    # Only forward known keys; ignore anything unexpected the client sends.
     ok, err = gym_update_exercise(exercise_id, **data)
+    if not ok:
+        return {'ok': False, 'error': err}, 400
+    return {'ok': True}
+
+
+@app.route('/api/gym/exercise/<int:exercise_id>', methods=['DELETE'])
+def api_gym_exercise_delete(exercise_id):
+    """Hard delete — refused with 409 if the exercise has logged history.
+    The UI must offer Archive in that case; the API enforces it regardless."""
+    ok, err = gym_delete_exercise(exercise_id)
+    if not ok:
+        # 409 Conflict when it has history; 404 when it doesn't exist.
+        status = 404 if err == 'Exercise not found.' else 409
+        return {'ok': False, 'error': err}, status
+    return {'ok': True}
+
+
+@app.route('/api/gym/exercise/<int:exercise_id>/archive', methods=['POST'])
+def api_gym_exercise_archive(exercise_id):
+    """Archive / unarchive. Body: {archived: true|false}."""
+    data = request.get_json(silent=True) or {}
+    if bool(data.get('archived', True)):
+        gym_archive_exercise(exercise_id)
+    else:
+        gym_unarchive_exercise(exercise_id)
+    return {'ok': True}
+
+
+@app.route('/api/gym/exercise/reorder', methods=['POST'])
+def api_gym_exercise_reorder():
+    """Persist a new sort_order for exercises within one function.
+    Body: {function: <key|null>, order: [id, id, ...]}."""
+    data = request.get_json(silent=True) or {}
+    order = data.get('order') or []
+    if not isinstance(order, list) or not all(isinstance(i, int) for i in order):
+        return {'ok': False, 'error': 'order must be a list of exercise ids'}, 400
+    ok, err = gym_reorder_function(data.get('function'), order)
+    if not ok:
+        return {'ok': False, 'error': err}, 400
+    return {'ok': True}
+
+
+@app.route('/api/gym/functions', methods=['GET', 'POST'])
+def api_gym_functions():
+    """GET: list all function rows. POST: add one
+    ({muscle_group, key, label, sort_order?})."""
+    if request.method == 'GET':
+        return {'functions': get_gym_functions()}
+    data = request.get_json(silent=True) or {}
+    ok, err = gym_add_function(
+        muscle_group=data.get('muscle_group', ''),
+        key=data.get('key', ''),
+        label=data.get('label', ''),
+        sort_order=(_safe_int(data.get('sort_order'), None) if data.get('sort_order') not in (None, '') else None),
+    )
     if not ok:
         return {'ok': False, 'error': err}, 400
     return {'ok': True}
@@ -1251,6 +1349,8 @@ def api_gym_exercise_add():
         function=data.get('function') or None,
         is_enabled=bool(data.get('is_enabled', True)),
         notes=data.get('notes') or None,
+        tracking_type=data.get('tracking_type') or 'weight_reps',
+        sort_order=_safe_int(data.get('sort_order'), 0),
     )
     if not ok:
         return {'ok': False, 'error': err}, 400
@@ -1271,75 +1371,11 @@ def exercises():
     return redirect(url_for('train'))
 
 
-# ── GYM Session Log: new exercise-first flow ─────────────────────────────────
-
-def _build_fajin_map():
-    """Build a lookup map for Fa Jin suggestions.
-    Keys: 'muscle_group' and 'muscle_group:function' → {name, muscle, fn}
-    """
-    from gym_bank import _gym_db
-    conn = _gym_db()
-    rows = conn.execute(
-        "SELECT id, name, muscle_group, function FROM gym_exercises WHERE tier = 4 AND is_enabled = 1"
-    ).fetchall()
-    conn.close()
-    fajin = {}
-    for r in rows:
-        entry = {'id': r['id'], 'name': r['name'], 'muscle': r['muscle_group'], 'fn': r['function'] or ''}
-        # Map by muscle_group:function (specific) and muscle_group (general)
-        if r['function']:
-            fajin[f"{r['muscle_group']}:{r['function']}"] = entry
-        # General muscle group fallback (first Fa Jin for that muscle wins)
-        if r['muscle_group'] not in fajin:
-            fajin[r['muscle_group']] = entry
-    return fajin
-
 
 @app.route('/session/log')
 def session_log():
-    """New gym session logging screen — exercise-first, accordion picker."""
-    import traceback
-    if _profile_id() in (2, 3):
-        return redirect(url_for('dashboard'))
-
-    try:
-        bank = get_gym_bank()
-        all_exercises = []
-        for tier_list in bank.values():
-            all_exercises.extend(tier_list)
-
-        # Only show enabled, non-Fa-Jin exercises in the picker (T1/T2/T3)
-        pickable = [e for e in all_exercises if e.get('is_enabled') and e['tier'] in (1, 2, 3)]
-
-        groups = []
-        for key in _GYM_GROUP_ORDER:
-            exs = [e for e in pickable if e['muscle_group'] == key]
-            if exs:
-                exs.sort(key=lambda e: (e['tier'], e.get('function') or 'zzz', e['name']))
-                groups.append({
-                    'key': key,
-                    'label': _GYM_GROUP_LABELS.get(key, key.title()),
-                    'exercises': exs,
-                })
-
-        fajin_map = _build_fajin_map()
-        today = date_type.today().isoformat()
-
-        # Cardio items from the existing exercises table (tier 4, Cardio group)
-        cardio_choices = get_cardio_choices(_profile_id())
-        cardio_items = [{'id': c['id'], 'name': c['name'],
-                         'metrics': c.get('cardio_metrics', '{}')}
-                        for c in cardio_choices]
-        # Ensure "Kicks + Run" is available
-        if not any(c['name'] == 'Kicks + Run' for c in cardio_items):
-            cardio_items.append({'id': None, 'name': 'Kicks + Run', 'metrics': '{"time":true,"distance":"m"}'})
-
-        return render_template('session_log.html', groups=groups, today=today,
-                               cardio_items=cardio_items,
-                               fajin_map=_json.dumps(fajin_map))
-    except Exception as e:
-        traceback.print_exc()
-        return f"<pre>Error loading session log:\n{traceback.format_exc()}</pre>", 500
+    """Legacy redirect — old /session/log URL now points to the live Train engine."""
+    return redirect(url_for('train'))
 
 
 @app.route('/api/gym/history/<int:exercise_id>')
@@ -1350,43 +1386,147 @@ def api_gym_history(exercise_id):
     return {'history': history}
 
 
-@app.route('/api/gym/session/start', methods=['POST'])
-def api_gym_session_start():
-    """Start a new workout session. Returns the new session id."""
-    session_id = start_gym_session()
-    return {'ok': True, 'session_id': session_id}
 
 
-@app.route('/api/gym/session/end', methods=['POST'])
-def api_gym_session_end():
-    """End a workout session."""
-    data = request.get_json(silent=True) or {}
-    session_id = _safe_int(data.get('session_id'), 0)
-    if not session_id:
-        return {'ok': False, 'error': 'Missing session_id'}, 400
-    ok = end_gym_session(session_id)
-    if not ok:
-        return {'ok': False, 'error': 'Session not found'}, 404
-    return {'ok': True}
+
+def _tracking_type_for(exercise_id):
+    """Fetch an exercise's tracking_type (defaults to weight_reps)."""
+    ex = get_gym_exercise(exercise_id)
+    return (ex or {}).get('tracking_type', 'weight_reps')
+
+
+def _cardio_spec(engagement):
+    """Normalise an exercise's engagement column into a dict. Cardio exercises
+    store their per-activity field spec here, e.g.
+    {"duration": true, "distance": "m", "setting": true}. Tolerates a JSON
+    string, an already-parsed dict, or None/blank."""
+    if isinstance(engagement, dict):
+        return engagement
+    if not engagement:
+        return {}
+    try:
+        return _json.loads(engagement)
+    except (ValueError, TypeError):
+        return {}
 
 
 @app.route('/api/gym/log-set', methods=['POST'])
 def api_gym_log_set():
-    """Log one set of N reps at a given weight, against an active session."""
+    """Log one set for the live workout engine (§5).
+
+    Resolves today's open session via get_or_create_today_gym_session() (no
+    separate Start step), persists the set immediately via log_gym_set, and
+    returns enough state to update workout-so-far + the function checklist
+    without a full reload.
+
+    Request: {exercise_id, weight_kg?, reps?, duration_s?, successful=true}.
+    Fields present per tracking_type:
+      weight_reps -> weight_kg + reps       reps -> reps
+      weight_time -> weight_kg + duration_s  time -> duration_s
+    Response: {ok, id, workout_so_far, checklist}. On failure returns a non-2xx
+    so the client shows the failed ✓ state and retries (§6) — a confirmed set is
+    never silently dropped."""
     data = request.get_json(silent=True) or {}
     exercise_id = _safe_int(data.get('exercise_id'), 0)
+    if not exercise_id:
+        return {'ok': False, 'error': 'Missing exercise_id'}, 400
+
+    tt = _tracking_type_for(exercise_id)
     weight_kg = _safe_float(data.get('weight_kg'), 0.0)
     reps = _safe_int(data.get('reps'), 0)
+    duration_s = _safe_int(data.get('duration_s'), 0) or None
+    distance_m = _safe_int(data.get('distance_m'), 0) or None
+    setting = (data.get('setting') or '').strip() or None
     successful = bool(data.get('successful', True))
-    session_id = _safe_int(data.get('session_id'), 0) or None
+
+    # Per-tracking-type minimum validity so we never persist an empty set.
+    if tt in ('weight_reps', 'reps') and reps <= 0:
+        return {'ok': False, 'error': 'reps required'}, 400
+    if tt in ('time', 'weight_time') and not duration_s:
+        return {'ok': False, 'error': 'duration required'}, 400
+    if tt == 'cardio' and not duration_s:
+        return {'ok': False, 'error': 'duration required'}, 400
+
+    session_id = get_or_create_today_gym_session()
+    log_id = log_gym_set(
+        exercise_id, weight_kg, reps, sets=1, successful=successful,
+        session_id=session_id, duration_s=duration_s,
+        distance_m=distance_m, setting=setting,
+    )
+    live = get_live_session_state()
+    return {'ok': True, 'id': log_id,
+            'workout_so_far': live, 'checklist': live['muscles']}
+
+
+@app.route('/api/gym/log-set/undo', methods=['POST'])
+def api_gym_log_set_undo():
+    """Walk back the last set for an exercise today (§5), then return the
+    refreshed live state so workout-so-far + checklist update in place."""
+    data = request.get_json(silent=True) or {}
+    exercise_id = _safe_int(data.get('exercise_id'), 0)
+    if not exercise_id:
+        return {'ok': False, 'error': 'Missing exercise_id'}, 400
+    removed = undo_last_today(exercise_id)
+    live = get_live_session_state()
+    return {'ok': True, 'removed': removed,
+            'workout_so_far': live, 'checklist': live['muscles']}
+
+
+@app.route('/api/gym/live-session')
+def api_gym_live_session():
+    """Today's live-session state for rehydrate on load/refresh (§4.5).
+    Applies the ~4 AM lazy roll-over stamp (inside get_live_session_state)."""
+    return get_live_session_state()
+
+
+@app.route('/api/gym/exercise/<int:exercise_id>/prefill')
+def api_gym_exercise_prefill(exercise_id):
+    """Pre-fill payload when an exercise opens (§3): most-recent set (drives the
+    pre-filled working set) + best recent set (reference only)."""
+    ex = get_gym_exercise(exercise_id)
+    if not ex:
+        return {'ok': False, 'error': 'Exercise not found'}, 404
+    pf = get_exercise_prefill(exercise_id)
+    return {'ok': True,
+            'tracking_type': ex.get('tracking_type', 'weight_reps'),
+            'name': ex.get('name'),
+            'engagement': _cardio_spec(ex.get('engagement')),
+            'most_recent': pf['most_recent'],
+            'best_recent': pf['best_recent']}
+
+
+@app.route('/api/gym/quick-log', methods=['POST'])
+def api_gym_quick_log():
+    """One-touch set logging for Train page exercises (currently Muay Thai).
+    Unlike /api/gym/log-set, this doesn't require an already-started session
+    — it transparently drops into (or starts) today's open gym session, so a
+    single tap is enough. Unweighted drills log reps=1 per tap; the weighted
+    quick-entry form on the Train page passes its own weight_kg/reps."""
+    data = request.get_json(silent=True) or {}
+    exercise_id = _safe_int(data.get('exercise_id'), 0)
+    reps = _safe_int(data.get('reps'), 1)
+    weight_kg = _safe_float(data.get('weight_kg'), 0.0)
 
     if not exercise_id or reps <= 0:
         return {'ok': False, 'error': 'Invalid data'}, 400
-    if not session_id:
-        return {'ok': False, 'error': 'No active session — start a session first'}, 400
 
-    log_id = log_gym_set(exercise_id, weight_kg, reps, sets=1, successful=successful, session_id=session_id)
-    return {'ok': True, 'id': log_id}
+    session_id = get_or_create_today_gym_session()
+    log_id = log_gym_set(exercise_id, weight_kg, reps, sets=1, successful=True, session_id=session_id)
+    tally = get_today_tally(exercise_id)
+    return {'ok': True, 'id': log_id, 'today_sets': tally['sets'], 'today_reps': tally['reps']}
+
+
+@app.route('/api/gym/quick-log/undo', methods=['POST'])
+def api_gym_quick_log_undo():
+    """Undo the most recent one-touch tap for an exercise (today only) —
+    lets a misclick on the Train page be walked back instantly."""
+    data = request.get_json(silent=True) or {}
+    exercise_id = _safe_int(data.get('exercise_id'), 0)
+    if not exercise_id:
+        return {'ok': False, 'error': 'Invalid data'}, 400
+    removed = undo_last_today(exercise_id)
+    tally = get_today_tally(exercise_id)
+    return {'ok': True, 'removed': removed, 'today_sets': tally['sets'], 'today_reps': tally['reps']}
 
 
 @app.route('/api/gym/log-cardio', methods=['POST'])
@@ -1500,10 +1640,50 @@ def analytics():
     return render_template('analytics.html', prs=prs, progression_json=_json.dumps(progression), exercise_names=exercise_names, week_labels=_json.dumps(week_labels), volume_data=_json.dumps(volume_data), swim_data=_json.dumps(swim_data), heatmap_json=_json.dumps(get_activity_calendar()))
 
 
-# Legacy redirect — old /exercise-bank URL points to /train now
+# /exercise-bank now points to the databank management page (was /train).
 @app.route('/exercise-bank')
 def exercise_bank():
-    return redirect(url_for('train'))
+    return redirect(url_for('exercise_db'))
+
+
+@app.route('/exercise-db')
+def exercise_db():
+    """Databank management page — browse, add, edit, reorder, archive, delete.
+    Arjun-only (profile 1); Gayathri/Raj are redirected to dashboard."""
+    if _profile_id() in (2, 3):
+        return redirect(url_for('dashboard'))
+    tree = get_gym_bank_grouped(include_archived=True)
+    # Split active vs archived for the two-section layout. A group's functions
+    # keep only active exercises; archived ones are collected into a flat list.
+    archived = []
+    active_total = 0
+    for group in tree:
+        kept_fns = []
+        for fn in group['functions']:
+            active_exs = []
+            for e in fn['exercises']:
+                if e.get('archived_at'):
+                    archived.append(e)
+                else:
+                    active_exs.append(e)
+                    active_total += 1
+            if active_exs:
+                kept_fns.append({**fn, 'exercises': active_exs})
+        group['functions'] = kept_fns
+        group['active_count'] = sum(len(fn['exercises']) for fn in kept_fns)
+    # Drop groups that ended up with no active functions (their only members
+    # were archived) — but keep the archived rows in the Archived section.
+    groups = [g for g in tree if g['functions']]
+    archived.sort(key=lambda e: (e['muscle_group'], e['name']))
+    functions_by_muscle = {mg: get_gym_functions(mg) for mg in _GYM_GROUP_ORDER}
+    return render_template('exercise_db.html',
+                           groups=groups,
+                           archived=archived,
+                           active_total=active_total,
+                           archived_count=len(archived),
+                           muscle_groups=list(_GYM_GROUP_LABELS.keys()),
+                           functions_by_muscle=functions_by_muscle,
+                           tracking_types=list(TRACKING_TYPES))
 
 
 @app.route('/food/shared')
@@ -1550,6 +1730,7 @@ def food():
     goals = get_macro_goals(pid)
     _rows = get_food_log(date_str, pid)
     entries = [ dict(e) for e in _rows ]
+    enrich_log_entries(entries)   # attach source/type/std-serving/unit_type for the food card
     totals = {
         'calories': round(sum(e['calories'] for e in entries), 1),
         'protein_g': round(sum(e['protein_g'] for e in entries), 1),
@@ -1674,6 +1855,48 @@ def food_api_entry():
         'Content-Type': 'application/json' })
 
 
+@app.route('/food/api/define', methods=[ 'POST'])
+def food_api_define():
+    """Define macros for a food inline (from the 'define it now?' prompt shown after
+    logging an undefined food). Backfills any matching 0-cal log rows — including the
+    just-logged entry — and returns that entry's fresh values so the client can animate
+    the calorie/protein bars without a full page reload."""
+    data = request.get_json(silent=True) or {}
+    pid = _profile_id()
+    name = (data.get('name') or '').strip()
+    if not name:
+        return (_json.dumps({
+            'error': 'name required' }), 400, {
+            'Content-Type': 'application/json' })
+    unit_type = 'unit' if data.get('unit_type') == 'unit' else 'g'
+    cal  = _safe_float(data.get('calories'))
+    pro  = _safe_float(data.get('protein_g'))
+    carb = _safe_float(data.get('carbs_g'))
+    fat  = _safe_float(data.get('fat_g'))
+    define_food_item(name, cal, pro, carb, fat, unit_type)
+
+    entry = None
+    entry_id = data.get('entry_id')
+    if entry_id:
+        conn = get_db()
+        row = conn.execute('SELECT * FROM food_log WHERE id=? AND profile_id=?', (entry_id, pid)).fetchone()
+        conn.close()
+        if row:
+            entry = {
+                'id': row['id'],
+                'name': row['name'],
+                'meal_type': row['meal_type'],
+                'calories': row['calories'],
+                'protein_g': row['protein_g'],
+                'carbs_g': row['carbs_g'],
+                'fat_g': row['fat_g'],
+                'logged_at': row['logged_at'] }
+    return (_json.dumps({
+        'ok': True,
+        'entry': entry }), 200, {
+        'Content-Type': 'application/json' })
+
+
 @app.route('/food/delete/<int:entry_id>', methods=[ 'POST'])
 def food_log_delete(entry_id):
     date_str = request.form.get('date', date_type.today().isoformat())
@@ -1756,15 +1979,20 @@ def food_database():
     comps_map = get_food_components()
     recipe_keys = set(comps_map.keys())
     composite_keys = {k for k, v in comps_map.items() if any((c.get('pct') or 0) > 0 for c in v)}
+    types = get_food_types()
+    type_map = {t['id']: t for t in types}
     for item in library:
         nl = item['name'].lower()
         item['is_pending'] = item['calories'] == 0
         item['is_composite'] = nl in composite_keys
         # 'recipe' now means a fixed-portion recipe; percentage composites get their own badge.
         item['is_recipe'] = nl in recipe_keys and not item['is_composite']
+        t = type_map.get(item.get('type_id'))
+        item['type_name'] = t['name'] if t else None
+        item['type_color'] = t['color'] if t else None
     library.sort(key=lambda x: (not x['is_pending'], x['name'].lower()))
     counts = {'all': len(library), 'defined': sum(1 for i in library if not i['is_pending']), 'pending': sum(1 for i in library if i['is_pending']), 'recipes': sum(1 for i in library if i['is_recipe']), 'composites': sum(1 for i in library if i['is_composite'])}
-    return render_template('food_database.html', food_library=library, counts=counts)
+    return render_template('food_database.html', food_library=library, counts=counts, food_types=types)
 
 
 @app.route('/food/edit/new', methods=['GET', 'POST'])
@@ -1774,15 +2002,17 @@ def food_edit_new():
         if not name:
             return redirect(url_for('food_edit_new'))
         unit_type = 'unit' if request.form.get('unit_type') == 'unit' else 'g'
+        _meta = _read_food_meta(request.form, unit_type)
         define_food_item(name,
             float(request.form.get('calories', 0) or 0),
             float(request.form.get('protein_g', 0) or 0),
             float(request.form.get('carbs_g', 0) or 0),
             float(request.form.get('fat_g', 0) or 0),
-            unit_type)
+            unit_type, **_meta)
         return redirect(url_for('food_edit', name=name))
     return render_template('food_edit.html', mode='new', name='',
-                           existing=None, components=[], food_library=[], macros_json='{}')
+                           existing=None, components=[], food_library=[], macros_json='{}',
+                           food_types=get_food_types(), source_names=get_distinct_source_names())
 
 
 @app.route('/food/edit/<path:name>', methods=['GET', 'POST'])
@@ -1794,12 +2024,13 @@ def food_edit(name):
     existing_dict = dict(existing) if existing else None
     if request.method == 'POST':
         unit_type = 'unit' if request.form.get('unit_type') == 'unit' else 'g'
+        _meta = _read_food_meta(request.form, unit_type)
         define_food_item(name,
             float(request.form.get('calories', 0) or 0),
             float(request.form.get('protein_g', 0) or 0),
             float(request.form.get('carbs_g', 0) or 0),
             float(request.form.get('fat_g', 0) or 0),
-            unit_type)
+            unit_type, **_meta)
         sync_food_log_from_library(date_type.today().isoformat(), pid)
         return redirect(url_for('food_edit', name=name))
     comps = get_food_components().get(name.lower(), [])
@@ -1818,7 +2049,8 @@ def food_edit(name):
     return render_template('food_edit.html', mode=mode, name=name,
                            existing=existing_dict, components=comps,
                            recipe_mode=recipe_mode,
-                           food_library=library, macros_json=macros_json)
+                           food_library=library, macros_json=macros_json,
+                           food_types=get_food_types(), source_names=get_distinct_source_names())
 
 
 @app.route('/food/delete/<path:name>', methods=['POST'])
@@ -1830,6 +2062,76 @@ def food_delete(name):
 @app.route('/food/define/<path:name>')
 def food_define_redirect(name):
     return redirect(url_for('food_edit', name=name), 301)
+
+
+def _read_food_meta(form, unit_type):
+    """Extract the optional source/type/std-serving fields from a food-edit POST.
+    Empty strings -> None (stored NULL). std_serving_g is ignored for unit-type foods."""
+    st = (form.get('source_type', '') or '').strip().lower()
+    source_type = st if st in ('restaurant', 'brand', 'homemade') else None
+    source_name = (form.get('source_name', '') or '').strip() or None
+    if source_type == 'homemade' or source_type is None:
+        source_name = None if source_type == 'homemade' else source_name
+    tid_raw = (form.get('type_id', '') or '').strip()
+    try:
+        type_id = int(tid_raw) if tid_raw else None
+    except ValueError:
+        type_id = None
+    std_raw = (form.get('std_serving_g', '') or '').strip()
+    if unit_type == 'unit':
+        std_serving_g = None            # ignored for count-based foods
+    else:
+        try:
+            std_serving_g = float(std_raw) if std_raw else None
+        except ValueError:
+            std_serving_g = None
+    return {'source_type': source_type, 'source_name': source_name,
+            'type_id': type_id, 'std_serving_g': std_serving_g}
+
+
+# ── Managed food types ──────────────────────────────────────────────────────────
+@app.route('/food/types')
+def food_types():
+    types = get_food_types()
+    # attach usage counts so the manage screen can show "N foods" and the delete confirm.
+    for t in types:
+        t['count'] = count_foods_with_type(t['id'])
+    return render_template('food_types.html', food_types=types)
+
+
+@app.route('/food/types', methods=['POST'])
+def food_types_create():
+    name = request.form.get('name', '')
+    color = request.form.get('color', '') or '#888888'
+    _id, err = create_food_type(name, color)
+    if err == 'duplicate':
+        # Re-render with an inline error rather than a bare 409 page.
+        types = get_food_types()
+        for t in types:
+            t['count'] = count_foods_with_type(t['id'])
+        return render_template('food_types.html', food_types=types,
+                               error='A type called "%s" already exists.' % name.strip()), 409
+    return redirect(url_for('food_types'))
+
+
+@app.route('/food/types/<int:type_id>/edit', methods=['POST'])
+def food_types_edit(type_id):
+    name = request.form.get('name', '')
+    color = request.form.get('color', '') or '#888888'
+    ok, err = update_food_type(type_id, name, color)
+    if err == 'duplicate':
+        types = get_food_types()
+        for t in types:
+            t['count'] = count_foods_with_type(t['id'])
+        return render_template('food_types.html', food_types=types,
+                               error='A type called "%s" already exists.' % name.strip()), 409
+    return redirect(url_for('food_types'))
+
+
+@app.route('/food/types/<int:type_id>/delete', methods=['POST'])
+def food_types_delete(type_id):
+    delete_food_type(type_id)   # nulls out referencing food_items.type_id; never deletes foods
+    return redirect(url_for('food_types'))
 
 
 @app.route('/command-centre')

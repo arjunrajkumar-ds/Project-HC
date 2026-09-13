@@ -26,6 +26,24 @@
     transition: background .1s, color .1s, border-color .1s;
 }
 .unit-btn.active { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+/* ── Source / type / advanced serving ─────────────────────────────── */
+.fe-field { display: flex; flex-direction: column; gap: 8px; }
+.fe-label { font-size: 0.65rem; font-weight: 700; color: var(--dim);
+    text-transform: uppercase; letter-spacing: .08em; }
+.fe-input, .fe-select {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); font-family: inherit; font-size: 0.9rem; padding: 10px 12px; width: 100%;
+    -webkit-appearance: none; appearance: none;
+}
+.fe-adv-toggle {
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    font-family: inherit; font-size: 0.78rem; font-weight: 700; padding: 4px 0; text-align: left;
+    -webkit-tap-highlight-color: transparent;
+}
+.fe-adv-toggle:active { color: var(--accent); }
+.fe-adv-body { display: none; flex-direction: column; gap: 8px; }
+.fe-adv-body.open { display: flex; }
+.fe-hint { font-size: 0.72rem; color: var(--dim); line-height: 1.4; }
 .btn-save {
     background: var(--accent); border: none; border-radius: 10px;
     color: var(--bg); cursor: pointer; font-family: inherit;
@@ -197,6 +215,61 @@
                    value="{{ 'unit' if is_unit else 'g' }}">
         </div>
 
+        {# ── Source ─────────────────────────────────────────────────── #}
+        {% set st = existing.source_type if existing else None %}
+        <div class="fe-field">
+            <div class="fe-label">Source</div>
+            <div class="unit-toggle-row">
+                <button type="button" class="unit-btn {% if st == 'restaurant' %}active{% endif %}"
+                        id="src-restaurant" onclick="setSource('restaurant')">Restaurant</button>
+                <button type="button" class="unit-btn {% if st == 'brand' %}active{% endif %}"
+                        id="src-brand" onclick="setSource('brand')">Brand</button>
+                <button type="button" class="unit-btn {% if st == 'homemade' %}active{% endif %}"
+                        id="src-homemade" onclick="setSource('homemade')">Homemade</button>
+            </div>
+            <input type="hidden" name="source_type" id="h-source-type" value="{{ st or '' }}">
+        </div>
+
+        {# Vendor name — only meaningful for restaurant/brand #}
+        <div class="fe-field" id="vendor-field"
+             style="{% if st not in ['restaurant','brand'] %}display:none{% endif %}">
+            <div class="fe-label">Vendor / brand name</div>
+            <input type="text" class="fe-input" name="source_name" id="fe-source-name"
+                   list="fe-vendor-list" autocomplete="off" autocapitalize="words"
+                   placeholder="e.g. GyG, Chobani"
+                   value="{{ existing.source_name | e if existing and existing.source_name else '' }}">
+            <datalist id="fe-vendor-list">
+                {% for v in source_names %}<option value="{{ v | e }}">{% endfor %}
+            </datalist>
+        </div>
+
+        {# ── Type (from managed list) ───────────────────────────────── #}
+        <div class="fe-field">
+            <div class="fe-label">Type</div>
+            <select class="fe-select" name="type_id" id="fe-type-id">
+                <option value="">— none —</option>
+                {% for t in food_types %}
+                <option value="{{ t.id }}"
+                    {% if existing and existing.type_id == t.id %}selected{% endif %}>{{ t.name }}</option>
+                {% endfor %}
+            </select>
+            <a href="/food/types" class="fe-hint" style="color:var(--accent);text-decoration:none">Manage types →</a>
+        </div>
+
+        {# ── Advanced: standard serving (weight foods only) ─────────── #}
+        <div id="adv-section" style="{% if is_unit %}display:none{% endif %}">
+            <button type="button" class="fe-adv-toggle" id="adv-toggle" onclick="toggleAdv()">▸ Advanced</button>
+            <div class="fe-adv-body" id="adv-body">
+                <div class="fe-field">
+                    <div class="fe-label">Standard serving (g)</div>
+                    <input type="number" class="fe-input" name="std_serving_g" id="fe-std-serving"
+                           min="0" step="1" inputmode="decimal" placeholder="Default portion, e.g. 30"
+                           value="{{ existing.std_serving_g | int if existing and existing.std_serving_g else '' }}">
+                    <div class="fe-hint">Hidden default portion for this food. Empty = fall back to 100g.</div>
+                </div>
+            </div>
+        </div>
+
         <button type="submit" class="btn-save">Save</button>
     </form>
 </div>
@@ -270,7 +343,35 @@ function setUnit(val) {
     document.getElementById('h-unit-type').value = val;
     document.getElementById('btn-per-g').classList.toggle('active', val === 'g');
     document.getElementById('btn-per-unit').classList.toggle('active', val === 'unit');
+    // Standard serving (grams) only applies to weight-based foods.
+    const adv = document.getElementById('adv-section');
+    if (adv) adv.style.display = (val === 'unit') ? 'none' : '';
 }
+
+// ── Source segmented control ────────────────────────────────────────────
+function setSource(val) {
+    const cur = document.getElementById('h-source-type').value;
+    const next = (cur === val) ? '' : val;   // tapping the active option clears it (-> none)
+    document.getElementById('h-source-type').value = next;
+    ['restaurant', 'brand', 'homemade'].forEach(s =>
+        document.getElementById('src-' + s).classList.toggle('active', s === next));
+    // Vendor name only for restaurant/brand.
+    const vf = document.getElementById('vendor-field');
+    vf.style.display = (next === 'restaurant' || next === 'brand') ? '' : 'none';
+    if (next === 'homemade' || next === '') document.getElementById('fe-source-name').value = '';
+}
+
+function toggleAdv() {
+    const body = document.getElementById('adv-body');
+    const btn = document.getElementById('adv-toggle');
+    const open = body.classList.toggle('open');
+    btn.textContent = (open ? '▾ Advanced' : '▸ Advanced');
+}
+// Auto-expand Advanced if a standard serving is already set.
+(function () {
+    const ss = document.getElementById('fe-std-serving');
+    if (ss && ss.value) toggleAdv();
+})();
 
 // ── Recipe ─────────────────────────────────────────────────────────────
 // FOOD_MACROS is keyed by canonical key (plural-aware), matching the server.

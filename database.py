@@ -703,6 +703,14 @@ def init_db():
             weight_g INTEGER NOT NULL
         )
     """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS food_types (
+            id     INTEGER PRIMARY KEY AUTOINCREMENT,
+            name   TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            color  TEXT NOT NULL
+        )
+    """)
     conn.executemany(
         "INSERT OR IGNORE INTO containers (name, weight_g) VALUES (?, ?)",
         [('white circle bowl', 175), ('white square bowl', 215)]
@@ -723,6 +731,15 @@ def init_db():
         conn.execute("ALTER TABLE food_items ADD COLUMN unit_type TEXT NOT NULL DEFAULT 'g'")
     if 'name_key' not in _fi_cols:
         conn.execute("ALTER TABLE food_items ADD COLUMN name_key TEXT")
+    # Source / type / standard-serving metadata (all nullable, additive).
+    if 'source_type' not in _fi_cols:
+        conn.execute("ALTER TABLE food_items ADD COLUMN source_type TEXT")
+    if 'source_name' not in _fi_cols:
+        conn.execute("ALTER TABLE food_items ADD COLUMN source_name TEXT")
+    if 'type_id' not in _fi_cols:
+        conn.execute("ALTER TABLE food_items ADD COLUMN type_id INTEGER")
+    if 'std_serving_g' not in _fi_cols:
+        conn.execute("ALTER TABLE food_items ADD COLUMN std_serving_g REAL")
 
     # Migrate food_components: add pct column for percentage / by-weight composites.
     _fc_cols = {r[1] for r in conn.execute('PRAGMA table_info(food_components)')}
@@ -2892,21 +2909,68 @@ def get_pending_foods(profile_id=1):
     return result
 
 
-def define_food_item(name, calories, protein_g, carbs_g, fat_g, unit_type='g'):
+# Sentinel meaning "caller did not pass this field" — distinct from an explicit None
+# (which means "clear this column to NULL"). Lets recipe/composite callers upsert macros
+# without disturbing source/type/serving metadata they don't know about.
+_UNSET = object()
+
+
+def define_food_item(name, calories, protein_g, carbs_g, fat_g, unit_type='g',
+                     source_type=_UNSET, source_name=_UNSET,
+                     type_id=_UNSET, std_serving_g=_UNSET):
     """Create or update a library food, then backfill any 0-cal log rows that resolve
-    to it (including quantity-prefixed and plural variants)."""
+    to it (including quantity-prefixed and plural variants).
+
+    source_type / source_name / type_id / std_serving_g are optional. When left at the
+    _UNSET sentinel they are not written on update (and default to NULL on insert), so
+    existing callers that don't pass them never clobber previously-set metadata. Pass an
+    explicit value (including None/'' -> NULL) to set the column.
+    """
     name = _display_name(name)
     conn = get_db()
     key  = _food_key(name)
-    conn.execute("""
-        INSERT INTO food_items (name, name_key, calories, protein_g, carbs_g, fat_g, unit_type)
-        VALUES (?,?,?,?,?,?,?)
+
+    # Coerce source_type to the allowed set or NULL (defensive; UI can't produce bad values).
+    def _norm_source_type(v):
+        if v in (None, ''):
+            return None
+        return v if v in ('restaurant', 'brand', 'homemade') else None
+
+    _st = _norm_source_type(source_type) if source_type is not _UNSET else _UNSET
+    # Homemade has no vendor name.
+    if _st == 'homemade':
+        source_name = None
+    _sn = (source_name or None) if source_name is not _UNSET else _UNSET
+    _ti = ((int(type_id) if str(type_id).strip() not in ('', 'None') else None)
+           if type_id is not _UNSET else _UNSET)
+    def _to_float_or_none(v):
+        try:
+            return float(v) if str(v).strip() not in ('', 'None') else None
+        except (TypeError, ValueError):
+            return None
+    _ss = _to_float_or_none(std_serving_g) if std_serving_g is not _UNSET else _UNSET
+
+    # Build the INSERT column list dynamically so unset fields fall back to NULL on insert
+    # and are omitted from the UPDATE SET so they stay untouched.
+    insert_cols = ['name', 'name_key', 'calories', 'protein_g', 'carbs_g', 'fat_g', 'unit_type']
+    insert_vals = [name, key, calories, protein_g, carbs_g, fat_g, unit_type]
+    update_sets = ['name_key=excluded.name_key', 'calories=excluded.calories',
+                   'protein_g=excluded.protein_g', 'carbs_g=excluded.carbs_g',
+                   'fat_g=excluded.fat_g', 'unit_type=excluded.unit_type']
+    for col, val in (('source_type', _st), ('source_name', _sn),
+                     ('type_id', _ti), ('std_serving_g', _ss)):
+        if val is not _UNSET:
+            insert_cols.append(col)
+            insert_vals.append(val)
+            update_sets.append(f'{col}=excluded.{col}')
+
+    placeholders = ','.join('?' for _ in insert_cols)
+    conn.execute(f"""
+        INSERT INTO food_items ({', '.join(insert_cols)})
+        VALUES ({placeholders})
         ON CONFLICT(name) DO UPDATE SET
-            name_key=excluded.name_key,
-            calories=excluded.calories, protein_g=excluded.protein_g,
-            carbs_g=excluded.carbs_g,   fat_g=excluded.fat_g,
-            unit_type=excluded.unit_type
-    """, (name, key, calories, protein_g, carbs_g, fat_g, unit_type))
+            {', '.join(update_sets)}
+    """, insert_vals)
     # Backfill existing 0-cal log rows that resolve to this food (any date/profile).
     if calories > 0:
         pending = conn.execute(
@@ -2922,6 +2986,111 @@ def define_food_item(name, calories, protein_g, carbs_g, fat_g, unit_type='g'):
                       resolved['carbs_g'], resolved['fat_g'], row['id']))
     conn.commit()
     conn.close()
+
+
+# ── Food types (managed, colour-coded grouping labels) ──────────────────────────
+def get_food_types():
+    """All managed food types, alphabetical. Each: id, name, color."""
+    conn = get_db()
+    rows = conn.execute('SELECT id, name, color FROM food_types ORDER BY name COLLATE NOCASE').fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def create_food_type(name, color):
+    """Create a type. Returns (id, None) on success or (None, 'duplicate') on name clash."""
+    name = ' '.join((name or '').strip().split())
+    color = (color or '').strip() or '#888888'
+    if not name:
+        return None, 'empty'
+    conn = get_db()
+    try:
+        cur = conn.execute('INSERT INTO food_types (name, color) VALUES (?, ?)', (name, color))
+        conn.commit()
+        return cur.lastrowid, None
+    except sqlite3.IntegrityError:
+        return None, 'duplicate'
+    finally:
+        conn.close()
+
+
+def update_food_type(type_id, name, color):
+    """Rename / recolour a type. Returns (True, None) or (False, 'duplicate')."""
+    name = ' '.join((name or '').strip().split())
+    color = (color or '').strip() or '#888888'
+    conn = get_db()
+    try:
+        conn.execute('UPDATE food_types SET name=?, color=? WHERE id=?', (name, color, int(type_id)))
+        conn.commit()
+        return True, None
+    except sqlite3.IntegrityError:
+        return False, 'duplicate'
+    finally:
+        conn.close()
+
+
+def count_foods_with_type(type_id):
+    conn = get_db()
+    n = conn.execute('SELECT COUNT(*) FROM food_items WHERE type_id=?', (int(type_id),)).fetchone()[0]
+    conn.close()
+    return n
+
+
+def delete_food_type(type_id):
+    """Delete a type and untag any foods referencing it (never deletes foods)."""
+    conn = get_db()
+    conn.execute('UPDATE food_items SET type_id=NULL WHERE type_id=?', (int(type_id),))
+    conn.execute('DELETE FROM food_types WHERE id=?', (int(type_id),))
+    conn.commit()
+    conn.close()
+
+
+def get_distinct_source_names():
+    """Distinct non-null vendor/brand names, for edit-form autocomplete."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT DISTINCT source_name FROM food_items "
+        "WHERE source_name IS NOT NULL AND TRIM(source_name) != '' "
+        "ORDER BY source_name COLLATE NOCASE"
+    ).fetchall()
+    conn.close()
+    return [r[0] for r in rows]
+
+
+def enrich_log_entries(entries):
+    """Attach parent food_items metadata (source/type/std-serving/unit_type) to each
+    food_log entry dict, read live from the matched definition via the shared resolver.
+
+    Adds keys: source_type, source_name, type_name, type_color, std_serving_g, unit_type.
+    Missing/pending foods simply get None for all of them — the card copes.
+    """
+    conn = get_db()
+    try:
+        for e in entries:
+            for k in ('source_type', 'source_name', 'type_name', 'type_color',
+                      'std_serving_g', 'unit_type'):
+                e.setdefault(k, None)
+            parsed = _parse_entry_name(e.get('name', ''))
+            item = _lookup_food_item(conn, parsed['key'])
+            if not item:
+                continue
+            item = dict(item)
+            e['source_type']   = item.get('source_type')
+            e['source_name']   = item.get('source_name')
+            e['std_serving_g'] = item.get('std_serving_g')
+            e['unit_type']     = item.get('unit_type')
+            # Expose parsed serving info so the card can build the serving-basis label.
+            e['_multiplier'] = parsed['multiplier']
+            e['_gram_qty']   = parsed['gram_qty']
+            tid = item.get('type_id')
+            if tid:
+                t = conn.execute('SELECT name, color FROM food_types WHERE id=?', (tid,)).fetchone()
+                if t:
+                    e['type_name']  = t['name']
+                    e['type_color'] = t['color']
+    finally:
+        conn.close()
+    return entries
 
 
 def delete_food_item(name):
@@ -2998,6 +3167,9 @@ def save_food_components(food_name, components):
         VALUES (?, ?, 0, 0, 0, 0, 'unit')
         ON CONFLICT(name) DO UPDATE SET unit_type = 'unit', name_key = excluded.name_key
     """, (food_name, _food_key(food_name)))
+    # Recipe/composite => homemade by default, but never overwrite an explicit source.
+    conn.execute("UPDATE food_items SET source_type='homemade' "
+                 "WHERE name=? COLLATE NOCASE AND source_type IS NULL", (food_name,))
     conn.execute('DELETE FROM food_components WHERE food_name = ? COLLATE NOCASE', (food_name,))
     total_cal = total_pro = total_carb = total_fat = 0.0
     for ing_name, qty in components:
@@ -3093,6 +3265,9 @@ def save_food_components_pct(food_name, components):
             carbs_g=excluded.carbs_g,   fat_g=excluded.fat_g
     """, (food_name, _food_key(food_name),
           round(cal, 1), round(pro, 1), round(carb, 1), round(fat, 1)))
+    # Recipe/composite => homemade by default, but never overwrite an explicit source.
+    conn.execute("UPDATE food_items SET source_type='homemade' "
+                 "WHERE name=? COLLATE NOCASE AND source_type IS NULL", (food_name,))
 
     # Backfill any 0-cal log rows that resolve to this composite (incl. '150g Curd Rice').
     if cal > 0:

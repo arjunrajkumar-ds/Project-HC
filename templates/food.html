@@ -86,7 +86,7 @@
     padding: 14px; margin-bottom: 16px;
     display: flex; flex-direction: column; gap: 10px;
 }
-.meal-bar-row { display: flex; align-items: center; gap: 10px; }
+.meal-bar-row { display: flex; align-items: center; gap: 10px; position: relative; }
 .meal-bar-label {
     font-size: 0.65rem; font-weight: 700; color: var(--dim);
     text-transform: uppercase; letter-spacing: .06em;
@@ -95,7 +95,7 @@
 .meal-bar-track {
     flex: 1; height: 26px; background: var(--surface-2);
     border-radius: 6px; overflow: hidden;
-    display: flex;
+    display: flex; position: relative;
 }
 .meal-seg {
     height: 100%; display: flex; align-items: center; justify-content: center;
@@ -108,6 +108,106 @@
     background: var(--border) !important;
     color: var(--dim) !important;
 }
+
+/* ── Bar-increment animation: a light overlay that grows from the old fill
+   to the new one, then fades, plus a floating "+N" badge over the row.   */
+.bar-grow-overlay {
+    position: absolute; top: 0; left: 0; height: 100%;
+    background: rgba(255,255,255,.45);
+    border-radius: inherit;
+    transition: width .6s cubic-bezier(.22,.61,.36,1), opacity .4s ease;
+    pointer-events: none;
+}
+.bar-popup {
+    position: absolute; right: 2px; top: -6px;
+    background: var(--accent); color: #fff;
+    font-size: 0.68rem; font-weight: 800; padding: 2px 9px; border-radius: 20px;
+    pointer-events: none; z-index: 6; white-space: nowrap;
+    animation: bar-popup-float 3.6s ease forwards;
+}
+@keyframes bar-popup-float {
+    0%   { opacity: 0; transform: translateY(4px) scale(.9); }
+    5%   { opacity: 1; transform: translateY(0) scale(1); }
+    90%  { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-18px) scale(.96); }
+}
+
+/* ── Define-food dialog (shown when a logged food has no macros yet) ───── */
+.define-dialog {
+    border: none; border-radius: 16px; padding: 0;
+    background: var(--surface); color: var(--text);
+    width: min(340px, 90vw);
+}
+.define-dialog::backdrop { background: rgba(0,0,0,.5); }
+.define-dialog-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.define-dialog-body > p { font-size: 0.92rem; font-weight: 600; line-height: 1.4; margin: 0; }
+.define-form-title { font-size: 0.95rem; font-weight: 800; margin: 0; }
+.define-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.define-dialog-actions { display: flex; gap: 10px; }
+.define-dialog-actions .btn { flex: 1; }
+.define-form-error {
+    font-size: 0.75rem; color: #ef4444; display: none;
+}
+.unit-toggle-row { display: flex; gap: 6px; }
+.unit-btn {
+    flex: 1; background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--muted); cursor: pointer;
+    font-family: inherit; font-size: 0.8rem; font-weight: 700;
+    padding: 9px 8px; text-align: center;
+    -webkit-tap-highlight-color: transparent;
+    transition: background .1s, color .1s, border-color .1s;
+}
+.unit-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+body.pandora .unit-btn.active { color: var(--bg); }
+
+/* ── Food card (read-only inspection popup) ──────────────────────────── */
+.food-card-dialog {
+    border: none; border-radius: 16px; padding: 0;
+    background: var(--surface); color: var(--text);
+    width: min(320px, 90vw);
+}
+.food-card-dialog::backdrop { background: rgba(0,0,0,.5); }
+.food-card-body { padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 14px; }
+.fc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.fc-name { font-size: 1.02rem; font-weight: 800; line-height: 1.25; margin: 0; }
+.fc-type {
+    flex-shrink: 0; font-size: 0.62rem; font-weight: 800; letter-spacing: .03em;
+    text-transform: uppercase; padding: 4px 9px; border-radius: 20px;
+    border: 1px solid; white-space: nowrap; margin-top: 2px;
+}
+.fc-serving {
+    font-size: 0.72rem; color: var(--muted); font-family: var(--font-mono, monospace);
+    text-transform: uppercase; letter-spacing: .05em; margin-top: -6px;
+}
+.fc-cal { display: flex; align-items: baseline; gap: 8px; justify-content: center; padding: 4px 0 2px; }
+.fc-cal .fc-cal-num { color: #3b82f6; line-height: .9; font-variant-numeric: tabular-nums; }
+.fc-cal .fc-cal-unit { color: #3b82f6; opacity: .7; font-size: 0.9rem; font-weight: 700; }
+.fc-macros { display: flex; gap: 8px; }
+.fc-macro { flex: 1; background: var(--surface-2); border-radius: 10px; padding: 9px 6px; text-align: center; }
+.fc-macro .fc-mv { font-size: 1rem; font-weight: 800; font-family: var(--font-mono, monospace); }
+.fc-macro .fc-mk { font-size: 0.58rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-top: 2px; }
+.fc-macro.pro .fc-mv  { color: #22c55e; }
+.fc-macro.carb .fc-mv { color: #f59e0b; }
+.fc-macro.fat .fc-mv  { color: #a855f7; }
+.fc-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fc-source {
+    font-size: 0.62rem; font-weight: 700; color: var(--muted); background: var(--surface-2);
+    border: 1px solid var(--border); padding: 4px 9px; border-radius: 20px;
+}
+.fc-meal {
+    font-size: 0.6rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+    border-radius: 20px; padding: 4px 9px;
+}
+/* Card entrance — matches the bar-popup-float easing already in use */
+.food-card-dialog[open] .food-card-body { animation: fc-rise .22s ease; }
+@keyframes fc-rise {
+    0%   { opacity: 0; transform: translateY(6px) scale(.98); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+/* Press feedback on a tapped log row */
+.log-entry.fc-press { transform: scale(.985); transition: transform .08s ease; }
+/* The row body (everything except the action buttons) is tappable for the card */
+.log-entry .log-name { cursor: pointer; }
 
 /* ── Log list ────────────────────────────────────────────────────── */
 .log-list { display: flex; flex-direction: column; gap: 6px; }
@@ -499,11 +599,11 @@ body.pandora .dym-chip {
 
 {# ── Segmented meal bars ─────────────────────────────────────────────── #}
 <div class="meal-bars" id="meal-bars-section">
-    <div class="meal-bar-row">
+    <div class="meal-bar-row" id="cal-bar-row">
         <div class="meal-bar-label">Cal</div>
         <div class="meal-bar-track" id="bar-cal"></div>
     </div>
-    <div class="meal-bar-row">
+    <div class="meal-bar-row" id="pro-bar-row">
         <div class="meal-bar-label">Protein</div>
         <div class="meal-bar-track" id="bar-pro"></div>
     </div>
@@ -716,6 +816,71 @@ body.pandora .dym-chip {
 </details>
 </section>
 
+{# ── Define-food dialog — shown after logging a food with no macros yet ── #}
+<dialog id="define-food-dialog" class="define-dialog">
+  <div class="define-dialog-body">
+    <div id="define-confirm-view">
+      <p id="define-confirm-msg"></p>
+      <div class="define-dialog-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeDefineDialog()">Not now</button>
+        <button type="button" class="btn btn-primary" onclick="showDefineForm()">Define it</button>
+      </div>
+    </div>
+    <div id="define-form-view" style="display:none">
+      <p class="define-form-title" id="define-form-title"></p>
+      <div class="define-form-grid">
+        <div class="form-group">
+          <label for="df-cal">Calories (kcal)</label>
+          <input type="number" id="df-cal" min="0" step="1" inputmode="decimal" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label for="df-pro">Protein (g)</label>
+          <input type="number" id="df-pro" min="0" step="0.1" inputmode="decimal" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label for="df-carb">Carbs (g)</label>
+          <input type="number" id="df-carb" min="0" step="0.1" inputmode="decimal" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label for="df-fat">Fat (g)</label>
+          <input type="number" id="df-fat" min="0" step="0.1" inputmode="decimal" placeholder="0">
+        </div>
+      </div>
+      <div class="unit-toggle-row">
+        <button type="button" class="unit-btn active" id="df-unit-g" onclick="setDefineUnit('g')">per 100g</button>
+        <button type="button" class="unit-btn" id="df-unit-unit" onclick="setDefineUnit('unit')">per unit</button>
+      </div>
+      <div class="define-form-error" id="define-form-error"></div>
+      <div class="define-dialog-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeDefineDialog()">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="submitDefineForm()">Save</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="food-card-dialog" class="food-card-dialog">
+  <div class="food-card-body">
+    <div class="fc-head">
+      <p class="fc-name" id="fc-name"></p>
+      <span class="fc-type" id="fc-type" style="display:none"></span>
+    </div>
+    <div class="fc-serving" id="fc-serving"></div>
+    <div class="fc-cal">
+      <span class="fc-cal-num" id="fc-cal-num"></span><span class="fc-cal-unit">kcal</span>
+    </div>
+    <div class="fc-macros">
+      <div class="fc-macro pro"><div class="fc-mv" id="fc-pro"></div><div class="fc-mk">Protein</div></div>
+      <div class="fc-macro carb"><div class="fc-mv" id="fc-carb"></div><div class="fc-mk">Carbs</div></div>
+      <div class="fc-macro fat"><div class="fc-mv" id="fc-fat"></div><div class="fc-mk">Fat</div></div>
+    </div>
+    <div class="fc-foot">
+      <span class="fc-source" id="fc-source" style="display:none"></span>
+      <span class="fc-meal" id="fc-meal"></span>
+    </div>
+  </div>
+</dialog>
+
 <script>
 // ── Constants ──────────────────────────────────────────────────────────
 const GOALS    = { calories: {{ goals.calories }}, protein_g: {{ goals.protein_g }},
@@ -739,7 +904,11 @@ let selectedMeal = null;
 
 
 // ── Render ─────────────────────────────────────────────────────────────
-function render() {
+// `opts.animateEntry` is the entry (with its own calories/protein_g) that was
+// just added or just had its macros defined — when set, the cal/protein bars
+// play a "grow" overlay + "+N" popup for the amount it contributed.
+function render(opts) {
+    opts = opts || {};
     const totals = {
         calories:  entries.reduce((s, e) => s + (e.calories  || 0), 0),
         protein_g: entries.reduce((s, e) => s + (e.protein_g || 0), 0),
@@ -747,7 +916,7 @@ function render() {
         fat_g:     entries.reduce((s, e) => s + (e.fat_g     || 0), 0),
     };
     renderMacros(totals);
-    renderBars(totals);
+    renderBars(totals, opts.animateEntry || null);
     renderLog();
 }
 
@@ -770,7 +939,7 @@ function renderMacros(totals) {
     cell('fat',  totals.fat_g,     GOALS.fat_g,     'g', true);
 }
 
-function renderBars(totals) {
+function renderBars(totals, animateEntry) {
     const byMeal = {};
     MEAL_ORDER.forEach(mt => { byMeal[mt] = { cal: 0, pro: 0 }; });
     entries.forEach(e => {
@@ -781,6 +950,55 @@ function renderBars(totals) {
     const proScale = totals.protein_g > GOALS.protein_g ? totals.protein_g : GOALS.protein_g;
     fillBar('bar-cal', byMeal, 'cal', calScale, totals.calories,  GOALS.calories,  'kcal');
     fillBar('bar-pro', byMeal, 'pro', proScale, totals.protein_g, GOALS.protein_g, 'g');
+
+    if (!animateEntry) return;
+    const addedCal = animateEntry.calories  || 0;
+    const addedPro = animateEntry.protein_g || 0;
+    if (addedCal > 0 && calScale > 0) {
+        const newPct = Math.max(0, Math.min(100, (totals.calories / calScale) * 100));
+        const oldPct = Math.max(0, Math.min(100, ((totals.calories - addedCal) / calScale) * 100));
+        animateBarGrowth('bar-cal', oldPct, newPct);
+        showBarPopup('cal-bar-row', '+' + Math.round(addedCal));
+    }
+    if (addedPro > 0 && proScale > 0) {
+        const newPct = Math.max(0, Math.min(100, (totals.protein_g / proScale) * 100));
+        const oldPct = Math.max(0, Math.min(100, ((totals.protein_g - addedPro) / proScale) * 100));
+        animateBarGrowth('bar-pro', oldPct, newPct);
+        showBarPopup('pro-bar-row', '+' + addedPro.toFixed(1) + 'g');
+    }
+}
+
+// Grow a translucent overlay from the pre-log fill to the post-log fill, then
+// fade it out — layered on top of the (already-correct) segmented bar so the
+// visible "jump" reads as a smooth slide instead of an instant snap.
+function animateBarGrowth(trackId, oldPct, newPct) {
+    const track = document.getElementById(trackId);
+    if (!track) return;
+    const prev = track.querySelector('.bar-grow-overlay');
+    if (prev) prev.remove();
+    const overlay = document.createElement('div');
+    overlay.className = 'bar-grow-overlay';
+    overlay.style.width = oldPct.toFixed(2) + '%';
+    overlay.style.opacity = '1';
+    track.appendChild(overlay);
+    void overlay.offsetWidth; // force layout so the width change below transitions
+    requestAnimationFrame(() => { overlay.style.width = newPct.toFixed(2) + '%'; });
+    overlay.addEventListener('transitionend', function te(e) {
+        if (e.propertyName && e.propertyName !== 'width') return;
+        overlay.style.opacity = '0';
+        setTimeout(() => overlay.remove(), 420);
+    }, { once: true });
+}
+
+// Floating "+N" badge over a meal-bar row, matching the row's own animation.
+function showBarPopup(rowId, text) {
+    const row = document.getElementById(rowId);
+    if (!row) return;
+    const badge = document.createElement('span');
+    badge.className = 'bar-popup';
+    badge.textContent = text;
+    row.appendChild(badge);
+    badge.addEventListener('animationend', () => badge.remove());
 }
 
 function fillBar(id, byMeal, key, scale, total, goal, unit) {
@@ -825,7 +1043,7 @@ function renderLog() {
         return `<div class="log-entry" data-id="${e.id}">
             <span class="log-meal-pill" style="cursor:pointer"
                   onclick="openMealPicker(event,${e.id})">${h(label)}</span>
-            <span class="log-name">${h(e.name)}</span>
+            <span class="log-name" onclick="openFoodCard(${e.id})">${h(e.name)}</span>
             ${time}
             <span class="log-cal">${Math.round(e.calories || 0)} kcal</span>
             <span class="log-pro">${(e.protein_g || 0).toFixed(1)}g</span>
@@ -978,6 +1196,113 @@ window.saveEntryEdit = async function (entryId) {
 function h(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// ── Food card (read-only inspection popup) ──────────────────────────────
+// Fixed absolute calorie scale so a given kcal always looks identical across foods:
+//   <=200 kcal -> 1.6rem / weight 400 (floor);  >=800 kcal -> 3.2rem / weight 900 (ceiling);
+//   linear interpolation between the anchors, clamped at both ends.
+function fcCalScale(kcal) {
+    const LO = 200, HI = 800;
+    const t = Math.max(0, Math.min(1, (kcal - LO) / (HI - LO)));   // clamp to [0,1]
+    const size   = 1.6 + t * (3.2 - 1.6);        // rem
+    const weight = Math.round(400 + t * (900 - 400));
+    return { size, weight };
+}
+
+// Build the serving-basis label from the logged entry + its definition metadata.
+//   weight food logged with grams -> "200g"; unit food with multiplier -> "2 units";
+//   no explicit qty -> "1 unit" (unit) or std_serving_g / "100g" (weight).
+function fcServingLabel(e) {
+    const unit = e.unit_type || 'g';
+    const mult = e._multiplier != null ? e._multiplier : 1;
+    const gramQty = e._gram_qty;
+    if (unit === 'unit') {
+        const n = mult && mult > 0 ? mult : 1;
+        return n === 1 ? '1 unit' : `${(+n).toFixed(n % 1 ? 1 : 0)} units`;
+    }
+    // weight-based
+    if (gramQty != null) {
+        const g = gramQty * (mult || 1);
+        return `${Math.round(g)}g`;
+    }
+    if (e.std_serving_g != null && e.std_serving_g > 0) return `${Math.round(e.std_serving_g)}g`;
+    return '100g';
+}
+
+window.openFoodCard = function (entryId) {
+    const e = entries.find(x => x.id === entryId);
+    if (!e) return;
+    const rowEl = document.querySelector(`.log-entry[data-id="${entryId}"]`);
+    if (rowEl) { rowEl.classList.add('fc-press'); setTimeout(() => rowEl.classList.remove('fc-press'), 120); }
+
+    // Name
+    document.getElementById('fc-name').textContent = e.name || '';
+
+    // Type pill (colour-coded) — omitted if no type
+    const typeEl = document.getElementById('fc-type');
+    if (e.type_name) {
+        typeEl.textContent = e.type_name;
+        typeEl.style.display = '';
+        typeEl.style.color = e.type_color || 'var(--muted)';
+        typeEl.style.borderColor = e.type_color || 'var(--border)';
+        typeEl.style.background = 'transparent';
+    } else {
+        typeEl.style.display = 'none';
+    }
+
+    // Serving basis
+    document.getElementById('fc-serving').textContent = fcServingLabel(e);
+
+    // Calories — the hero, scaled
+    const kcal = Math.round(e.calories || 0);
+    const numEl = document.getElementById('fc-cal-num');
+    numEl.textContent = kcal;
+    const { size, weight } = fcCalScale(kcal);
+    numEl.style.fontSize = size.toFixed(3) + 'rem';
+    numEl.style.fontWeight = weight;
+
+    // Macros for the serving
+    document.getElementById('fc-pro').textContent  = (e.protein_g || 0).toFixed(1) + 'g';
+    document.getElementById('fc-carb').textContent = (e.carbs_g  || 0).toFixed(1) + 'g';
+    document.getElementById('fc-fat').textContent  = (e.fat_g    || 0).toFixed(1) + 'g';
+
+    // Source badge — omitted if no source_type
+    const srcEl = document.getElementById('fc-source');
+    if (e.source_type) {
+        const LABELS = { restaurant: 'Restaurant', brand: 'Brand', homemade: 'Homemade' };
+        const base = LABELS[e.source_type] || e.source_type;
+        srcEl.textContent = (e.source_type !== 'homemade' && e.source_name)
+            ? `${base} · ${e.source_name}` : base;
+        srcEl.style.display = '';
+    } else {
+        srcEl.style.display = 'none';
+    }
+
+    // Meal pill — reuse meal colours
+    const mt = e.meal_type || 'snack';
+    const mealEl = document.getElementById('fc-meal');
+    mealEl.textContent = MEAL_LABELS[mt] || mt;
+    const col = (MEAL_COLORS[mt] || MEAL_COLORS.snack).cal;
+    mealEl.style.color = col;
+    mealEl.style.background = 'color-mix(in srgb, ' + col + ' 15%, transparent)';
+
+    const dlg = document.getElementById('food-card-dialog');
+    if (dlg.open) dlg.close();
+    dlg.showModal();
+};
+
+window.closeFoodCard = function () {
+    const dlg = document.getElementById('food-card-dialog');
+    if (dlg.open) dlg.close();
+};
+
+// Tap the backdrop (outside the card body) to dismiss — read-only card, no explicit button.
+(function () {
+    const dlg = document.getElementById('food-card-dialog');
+    if (dlg) dlg.addEventListener('click', function (ev) {
+        if (ev.target === dlg) dlg.close();   // click landed on the <dialog> itself = backdrop
+    });
+})();
 
 // ── Add entry ──────────────────────────────────────────────────────────
 // Canonical match key — mirrors the server's _food_key(): lowercase, collapse
@@ -1167,9 +1492,93 @@ async function addEntry() {
         entries.push(data.entry);
         document.getElementById('ef-name').value = '';
         document.getElementById('ef-db-hint').style.display = 'none';
-        render();
+
+        const isDefined = (data.entry.calories || 0) > 0;
+        render({ animateEntry: isDefined ? data.entry : null });
+        if (!isDefined) promptDefineFood(data.entry);
     } catch (err) {
         showError('Failed to save — try again.');
+    }
+}
+
+// ── "Define it now?" flow for foods logged with no macros ─────────────
+let defineCtx = null;
+
+function promptDefineFood(entry) {
+    const { base } = efParseName(entry.name);
+    defineCtx = { baseName: base || entry.name, entryId: entry.id, unitType: 'g' };
+    const dlg = document.getElementById('define-food-dialog');
+    document.getElementById('define-confirm-msg').textContent =
+        `"${defineCtx.baseName}" isn't in your food database yet. Define its macros now?`;
+    document.getElementById('define-confirm-view').style.display = '';
+    document.getElementById('define-form-view').style.display = 'none';
+    if (dlg.open) dlg.close();
+    dlg.showModal();
+}
+
+function closeDefineDialog() {
+    const dlg = document.getElementById('define-food-dialog');
+    if (dlg.open) dlg.close();
+    defineCtx = null;
+}
+
+function showDefineForm() {
+    if (!defineCtx) return;
+    document.getElementById('define-confirm-view').style.display = 'none';
+    document.getElementById('define-form-view').style.display = '';
+    document.getElementById('define-form-title').textContent = `Define "${defineCtx.baseName}"`;
+    ['df-cal', 'df-pro', 'df-carb', 'df-fat'].forEach(id => { document.getElementById(id).value = ''; });
+    setDefineUnit('g');
+    document.getElementById('define-form-error').style.display = 'none';
+    setTimeout(() => document.getElementById('df-cal').focus(), 30);
+}
+
+function setDefineUnit(u) {
+    if (!defineCtx) return;
+    defineCtx.unitType = u;
+    document.getElementById('df-unit-g').classList.toggle('active', u === 'g');
+    document.getElementById('df-unit-unit').classList.toggle('active', u === 'unit');
+}
+
+async function submitDefineForm() {
+    if (!defineCtx) return;
+    const errEl = document.getElementById('define-form-error');
+    const cal  = parseFloat(document.getElementById('df-cal').value)  || 0;
+    const pro  = parseFloat(document.getElementById('df-pro').value)  || 0;
+    const carb = parseFloat(document.getElementById('df-carb').value) || 0;
+    const fat  = parseFloat(document.getElementById('df-fat').value)  || 0;
+    if (cal <= 0 && pro <= 0) {
+        errEl.textContent = 'Enter at least calories or protein.';
+        errEl.style.display = '';
+        return;
+    }
+    errEl.style.display = 'none';
+    const entryId = defineCtx.entryId;
+    try {
+        const res = await fetch('/food/api/define', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window._csrf },
+            body:    JSON.stringify({
+                name: defineCtx.baseName, calories: cal, protein_g: pro,
+                carbs_g: carb, fat_g: fat, unit_type: defineCtx.unitType,
+                entry_id: entryId,
+            }),
+        });
+        if (!res.ok) throw new Error('Server error');
+        const data = await res.json();
+        closeDefineDialog();
+        if (data.entry) {
+            const idx = entries.findIndex(e => e.id === entryId);
+            if (idx >= 0) {
+                entries[idx] = { ...entries[idx], ...data.entry };
+                render({ animateEntry: (entries[idx].calories || 0) > 0 ? entries[idx] : null });
+                return;
+            }
+        }
+        render();
+    } catch (_) {
+        errEl.textContent = 'Failed to save — try again.';
+        errEl.style.display = '';
     }
 }
 
@@ -1350,6 +1759,6 @@ function toggleWtForm() {
 
 // ── Initial render ────────────────────────────────────────────────────
 // Use rAF so the SVG transition fires on page load
-requestAnimationFrame(() => requestAnimationFrame(render));
+requestAnimationFrame(() => requestAnimationFrame(() => render()));
 </script>
 {% endblock %}
