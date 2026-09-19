@@ -1,0 +1,195 @@
+{# ── Shared Weight-over-time chart — Visualisation 2 ───────────────────────
+   Hand-rolled inline SVG (no library). Shared on both home screens.
+   Server seeds the initial series via `weight_history` (newest-first,
+   [{date, weight_kg}]); the range toggle re-fetches /api/weight-history?days=N.
+   Features: gradient area fill, smoothed Catmull-Rom curve, min(green)/max(red)/
+   latest(accent halo) markers, summary stats row, range toggle (2w/30d/90d/all),
+   fixed floated whole-kg-tick y-axis (never zero-based), <2-pt empty state.
+#}
+<style>
+.wc-card { background: var(--panel); border: 1px solid var(--border);
+           border-radius: var(--radius-md); padding: 12px 14px; }
+.wc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.wc-title { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em;
+            text-transform: uppercase; color: var(--dim); }
+.wc-seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.wc-seg button {
+    background: transparent; border: none; cursor: pointer; color: var(--dim);
+    font-family: var(--font-mono); font-size: 9px; letter-spacing: .04em; text-transform: uppercase;
+    padding: 4px 8px; -webkit-tap-highlight-color: transparent;
+}
+.wc-seg button + button { border-left: 1px solid var(--border); }
+.wc-seg button.active { color: var(--accent); background: var(--accent-soft); }
+.wc-stats { display: flex; gap: 14px; margin-bottom: 8px; flex-wrap: wrap; }
+.wc-stat-lbl { font-family: var(--font-mono); font-size: 8px; letter-spacing: .1em;
+               text-transform: uppercase; color: var(--dim); display: block; }
+.wc-stat-val { font-family: var(--font-mono); font-size: 13px; font-weight: 600; color: var(--text-strong); }
+.wc-chart-svg { width: 100%; height: 150px; display: block; overflow: visible; }
+.wc-empty { font-family: var(--font-mono); font-size: 11px; color: var(--dimmer);
+            font-style: italic; text-align: center; padding: 28px 10px; }
+</style>
+<section class="section">
+    <div class="wc-card">
+        <div class="wc-head">
+            <span class="wc-title">weight over time</span>
+            <span class="wc-seg" id="wc-seg">
+                <button type="button" data-days="14">2w</button>
+                <button type="button" data-days="30" class="active">30d</button>
+                <button type="button" data-days="90">90d</button>
+                <button type="button" data-days="3650">all</button>
+            </span>
+        </div>
+        <div class="wc-stats" id="wc-stats"></div>
+        <svg id="wc-chart" class="wc-chart-svg" preserveAspectRatio="none"></svg>
+        <div class="wc-empty" id="wc-empty" style="display:none">Not enough data yet — log a couple of weigh-ins.</div>
+    </div>
+</section>
+
+<script>
+(function () {
+    var SEED;
+    try { SEED = {{ weight_history | tojson }}; } catch (e) { SEED = []; }
+    var svg   = document.getElementById('wc-chart');
+    var empty = document.getElementById('wc-empty');
+    var statsEl = document.getElementById('wc-stats');
+    var seg   = document.getElementById('wc-seg');
+    if (!svg) return;
+
+    var cs   = getComputedStyle(document.body);
+    var ACCENT = (cs.getPropertyValue('--accent') || '#d4a574').trim();
+    var GREEN  = (cs.getPropertyValue('--green')  || '#7fb069').trim();
+    var RED    = (cs.getPropertyValue('--red')    || '#c97064').trim();
+
+    // ── Nice-step y-domain: padded band snapped to clean whole-kg ticks.
+    //    Never zero-based; stable week-to-week.
+    function niceStep(range, target) {
+        if (range <= 0) return 1;
+        var raw = range / target;
+        var mag = Math.pow(10, Math.floor(Math.log10(raw)));
+        var norm = raw / mag;
+        var step = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10;
+        return step * mag;
+    }
+
+    function computeDomain(vals) {
+        var mn = Math.min.apply(null, vals), mx = Math.max.apply(null, vals);
+        var pad = Math.max((mx - mn) * 0.15, 0.5);          // ≥0.5 kg headroom, never collapses
+        var span = ((mx + pad) - (mn - pad)) || 1;           // range || 1 backstop for flat series
+        var step = niceStep(span, 4);
+        var lo = Math.floor((mn - pad) / step) * step;
+        var hi = Math.ceil ((mx + pad) / step) * step;
+        if (hi - lo < step) hi = lo + step;                  // guarantee ≥1 interval
+        return { lo: lo, hi: hi, step: step };
+    }
+
+    // Catmull-Rom → cubic bézier smoothing.
+    function smoothPath(P) {
+        if (P.length < 2) return '';
+        var d = 'M' + P[0][0].toFixed(1) + ',' + P[0][1].toFixed(1);
+        for (var i = 0; i < P.length - 1; i++) {
+            var p0 = P[i - 1] || P[i], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2] || p2;
+            var c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
+            var c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
+            d += ' C' + c1x.toFixed(1) + ',' + c1y.toFixed(1) + ' ' +
+                        c2x.toFixed(1) + ',' + c2y.toFixed(1) + ' ' +
+                        p2[0].toFixed(1) + ',' + p2[1].toFixed(1);
+        }
+        return d;
+    }
+
+    function fmtDate(iso) { return iso.slice(5).replace('-', '/'); }
+
+    function render(history) {
+        // history newest-first → chronological
+        var pts = (history || []).slice().reverse();
+        var vals = pts.map(function (r) { return r.weight_kg; });
+        if (vals.length < 2) {
+            svg.style.display = 'none'; statsEl.style.display = 'none'; empty.style.display = '';
+            return;
+        }
+        svg.style.display = ''; statsEl.style.display = ''; empty.style.display = 'none';
+
+        var dom = computeDomain(vals);
+        var W = 320, H = 138, padL = 34, padR = 12, padT = 10, padB = 22;
+        var cW = W - padL - padR, cH = H - padT - padB;
+        svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+        var n = pts.length;
+        var cx = function (i) { return padL + (n === 1 ? cW / 2 : (i / (n - 1)) * cW); };
+        var cy = function (v) { return padT + (1 - (v - dom.lo) / (dom.hi - dom.lo)) * cH; };
+
+        // gridlines + mono tick labels at each whole-kg step
+        var grid = '', yLabels = '';
+        for (var t = dom.lo; t <= dom.hi + 1e-6; t += dom.step) {
+            var yy = cy(t);
+            var isBase = Math.abs(t - dom.lo) < 1e-6;
+            grid += '<line x1="' + padL + '" y1="' + yy.toFixed(1) + '" x2="' + (W - padR) +
+                    '" y2="' + yy.toFixed(1) + '" stroke="var(--border)" stroke-width="1"' +
+                    (isBase ? ' opacity="0.4"' : '') + '/>';
+            yLabels += '<text x="' + (padL - 5) + '" y="' + (yy + 3).toFixed(1) +
+                       '" fill="var(--dim)" font-size="8.5" text-anchor="end" font-family="var(--font-mono)">' +
+                       (Math.round(t * 10) / 10) + '</text>';
+        }
+
+        // x labels (≤4)
+        var xlc = Math.min(4, n), xLabels = '';
+        for (var k = 0; k < xlc; k++) {
+            var idx = Math.round(k * (n - 1) / (xlc - 1 || 1));
+            xLabels += '<text x="' + cx(idx).toFixed(1) + '" y="' + (H - 6) +
+                       '" fill="var(--dim)" font-size="8.5" text-anchor="middle" font-family="var(--font-mono)">' +
+                       fmtDate(pts[idx].date) + '</text>';
+        }
+
+        var XY = pts.map(function (r, i) { return [cx(i), cy(r.weight_kg)]; });
+        var line = smoothPath(XY);
+        var area = line + ' L' + cx(n - 1).toFixed(1) + ',' + (padT + cH).toFixed(1) +
+                   ' L' + padL.toFixed(1) + ',' + (padT + cH).toFixed(1) + ' Z';
+
+        // min / max / latest markers
+        var minV = Math.min.apply(null, vals), maxV = Math.max.apply(null, vals);
+        var minI = vals.indexOf(minV), maxI = vals.indexOf(maxV), lastI = n - 1;
+        var markers = '';
+        markers += '<circle cx="' + cx(minI).toFixed(1) + '" cy="' + cy(minV).toFixed(1) +
+                   '" r="3.2" fill="var(--panel)" stroke="' + GREEN + '" stroke-width="2"/>';
+        markers += '<circle cx="' + cx(maxI).toFixed(1) + '" cy="' + cy(maxV).toFixed(1) +
+                   '" r="3.2" fill="var(--panel)" stroke="' + RED + '" stroke-width="2"/>';
+        markers += '<circle cx="' + cx(lastI).toFixed(1) + '" cy="' + cy(vals[lastI]).toFixed(1) +
+                   '" r="7" fill="' + ACCENT + '" opacity="0.18"/>';
+        markers += '<circle cx="' + cx(lastI).toFixed(1) + '" cy="' + cy(vals[lastI]).toFixed(1) +
+                   '" r="3.4" fill="' + ACCENT + '"/>';
+
+        svg.innerHTML =
+            '<defs><linearGradient id="wc-grad" x1="0" y1="0" x2="0" y2="1">' +
+            '<stop offset="0%" stop-color="' + ACCENT + '" stop-opacity="0.20"/>' +
+            '<stop offset="100%" stop-color="' + ACCENT + '" stop-opacity="0"/></linearGradient></defs>' +
+            grid + yLabels + xLabels +
+            '<path d="' + area + '" fill="url(#wc-grad)"/>' +
+            '<path d="' + line + '" fill="none" stroke="' + ACCENT +
+            '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+            markers;
+
+        // stats row: latest / period-avg / min–max range
+        var avg = vals.reduce(function (a, b) { return a + b; }, 0) / n;
+        statsEl.innerHTML =
+            '<div><span class="wc-stat-lbl">latest</span><span class="wc-stat-val">' + vals[lastI].toFixed(1) + ' kg</span></div>' +
+            '<div><span class="wc-stat-lbl">avg</span><span class="wc-stat-val">' + avg.toFixed(1) + ' kg</span></div>' +
+            '<div><span class="wc-stat-lbl">range</span><span class="wc-stat-val">' + minV.toFixed(1) + '–' + maxV.toFixed(1) + '</span></div>';
+    }
+
+    function load(days) {
+        fetch('/api/weight-history?days=' + days)
+            .then(function (r) { return r.json(); })
+            .then(function (data) { render(data); })
+            .catch(function () { /* keep last good render */ });
+    }
+
+    seg.addEventListener('click', function (e) {
+        var b = e.target.closest('button'); if (!b) return;
+        Array.prototype.forEach.call(seg.querySelectorAll('button'),
+            function (x) { x.classList.toggle('active', x === b); });
+        load(b.dataset.days);
+    });
+
+    // Initial paint from server seed (30d), no network round-trip.
+    render(SEED);
+})();
+</script>

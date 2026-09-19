@@ -1,0 +1,34 @@
+{# ── Shared "This week" strip ─────────────────────────────────────────────
+   Rendered directly under the page header on both home screens.
+   Expects: week_days = [{day_short, day_num, active, is_today}, ...] (7 items).
+   `active` is a bool (a gym/training day → shows the dot). Identical on both pages.
+   Self-contained: styling lives here so both pages share one source of truth.
+#}
+<style>
+.week-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.week-day {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 9px 4px; border-radius: var(--radius-sm);
+    background: var(--panel); border: 1px solid var(--border);
+}
+.week-day.active { background: var(--accent-soft); border-color: var(--accent); }
+.week-day.today  { border-color: var(--accent); }
+.week-day-name { font-family: var(--font-mono); font-size: 8px; font-weight: 400;
+                 color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+.week-day-num  { font-family: var(--font-mono); font-size: 13px; font-weight: 600;
+                 color: var(--text-strong); line-height: 1; }
+.week-day.active .week-day-name,
+.week-day.active .week-day-num { color: var(--accent); }
+.week-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--accent); }
+</style>
+<section class="section week-strip-section">
+    <div class="week-strip">
+        {% for day in week_days %}
+        <div class="week-day{% if day.active %} active{% endif %}{% if day.is_today %} today{% endif %}">
+            <span class="week-day-name">{{ day.day_short }}</span>
+            <span class="week-day-num">{{ day.day_num }}</span>
+            <span class="week-dot"{% if not day.active %} style="visibility:hidden"{% endif %}></span>
+        </div>
+        {% endfor %}
+    </div>
+</section>

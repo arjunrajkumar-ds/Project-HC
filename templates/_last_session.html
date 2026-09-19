@@ -1,0 +1,68 @@
+{# ── Shared Last-session card — multi-type (gym / swim / cardio / pilates) ──
+   Works on both home screens. Arjun's last_session carries type + swim/cardio/
+   gym aggregates; Gayathri's is gym-only (no `type`, no `total_volume`) — an
+   absent/unknown type falls back to the gym badge (§5.4). All numeric fields are
+   guarded with defaults so the single partial renders for both shapes.
+   Expects: last_session (dict or None).
+#}
+<style>
+.last-session-card { display: block; background: var(--panel); border: 1px solid var(--border);
+                     border-radius: var(--radius-md); padding: 12px 14px;
+                     text-decoration: none; color: inherit; }
+.ls-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.ls-date { font-family: var(--font-sans); font-size: 12px; color: var(--text); }
+.ls-chevron { color: var(--dimmer); font-size: 1rem; margin-left: auto; }
+.ls-exs { font-family: var(--font-sans); font-size: 12px; color: var(--dim); line-height: 1.4; margin-top: 2px; }
+.ls-stat { font-family: var(--font-sans); font-size: 12px; color: var(--dim); }
+.ls-dot  { color: var(--dimmer); }
+.type-badge {
+    font-family: var(--font-mono); font-size: 9px; letter-spacing: .06em;
+    text-transform: uppercase; padding: 2px 7px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+}
+.type-badge.gym     { background: transparent; color: var(--dim); border-color: var(--border); }
+.type-badge.swim    { background: var(--t2-bg); color: var(--t2-fg); border-color: transparent; }
+.type-badge.core    { background: var(--waiting); color: var(--bg); border-color: transparent; }
+.type-badge.pilates { background: var(--t1-bg); color: var(--t1-fg); border-color: transparent; }
+</style>
+<section class="section">
+    <p class="section-title">last session</p>
+    {% if last_session %}
+    {%- set st = last_session.type | default('gym', true) -%}
+    <a href="/session/{{ last_session.id }}" class="last-session-card">
+        <div class="ls-top">
+            {% if st == 'swim' %}
+            <span class="type-badge swim">swim</span>
+            {% elif st == 'cardio' %}
+            <span class="type-badge core">cardio</span>
+            {% elif st == 'pilates' %}
+            <span class="type-badge pilates">pilates</span>
+            {% else %}
+            <span class="type-badge gym">gym</span>
+            {% endif %}
+            <span class="ls-date">{{ last_session.date | fmt_date }}</span>
+            <span class="ls-chevron">›</span>
+        </div>
+        <div>
+            {% if st == 'swim' %}
+            <span class="ls-stat">{{ last_session.distance_m | default(0, true) }} m</span>
+            {% elif st == 'cardio' %}
+            <span class="ls-stat">{{ last_session.cardio_name | default('Cardio', true) }}</span>
+            {% if last_session.cardio_dur %}<span class="ls-dot">·</span><span class="ls-stat">{{ (last_session.cardio_dur / 60) | round | int }} min</span>
+            {% elif last_session.cardio_dist %}<span class="ls-dot">·</span><span class="ls-stat">{{ last_session.cardio_dist | int }} m</span>{% endif %}
+            {% elif st == 'pilates' %}
+            <span class="ls-stat">Reformer Pilates</span>
+            {% else %}
+            {% if last_session.exercise_names %}<div class="ls-exs">{{ last_session.exercise_names }}</div>{% endif %}
+            <span class="ls-stat">{{ last_session.total_sets | default(0, true) }} sets</span>
+            {% if last_session.total_volume %}
+            <span class="ls-dot">·</span>
+            <span class="ls-stat">{{ '{:,.0f}'.format(last_session.total_volume) }} kg vol</span>
+            {% endif %}
+            {% endif %}
+        </div>
+    </a>
+    {% else %}
+    <p class="empty">No sessions yet. Log your first workout above.</p>
+    {% endif %}
+</section>

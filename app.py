@@ -7,7 +7,7 @@ from urllib.parse import quote as _urlquote
 from datetime import date as date_type, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, abort
 from datetime import datetime as _datetime
-from database import init_db, get_db, get_session_cardio, get_cardio_choices, log_cardio_session, get_muscle_group_activity, get_muscle_swimlane, bank_scope_for_profile, get_fatigue_state, adjust_fatigue, get_sessions_with_headlines, get_session_detail_with_progression, get_macro_goals, set_macro_goals, sync_food_log_from_library, get_food_log, add_food_entry, log_food_entry, delete_food_entry, get_pending_foods, define_food_item, delete_food_item, get_food_history, get_recent_foods, get_food_library, get_food_components, get_food_component_mode, save_food_components, save_food_components_pct, get_profiles, _parse_qty_name, _parse_gram_prefix, _food_key, log_food_reconciliation, get_food_reconciliations, log_body_weight, get_body_weight, get_body_weight_history, get_pilates_session, get_mission_progress, clear_mission_stage, get_exercise_tallies, bump_exercise_tally, ack_exercise_tally, get_crew_status, get_food_types, create_food_type, update_food_type, delete_food_type, count_foods_with_type, get_distinct_source_names, enrich_log_entries
+from database import init_db, get_db, get_session_cardio, get_cardio_choices, log_cardio_session, get_muscle_group_activity, bank_scope_for_profile, get_fatigue_state, get_sessions_with_headlines, get_session_detail_with_progression, get_macro_goals, set_macro_goals, sync_food_log_from_library, get_food_log, add_food_entry, log_food_entry, delete_food_entry, get_pending_foods, define_food_item, delete_food_item, get_food_history, get_recent_foods, get_food_library, get_food_components, get_food_component_mode, save_food_components, save_food_components_pct, get_profiles, _parse_qty_name, _parse_gram_prefix, _food_key, log_food_reconciliation, get_food_reconciliations, log_body_weight, get_body_weight, get_body_weight_history, get_pilates_session, get_mission_progress, clear_mission_stage, get_exercise_tallies, bump_exercise_tally, ack_exercise_tally, get_crew_status, get_food_types, create_food_type, update_food_type, delete_food_type, count_foods_with_type, get_distinct_source_names, enrich_log_entries
 from swim_routes import bp as swim_bp
 from pilates_routes import bp as pilates_bp
 from gym_bank import get_gym_bank, get_gym_bank_grouped, get_gym_exercise, gym_add_exercise, gym_update_exercise, gym_set_enabled, gym_archive_exercise, gym_unarchive_exercise, gym_delete_exercise, gym_reorder_function, get_gym_functions, gym_add_function, log_gym_set, get_today_tally, undo_last_today, get_or_create_today_gym_session, get_exercise_prefill, get_live_session_state, apply_session_rollover, TRACKING_TYPES, TIER_LABELS
@@ -330,33 +330,15 @@ def dashboard():
                 'is_today': day == today,
                 'is_past': day < today,
                 'active': day.isoformat() in week_active })
-        last_sess = db.execute("\n            SELECT s.id, s.date, s.notes,\n                   GROUP_CONCAT(DISTINCT e.name) AS exercise_names,\n                   COUNT(DISTINCT sl.id) AS total_sets\n            FROM sessions s\n            LEFT JOIN session_lifts sl ON sl.session_id = s.id\n            LEFT JOIN exercises e ON e.id = sl.exercise_id\n            WHERE s.profile_id = ? AND s.type = 'gym'\n            GROUP BY s.id ORDER BY s.date DESC, s.id DESC LIMIT 1\n        ", (_profile_id(),)).fetchone()
-        # All-day "tap a set" panel: exercises grouped by muscle + today's tallies.
-        gy_by_group = _gayathri_exercises_by_group()
-        gy_tallies, gy_covered = _gayathri_today_tallies(db, today_iso)
-        gy_total_sets = sum(t['sets'] for t in gy_tallies.values())
-        # Today's session log — one entry per set, newest first
-        gy_log_rows = db.execute("""
-            SELECT sl.id, e.name AS name, e.muscle_group AS mg, e.is_timed AS timed, sl.reps AS amount
-            FROM session_lifts sl
-            JOIN exercises e ON e.id = sl.exercise_id
-            JOIN sessions s  ON s.id = sl.session_id
-            WHERE s.date = ? AND s.type = 'gym' AND s.profile_id = ?
-            ORDER BY sl.id DESC
-        """, (today_iso, _profile_id())).fetchall()
-        gy_log = [{'id': r['id'], 'name': r['name'],
-                   'group': _gayathri_display_group(r['mg']),
-                   'timed': bool(r['timed']), 'amount': r['amount']}
-                  for r in gy_log_rows]
+        last_sess = db.execute("\n            SELECT s.id, s.date, s.notes, s.type,\n                   GROUP_CONCAT(DISTINCT e.name) AS exercise_names,\n                   COUNT(DISTINCT sl.id) AS total_sets,\n                   COALESCE(SUM(sl.reps * sl.weight_kg), 0.0) AS total_volume\n            FROM sessions s\n            LEFT JOIN session_lifts sl ON sl.session_id = s.id\n            LEFT JOIN exercises e ON e.id = sl.exercise_id\n            WHERE s.profile_id = ? AND s.type = 'gym'\n            GROUP BY s.id ORDER BY s.date DESC, s.id DESC LIMIT 1\n        ", (_profile_id(),)).fetchone()
         food_entries = [dict(r) for r in get_food_log(today_iso, _profile_id())]
         recent_foods = get_recent_foods(_profile_id(), limit=8)
         food_library = [dict(r) for r in get_food_library() if r['calories'] > 0]
+        macro = {'cal': total_cal, 'cal_goal': (goals.get('calories') or 0),
+                 'prot': total_prot, 'prot_goal': (goals.get('protein_g') or 0)}
         db.close()
-        return render_template('home_gayathri.html', today=today_iso, total_cal=total_cal, total_prot=total_prot, goals=goals, today_weight=today_weight, weight_history=[dict(r) for r in (weight_history or [])], week_days=week_days, last_session=dict(last_sess) if last_sess else None,
-                               gy_by_group=gy_by_group, gy_tallies=gy_tallies, gy_covered=sorted(gy_covered), gy_total_sets=gy_total_sets,
-                               gy_group_order=[g for g in _GAYATHRI_GROUPS if g in gy_by_group], gy_cardio=_GAYATHRI_CARDIO,
-                               gy_group_labels=_GAYATHRI_GROUP_LABELS,
-                               gy_log=gy_log, food_entries=food_entries, recent_foods=recent_foods, food_library=food_library)
+        return render_template('home_gayathri.html', today=today_iso, macro=macro, total_cal=total_cal, total_prot=total_prot, goals=goals, today_weight=today_weight, weight_history=[dict(r) for r in (weight_history or [])], week_days=week_days, last_session=dict(last_sess) if last_sess else None,
+                               food_entries=food_entries, recent_foods=recent_foods, food_library=food_library)
 
     # Support date navigation via ?date= param
     actual_today = date_type.today()
@@ -371,37 +353,9 @@ def dashboard():
     next_date = (today + timedelta(days=1)).isoformat() if today < actual_today else None
     week_start = (today - timedelta(days=today.weekday())).isoformat()
     db = get_db()
-    last_session = db.execute('\n        SELECT s.*,\n               COALESCE(sw_agg.distance_m, 0) AS distance_m,\n               COALESCE(agg.total_sets,   0)   AS total_sets,\n               COALESCE(agg.total_volume, 0.0) AS total_volume,\n               COALESCE(cd.cardio_dist, 0)     AS cardio_dist,\n               COALESCE(cd.cardio_dur,  0)     AS cardio_dur,\n               (SELECT e.name FROM session_cardio sc JOIN exercises e ON e.id = sc.exercise_id\n                WHERE sc.session_id = s.id ORDER BY sc.id LIMIT 1) AS cardio_name\n        FROM sessions s\n        LEFT JOIN (\n            SELECT session_id, SUM(distance_m) AS distance_m\n            FROM swim_logs GROUP BY session_id\n        ) sw_agg ON sw_agg.session_id = s.id\n        LEFT JOIN (\n            SELECT session_id,\n                   COUNT(*)              AS total_sets,\n                   SUM(reps * weight_kg) AS total_volume\n            FROM session_lifts\n            GROUP BY session_id\n        ) agg ON agg.session_id = s.id\n        LEFT JOIN (\n            SELECT session_id, SUM(distance_m) AS cardio_dist, SUM(duration_s) AS cardio_dur\n            FROM session_cardio GROUP BY session_id\n        ) cd ON cd.session_id = s.id\n        ORDER BY s.date DESC, s.id DESC\n        LIMIT 1\n    ').fetchone()
-    # Weekly volume from gym_progression (Arjun's new system)
-    weekly_volume = db.execute("""
-        SELECT COALESCE(SUM(gp.weight_kg * gp.sets * gp.reps), 0) AS vol
-        FROM gym_progression gp
-        WHERE DATE(gp.recorded_at) >= ?
-    """, (week_start,)).fetchone()['vol']
-    weekly_swim = db.execute('\n        SELECT COALESCE(SUM(sw.distance_m), 0) AS dist\n        FROM swim_logs sw\n        JOIN sessions s ON s.id = sw.session_id\n        WHERE s.date >= ? AND s.profile_id = ?\n    ', (week_start, _profile_id())).fetchone()['dist']
-    # T1/T2 activity this week from gym_progression
-    t1_count = db.execute("""
-        SELECT COUNT(DISTINCT gp.exercise_id) AS c
-        FROM gym_progression gp
-        JOIN gym_exercises ge ON ge.id = gp.exercise_id
-        WHERE DATE(gp.recorded_at) >= ? AND ge.tier = 1
-    """, (week_start,)).fetchone()['c']
-    t2_count = db.execute("""
-        SELECT COUNT(DISTINCT gp.exercise_id) AS c
-        FROM gym_progression gp
-        JOIN gym_exercises ge ON ge.id = gp.exercise_id
-        WHERE DATE(gp.recorded_at) >= ? AND ge.tier = 2
-    """, (week_start,)).fetchone()['c']
-    # PRs from gym_progression
-    prs = db.execute("""
-        SELECT ge.name, gp.weight_kg, gp.reps, gp.recorded_at AS date
-        FROM gym_progression gp
-        JOIN gym_exercises ge ON ge.id = gp.exercise_id
-        WHERE gp.weight_kg > 0
-        ORDER BY gp.weight_kg DESC
-        LIMIT 5
-    """).fetchall()
+    last_session = db.execute('\n        SELECT s.*,\n               COALESCE(sw_agg.distance_m, 0) AS distance_m,\n               COALESCE(agg.total_sets,   0)   AS total_sets,\n               COALESCE(agg.total_volume, 0.0) AS total_volume,\n               COALESCE(cd.cardio_dist, 0)     AS cardio_dist,\n               COALESCE(cd.cardio_dur,  0)     AS cardio_dur,\n               (SELECT e.name FROM session_cardio sc JOIN exercises e ON e.id = sc.exercise_id\n                WHERE sc.session_id = s.id ORDER BY sc.id LIMIT 1) AS cardio_name\n        FROM sessions s\n        LEFT JOIN (\n            SELECT session_id, SUM(distance_m) AS distance_m\n            FROM swim_logs GROUP BY session_id\n        ) sw_agg ON sw_agg.session_id = s.id\n        LEFT JOIN (\n            SELECT session_id,\n                   COUNT(*)              AS total_sets,\n                   SUM(reps * weight_kg) AS total_volume\n            FROM session_lifts\n            GROUP BY session_id\n        ) agg ON agg.session_id = s.id\n        LEFT JOIN (\n            SELECT session_id, SUM(distance_m) AS cardio_dist, SUM(duration_s) AS cardio_dur\n            FROM session_cardio GROUP BY session_id\n        ) cd ON cd.session_id = s.id\n        WHERE s.profile_id = ?\n        ORDER BY s.date DESC, s.id DESC\n        LIMIT 1\n    ', (_profile_id(),)).fetchone()
     today_weight = get_body_weight(today.isoformat(), _profile_id())
+    weight_history = get_body_weight_history(_profile_id(), days=30)
     food_goals = get_macro_goals(_profile_id())
     # Date being viewed on the "cumulative calories" chart — independent of `today`,
     # which stays anchored to the real date for the weekly stats above.
@@ -422,18 +376,6 @@ def dashboard():
         'protein_g': round(sum((r['protein_g'] or 0) for r in food_rows), 1),
         'carbs_g': round(sum((r['carbs_g'] or 0) for r in food_rows), 1),
         'fat_g': round(sum((r['fat_g'] or 0) for r in food_rows), 1) }
-    # Per-item breakdown for the cumulative-calories bar chart. Undefined (0-cal) foods
-    # are kept too — they render as grey/zero-height bars so nothing logged is hidden.
-    _meal_rank = {'breakfast': 0, 'lunch': 1, 'dinner': 2, 'snack': 3}
-    food_items = sorted(
-        ({'name': r['name'],
-          'meal': (r['meal_type'] or 'snack'),
-          'cal': round(r['calories'] or 0, 1),
-          'p': round(r['protein_g'] or 0, 1),
-          'c': round(r['carbs_g'] or 0, 1),
-          'f': round(r['fat_g'] or 0, 1)}
-         for r in food_rows),
-        key=lambda x: _meal_rank.get(x['meal'], 4))
     food_entries = [dict(r) for r in food_rows]
     enrich_log_entries(food_entries)   # attach source/type/std-serving for the food card
     recent_foods = get_recent_foods(_profile_id(), limit=8)
@@ -457,48 +399,13 @@ def dashboard():
             'day_num': day.day,
             'is_today': day == today,
             'is_past': day < today,
-            'activities': week_activity.get(day_iso, []) })
+            'activities': week_activity.get(day_iso, []),
+            'active': 'gym' in week_activity.get(day_iso, []) })
 
-    # ── Training streak: consecutive days with at least one gym session ──
-    db2 = get_db()
-    streak_rows = db2.execute("""
-        SELECT DISTINCT date FROM sessions
-        WHERE profile_id = ? AND type = 'gym'
-        ORDER BY date DESC LIMIT 60
-    """, (_profile_id(),)).fetchall()
-    streak = 0
-    check_date = today
-    streak_dates = {r['date'] for r in streak_rows}
-    # Allow today to not have a session yet (check from yesterday if today not logged)
-    if check_date.isoformat() not in streak_dates:
-        check_date = today - timedelta(days=1)
-    while check_date.isoformat() in streak_dates:
-        streak += 1
-        check_date -= timedelta(days=1)
+    macro = {'cal': (food_totals.get('calories') or 0), 'cal_goal': ((food_goals or {}).get('calories') or 0),
+             'prot': (food_totals.get('protein_g') or 0), 'prot_goal': ((food_goals or {}).get('protein_g') or 0)}
 
-    # ── Weekly T1 coverage: how many of total enabled T1s were hit ──
-    total_t1 = db2.execute(
-        "SELECT COUNT(*) AS c FROM gym_exercises WHERE tier = 1 AND is_enabled = 1"
-    ).fetchone()['c']
-
-    # ── Protein consistency: days this week at/above protein goal ──
-    prot_goal = food_goals.get('protein_g', 0) if food_goals else 0
-    prot_days_hit = 0
-    if prot_goal > 0:
-        prot_row = db2.execute("""
-            SELECT COUNT(DISTINCT date) AS c FROM (
-                SELECT date, SUM(protein_g) AS total_p
-                FROM food_log
-                WHERE profile_id = ? AND date >= ?
-                GROUP BY date
-                HAVING total_p >= ?
-            )
-        """, (_profile_id(), week_start, prot_goal)).fetchone()
-        prot_days_hit = prot_row['c'] if prot_row else 0
-    days_elapsed = min(today.weekday() + 1, 7)  # Mon=1 ... Sun=7
-    db2.close()
-
-    return render_template('dashboard.html', last_session=last_session, weekly_volume=weekly_volume, weekly_swim=weekly_swim, t1_count=t1_count, t2_count=t2_count, total_t1=total_t1, streak=streak, prot_days_hit=prot_days_hit, prot_goal=prot_goal, days_elapsed=days_elapsed, today=today.isoformat(), is_today=is_today, prev_date=prev_date, next_date=next_date, week_days=week_days, today_weight=today_weight, food_goals=food_goals, food_totals=food_totals, food_items_json=_json.dumps(food_items), swimlane_json=_json.dumps(get_muscle_swimlane(_profile_id())), fatigue_json=_json.dumps(get_fatigue_state(_profile_id())), food_date=food_date, food_prev_date=food_prev_date, food_next_date=food_next_date, food_date_label=food_date_label, food_is_today=food_is_today, food_entries=food_entries, recent_foods=recent_foods)
+    return render_template('dashboard.html', last_session=last_session, today=today.isoformat(), is_today=is_today, prev_date=prev_date, next_date=next_date, week_days=week_days, today_weight=today_weight, weight_history=[dict(r) for r in (weight_history or [])], food_goals=food_goals, macro=macro, food_date=food_date, food_prev_date=food_prev_date, food_next_date=food_next_date, food_date_label=food_date_label, food_is_today=food_is_today, food_entries=food_entries, recent_foods=recent_foods)
 
 
 @app.route('/session/new')
@@ -1351,6 +1258,7 @@ def api_gym_exercise_add():
         notes=data.get('notes') or None,
         tracking_type=data.get('tracking_type') or 'weight_reps',
         sort_order=_safe_int(data.get('sort_order'), 0),
+        exercise_class=data.get('exercise_class') or 'strength',
     )
     if not ok:
         return {'ok': False, 'error': err}, 400
@@ -1676,13 +1584,39 @@ def exercise_db():
     groups = [g for g in tree if g['functions']]
     archived.sort(key=lambda e: (e['muscle_group'], e['name']))
     functions_by_muscle = {mg: get_gym_functions(mg) for mg in _GYM_GROUP_ORDER}
+
+    # ── Group the active bank by exercise class (bodyweight / strength) ──
+    # Each class section carries its own muscle→function→exercise sub-tree,
+    # filtered to that class. Empty functions/groups are pruned per section so a
+    # section only lists muscles that actually contain exercises of that class.
+    def _filter_groups_by_class(src_groups, cls):
+        out = []
+        for g in src_groups:
+            fns = []
+            for fn in g['functions']:
+                exs = [e for e in fn['exercises'] if (e.get('exercise_class') or 'strength') == cls]
+                if exs:
+                    fns.append({**fn, 'exercises': exs})
+            if fns:
+                cnt = sum(len(fn['exercises']) for fn in fns)
+                out.append({**g, 'functions': fns, 'active_count': cnt})
+        return out
+
+    class_sections = [
+        {'class': 'bodyweight', 'label': 'Bodyweight',
+         'groups': _filter_groups_by_class(groups, 'bodyweight')},
+        {'class': 'strength', 'label': 'Strength',
+         'groups': _filter_groups_by_class(groups, 'strength')},
+    ]
     return render_template('exercise_db.html',
                            groups=groups,
+                           class_sections=class_sections,
                            archived=archived,
                            active_total=active_total,
                            archived_count=len(archived),
                            muscle_groups=list(_GYM_GROUP_LABELS.keys()),
                            functions_by_muscle=functions_by_muscle,
+                           exercise_classes=['bodyweight', 'strength'],
                            tracking_types=list(TRACKING_TYPES))
 
 
@@ -1739,12 +1673,11 @@ def food():
     library = [dict(r) for r in get_food_library() if r['calories'] > 0]
     food_map = {r['name'].lower(): r for r in library}
     components = get_food_components()
-    today_weight = get_body_weight(date_str, pid)
     weight_history = get_body_weight_history(pid, days=30)
     is_today = d == today
     pending = get_pending_foods(pid)
     history = get_food_history(pid)
-    return render_template('food.html', date_str=date_str, date_label=date_label, prev_date=prev_date, next_date=next_date, is_today=is_today, goals=goals, entries=entries, totals=totals, pending=pending, history=history, food_library=library, food_map=food_map, food_components=components, today_weight=today_weight, weight_history=weight_history)
+    return render_template('food.html', date_str=date_str, date_label=date_label, prev_date=prev_date, next_date=next_date, is_today=is_today, goals=goals, entries=entries, totals=totals, pending=pending, history=history, food_library=library, food_map=food_map, food_components=components, weight_history=weight_history)
 
 
 @app.route('/food/log', methods=[ 'POST'])
@@ -2165,6 +2098,19 @@ def body_weight_log():
     if ref.startswith(request.host_url):
         return redirect(ref)
     return redirect(url_for('dashboard'))
+
+
+@app.route('/api/weight-history')
+def api_weight_history():
+    """Body-weight series for the home weight chart's range toggle.
+    Returns [{date, weight_kg}] newest-first, scoped to the active profile."""
+    try:
+        days = int(request.args.get('days', 30))
+    except (TypeError, ValueError):
+        days = 30
+    days = max(2, min(days, 3650))  # clamp: >=2 points meaningful, <=10y sane cap
+    history = get_body_weight_history(_profile_id(), days=days)
+    return _json.dumps([dict(r) for r in (history or [])]), 200, {'Content-Type': 'application/json'}
 
 
 @app.route('/info')

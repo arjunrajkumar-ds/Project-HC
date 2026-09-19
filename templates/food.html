@@ -288,47 +288,7 @@ body.pandora .unit-btn.active { color: var(--bg); }
 .entry-inputs-row { display: grid; grid-template-columns: 1fr; gap: 8px; }
 .entry-inputs-row input { margin: 0; }
 .entry-error { font-size: 0.78rem; color: #ef4444; display: none; }
-.btn-add-entry {
-    background: var(--accent); border: none; border-radius: 10px;
-    color: #fff; cursor: pointer; font-family: inherit;
-    font-size: 1rem; font-weight: 800;
-    min-height: 50px; padding: 12px;
-    -webkit-tap-highlight-color: transparent;
-}
-.btn-add-entry:active { opacity: .8; }
 
-/* ── Weight widget ───────────────────────────────────────────────── */
-.weight-widget {
-    background: var(--surface); border-radius: 14px;
-    padding: 12px 14px; margin-bottom: 10px;
-    display: inline-flex; flex-direction: column; gap: 10px;
-    min-width: 160px;
-}
-.weight-widget-header {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-}
-.weight-widget-title { font-size: 0.7rem; font-weight: 700; color: var(--dim);
-    text-transform: uppercase; letter-spacing: .08em; }
-.weight-current { font-size: 1.4rem; font-weight: 900; color: var(--text); line-height: 1; }
-.weight-current span { font-size: 0.75rem; font-weight: 600; color: var(--muted); margin-left: 2px; }
-.btn-wt-tick {
-    background: color-mix(in srgb, #22c55e 15%, transparent);
-    border: 1px solid #22c55e; border-radius: 50%;
-    color: #22c55e; cursor: pointer; font-family: inherit;
-    font-size: 0.85rem; font-weight: 800;
-    width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0; -webkit-tap-highlight-color: transparent;
-}
-.btn-wt-tick:active { opacity: .7; }
-.weight-input-row { display: flex; gap: 8px; align-items: center; }
-.btn-log-weight {
-    background: var(--accent); border: none; border-radius: 10px;
-    color: #fff; cursor: pointer; font-family: inherit;
-    font-size: 0.9rem; font-weight: 800;
-    min-height: 44px; padding: 0 18px; white-space: nowrap;
-    -webkit-tap-highlight-color: transparent; flex-shrink: 0;
-}
-.btn-log-weight:active { opacity: .8; }
 
 /* ── Weight chart ─────────────────────────────────────────────────── */
 .wt-chart-card {
@@ -503,18 +463,6 @@ details[open].meal-builder > summary { border-radius: 12px 12px 0 0; }
 .log-cal { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--text-strong); }
 .log-pro { font-family: var(--font-mono); font-size: 11px; color: var(--green); }
 
-/* Add-entry disclosure (dashed box) */
-details.add-entry { margin-bottom: 20px; }
-details.add-entry > summary {
-    border: 1px dashed var(--border); border-radius: var(--radius-sm); padding: 11px;
-    text-align: center; color: var(--dim); font-family: var(--font-mono); font-size: 11px;
-    letter-spacing: .04em; cursor: pointer; list-style: none;
-    -webkit-tap-highlight-color: transparent;
-}
-details.add-entry > summary::-webkit-details-marker { display: none; }
-details[open].add-entry > summary { margin-bottom: 10px; color: var(--accent); }
-details.add-entry .entry-form { margin-bottom: 0; }
-
 /* ── Pandora (dark aesthetic) overrides for entry form ─────────────── */
 body.pandora .entry-form {
     background: var(--panel); border: 1px solid var(--border);
@@ -546,13 +494,6 @@ body.pandora .entry-error {
     font-family: var(--font-mono); font-size: 10px; color: var(--red);
     text-transform: uppercase; letter-spacing: .04em;
 }
-body.pandora .btn-add-entry {
-    background: var(--accent); color: var(--bg);
-    border-radius: var(--radius-sm);
-    font-family: var(--font-sans); font-size: 13px; font-weight: 600;
-    min-height: 0; padding: 11px;
-}
-body.pandora .btn-add-entry:active { opacity: .85; }
 body.pandora .recent-chips { margin-top: 2px; gap: 5px; }
 body.pandora .recent-chips-label {
     font-family: var(--font-mono); font-size: 9px; font-weight: 400;
@@ -609,29 +550,6 @@ body.pandora .dym-chip {
     </div>
 </div>
 
-{# ── Weight widget ───────────────────────────────────────────────────── #}
-<div class="weight-widget">
-    <div class="weight-widget-header">
-        <span class="weight-widget-title">Body Weight</span>
-        {% if today_weight %}
-        <button type="button" class="btn-wt-tick" onclick="toggleWtForm()" title="{{ today_weight | round(1) }} kg">✓</button>
-        {% else %}
-        <span class="weight-current" style="color:var(--dim);font-size:1rem">—</span>
-        {% endif %}
-    </div>
-    <div id="wt-form-wrap"{% if today_weight %} style="display:none"{% endif %}>
-        <form method="POST" action="/body-weight" class="weight-input-row">
-            <input type="hidden" name="date" value="{{ date_str }}">
-            <div class="form-group" style="margin:0;flex:1">
-                <input type="number" id="wt-input" name="weight_kg"
-                       min="20" max="300" step="0.1" inputmode="decimal"
-                       placeholder="kg" style="margin-top:0">
-            </div>
-            <button type="submit" class="btn-log-weight">Save</button>
-        </form>
-    </div>
-</div>
-
 {# ── Weight chart ────────────────────────────────────────────────────── #}
 {% if weight_history and weight_history | length > 1 %}
 <div class="wt-chart-card">
@@ -653,50 +571,6 @@ body.pandora .dym-chip {
     <p class="section-title">{{ date_label }}'s Log</p>
     <div id="food-log-list" class="log-list"></div>
 </section>
-
-{# ── Add entry (dashed disclosure → existing form) ───────────────────── #}
-<details class="add-entry"{% if is_today %} open{% endif %}>
-    <summary>+ add entry</summary>
-<div class="entry-form">
-    <div class="meal-pills-row">
-        <button type="button" class="meal-pill" data-meal="breakfast" onclick="selectMeal('breakfast')">Breakfast</button>
-        <button type="button" class="meal-pill" data-meal="lunch"     onclick="selectMeal('lunch')">Lunch</button>
-        <button type="button" class="meal-pill" data-meal="dinner"    onclick="selectMeal('dinner')">Dinner</button>
-        <button type="button" class="meal-pill" data-meal="snack"     onclick="selectMeal('snack')">Snack</button>
-    </div>
-    <div class="entry-inputs-row">
-        <div class="form-group">
-            <label for="ef-name">Food name</label>
-            <input type="text" id="ef-name" placeholder="e.g. 78g Chicken" autocomplete="off"
-                   oninput="efNameInput(event)">
-        </div>
-    </div>
-    <div id="ef-db-hint" style="font-size:0.72rem;color:var(--dim);display:none"></div>
-    {% if recent_foods %}
-    <div class="recent-chips" id="recent-chips">
-        <span class="recent-chips-label">Recent</span>
-        {% for rf in recent_foods %}
-        <button type="button" class="recent-chip" onclick="setFoodName({{ rf | tojson }})">{{ rf }}</button>
-        {% endfor %}
-    </div>
-    {% endif %}
-    <div class="entry-error" id="entry-error"></div>
-    <button type="button" class="btn-add-entry" onclick="addEntry()">Add entry</button>
-</div>
-</details>
-
-{# ── Datalist for meal builder autocomplete ──────────────────────────── #}
-<datalist id="ql-food-list">
-    {% for item in food_library %}
-    <option value="{{ item.name | e }}"
-            data-key="{{ item.name | food_key | e }}"
-            data-kcal="{{ item.calories }}"
-            data-pro="{{ item.protein_g }}"
-            data-carb="{{ item.carbs_g }}"
-            data-fat="{{ item.fat_g }}"
-            data-unit="{{ item.unit_type }}">
-    {% endfor %}
-</datalist>
 
 {# ── Meal builder ───────────────────────────────────────────────────── #}
 <details class="meal-builder" id="meal-builder">
@@ -1400,7 +1274,7 @@ function didYouMean(query, limit = 3) {
 }
 
 // Accept inline completion on Tab or →
-document.getElementById('ef-name').addEventListener('keydown', function (e) {
+document.getElementById('ef-name')?.addEventListener('keydown', function (e) {
     if ((e.key === 'ArrowRight' || e.key === 'Tab') &&
         this.selectionStart < this.selectionEnd) {
         this.setSelectionRange(this.value.length, this.value.length);
@@ -1598,7 +1472,7 @@ async function deleteEntry(id) {
     }
 }
 
-document.getElementById('ef-name').addEventListener('keydown', e => {
+document.getElementById('ef-name')?.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); addEntry(); }
 });
 
@@ -1674,15 +1548,6 @@ document.getElementById('ef-name').addEventListener('keydown', e => {
         if (this.open && document.querySelectorAll('.meal-ingredient-row').length === 0) mbAddRow();
     });
 })();
-
-// ── Body weight toggle ────────────────────────────────────────────────
-function toggleWtForm() {
-    const wrap = document.getElementById('wt-form-wrap');
-    if (!wrap) return;
-    const open = wrap.style.display === 'none';
-    wrap.style.display = open ? '' : 'none';
-    if (open) setTimeout(() => document.getElementById('wt-input')?.focus(), 40);
-}
 
 // ── Weight chart ──────────────────────────────────────────────────────
 (function () {

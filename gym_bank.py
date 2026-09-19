@@ -439,11 +439,15 @@ def end_gym_session(session_id):
 
 # ── Write / Admin ────────────────────────────────────────────────────────────
 
+EXERCISE_CLASSES = ('bodyweight', 'strength')
+
+
 def gym_add_exercise(name, tier, muscle_group, function=None, is_enabled=True,
                      engagement=None, notes=None, reps_min=None, reps_max=None, sets=None,
-                     tracking_type='weight_reps', sort_order=0):
+                     tracking_type='weight_reps', sort_order=0, exercise_class='strength'):
     """Add a new exercise to the GYM bank. Returns (ok, error).
-    tracking_type must be one of TRACKING_TYPES; is_weighted is derived from it."""
+    tracking_type must be one of TRACKING_TYPES; is_weighted is derived from it.
+    exercise_class is 'bodyweight' or 'strength' (defaults to 'strength')."""
     name = (name or '').strip()
     if not name:
         return False, 'Name is required.'
@@ -451,15 +455,17 @@ def gym_add_exercise(name, tier, muscle_group, function=None, is_enabled=True,
         return False, 'Tier must be 1–5.'
     if tracking_type not in TRACKING_TYPES:
         return False, f'Invalid tracking type "{tracking_type}".'
+    if exercise_class not in EXERCISE_CLASSES:
+        return False, f'Invalid exercise class "{exercise_class}".'
     conn = _gym_db()
     try:
         conn.execute(
             "INSERT INTO gym_exercises (name, tier, muscle_group, function, is_enabled, "
             "engagement, notes, reps_min, reps_max, sets, tracking_type, sort_order, "
-            "is_weighted) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "is_weighted, exercise_class) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (name, tier, muscle_group, function, 1 if is_enabled else 0,
              json.dumps(engagement or {}), notes, reps_min, reps_max, sets,
-             tracking_type, sort_order, _iw_from_tracking(tracking_type))
+             tracking_type, sort_order, _iw_from_tracking(tracking_type), exercise_class)
         )
         conn.commit()
         return True, None
@@ -473,12 +479,14 @@ def gym_update_exercise(exercise_id, **kwargs):
     """Update fields on an existing exercise. Pass only the fields to change."""
     allowed = {'name', 'tier', 'muscle_group', 'function', 'is_enabled',
                'engagement', 'notes', 'reps_min', 'reps_max', 'sets',
-               'tracking_type', 'sort_order', 'archived_at'}
+               'tracking_type', 'sort_order', 'archived_at', 'exercise_class'}
     updates = {k: v for k, v in kwargs.items() if k in allowed}
     if not updates:
         return False, 'Nothing to update.'
     if 'tracking_type' in updates and updates['tracking_type'] not in TRACKING_TYPES:
         return False, f'Invalid tracking type "{updates["tracking_type"]}".'
+    if 'exercise_class' in updates and updates['exercise_class'] not in EXERCISE_CLASSES:
+        return False, f'Invalid exercise class "{updates["exercise_class"]}".'
     if 'engagement' in updates and isinstance(updates['engagement'], dict):
         updates['engagement'] = json.dumps(updates['engagement'])
     # Keep the DEPRECATED is_weighted flag in sync whenever tracking_type moves.

@@ -10,3 +10,8 @@ tracker.db.bak-*
 pycdc/
 _iotest.tmp
 .vscode/
+
+# Added during cleanup 2026-09-19
+.pytest_cache/
+.claude/
+migrations/__pycache__/

@@ -182,6 +182,14 @@
 .db-foot a { font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); text-decoration: none; }
 .db-foot a:active { color: var(--accent); }
 
+.class-section { margin-bottom: 18px; }
+.class-section-head { display: flex; align-items: baseline; gap: 8px; margin: 6px 0 10px; }
+.class-section-title { font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--text-strong); }
+.class-section-count { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
+.class-section-empty { font-family: var(--font-mono); font-size: 11px; color: var(--dimmer);
+    font-style: italic; padding: 6px 2px 14px; }
+
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (min-width: 640px) {
     .groups-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
@@ -232,6 +240,11 @@
                 <option value="time">Time</option>
                 <option value="weight_time">Weight × time</option>
             </select></div>
+        <div class="edit-field"><label>Class</label>
+            <select id="add-class">
+                <option value="strength" selected>Strength</option>
+                <option value="bodyweight">Bodyweight</option>
+            </select></div>
         <div class="edit-field grow"><label>Notes</label><input type="text" id="add-notes" placeholder="optional"></div>
     </div>
     <div class="new-fn-row" id="add-newfn">
@@ -245,9 +258,8 @@
     </div>
 </div>
 
-<!-- Muscle groups -->
-<div class="groups-grid">
-{% for group in groups %}
+<!-- Muscle groups, grouped by exercise class -->
+{% macro render_group(group) %}
 <div class="g-group" data-group="{{ group.key }}">
     <button type="button" class="g-head" onclick="toggleGroup(this)">
         <span class="g-stripe"></span>
@@ -308,6 +320,12 @@
                         <option value="time"{% if ex.tracking_type == 'time' %} selected{% endif %}>Time</option>
                         <option value="weight_time"{% if ex.tracking_type == 'weight_time' %} selected{% endif %}>Weight × time</option>
                     </select></div>
+                <div class="edit-field"><label>Class</label>
+                    <select id="ed-class-{{ ex.id }}">
+                        {% set _ec = ex.exercise_class or 'strength' %}
+                        <option value="strength"{% if _ec == 'strength' %} selected{% endif %}>Strength</option>
+                        <option value="bodyweight"{% if _ec == 'bodyweight' %} selected{% endif %}>Bodyweight</option>
+                    </select></div>
                 <div class="edit-field"><label>Reps min</label><input type="text" inputmode="numeric" class="num" id="ed-repsmin-{{ ex.id }}" value="{{ ex.reps_min if ex.reps_min is not none else '' }}"></div>
                 <div class="edit-field"><label>Reps max</label><input type="text" inputmode="numeric" class="num" id="ed-repsmax-{{ ex.id }}" value="{{ ex.reps_max if ex.reps_max is not none else '' }}"></div>
                 <div class="edit-field"><label>Sets</label><input type="text" inputmode="numeric" class="num" id="ed-sets-{{ ex.id }}" value="{{ ex.sets if ex.sets is not none else '' }}"></div>
@@ -334,8 +352,23 @@
         {% endfor %}
     </div>
 </div>
-{% endfor %}
+{% endmacro %}
+
+{% for section in class_sections %}
+<div class="class-section" data-class="{{ section.class }}">
+    <div class="class-section-head">
+        <span class="class-section-title">{{ section.label }}</span>
+        <span class="class-section-count">{{ section.groups | sum(attribute='active_count') }}</span>
+    </div>
+    {% if section.groups %}
+    <div class="groups-grid">
+        {% for group in section.groups %}{{ render_group(group) }}{% endfor %}
+    </div>
+    {% else %}
+    <p class="class-section-empty">No {{ section.label | lower }} exercises yet.</p>
+    {% endif %}
 </div>
+{% endfor %}
 
 <!-- Archived section -->
 <div class="archived-section" id="archived-section">
@@ -491,6 +524,7 @@ async function saveEdit(id) {
         reps_max: numOrNull(document.getElementById('ed-repsmax-' + id).value),
         sets: numOrNull(document.getElementById('ed-sets-' + id).value),
         notes: document.getElementById('ed-notes-' + id).value.trim() || null,
+        exercise_class: document.getElementById('ed-class-' + id).value,
     };
     if (!body.name) { showRowError(id, 'Name is required.'); return; }
     const r = await apiPost('/api/gym/exercise/' + id, body);
@@ -549,6 +583,7 @@ async function addExercise() {
         muscle_group: muscle,
         function: fnRes.key,
         tracking_type: document.getElementById('add-tracking').value,
+        exercise_class: document.getElementById('add-class').value,
         notes: document.getElementById('add-notes').value.trim() || null,
     };
     const r = await apiPost('/api/gym/exercise/add', body);

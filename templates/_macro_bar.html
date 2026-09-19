@@ -1,0 +1,114 @@
+{# ── Shared macro / progress bar — Visualisation 1 ────────────────────────
+   Calories + protein, two stacked rows, placed directly under the week-strip.
+   Expects: macro = {cal, cal_goal, prot, prot_goal}.
+   Calories fill = --accent; protein fill = --green. Over-goal → --red, clamp
+   at 100% width, readout shows overage (e.g. "+120 kcal").
+   Live food logging updates #mb-cal-* / #mb-prot-* via macroBarUpdate() (below).
+   Self-contained styling so both pages share one source of truth.
+#}
+<style>
+.macro-bar { background: var(--panel); border: 1px solid var(--border);
+             border-radius: var(--radius-md); padding: 12px 14px; }
+.macro-bar-row + .macro-bar-row { margin-top: 12px; }
+.macro-bar-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.macro-bar-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em;
+                   text-transform: uppercase; }
+.macro-bar-label.cal { color: var(--accent); }
+.macro-bar-label.prot { color: var(--green); }
+.macro-bar-readout { font-family: var(--font-mono); font-size: 13px; font-weight: 700;
+                     color: var(--text-strong); white-space: nowrap; }
+.macro-bar-readout .goal { font-size: 10px; font-weight: 400; color: var(--dim); }
+.macro-bar-track { height: 8px; margin-top: 6px; background: var(--panel-soft);
+                   border-radius: 4px; overflow: hidden; }
+.macro-bar-fill { height: 100%; border-radius: 4px; transition: width .28s ease, background .2s ease; }
+.macro-bar-fill.cal { background: var(--accent); }
+.macro-bar-fill.prot { background: var(--green); }
+.macro-bar-fill.over { background: var(--red); }
+.macro-bar-sub { margin-top: 4px; font-family: var(--font-mono); font-size: 9px;
+                 letter-spacing: .04em; color: var(--dim); display: flex;
+                 justify-content: space-between; gap: 8px; }
+.macro-bar-sub .over { color: var(--red); }
+</style>
+
+{%- set cal      = (macro.cal or 0) -%}
+{%- set cal_goal = (macro.cal_goal or 0) -%}
+{%- set prot      = (macro.prot or 0) -%}
+{%- set prot_goal = (macro.prot_goal or 0) -%}
+{%- set cal_pct  = ((cal / cal_goal * 100) if cal_goal > 0 else 0) -%}
+{%- set prot_pct = ((prot / prot_goal * 100) if prot_goal > 0 else 0) -%}
+{%- set cal_over  = cal_goal > 0 and cal > cal_goal -%}
+{%- set prot_over = prot_goal > 0 and prot > prot_goal -%}
+
+<div class="macro-bar" id="macro-bar">
+    <div class="macro-bar-row">
+        <div class="macro-bar-top">
+            <span class="macro-bar-label cal">Calories</span>
+            <span class="macro-bar-readout" id="mb-cal-readout">
+                {{ cal | round | int }}<span class="goal"> / {{ cal_goal | round | int }} kcal</span>
+            </span>
+        </div>
+        <div class="macro-bar-track">
+            <div class="macro-bar-fill cal{% if cal_over %} over{% endif %}" id="mb-cal-fill"
+                 style="width: {{ [cal_pct, 100] | min if cal_goal > 0 else 0 }}%"></div>
+        </div>
+        <div class="macro-bar-sub">
+            <span id="mb-cal-pct">{{ cal_pct | round | int }}%</span>
+            <span id="mb-cal-rem"{% if cal_over %} class="over"{% endif %}>
+                {%- if cal_goal <= 0 -%}no goal
+                {%- elif cal_over -%}+{{ (cal - cal_goal) | round | int }} kcal
+                {%- else -%}{{ (cal_goal - cal) | round | int }} kcal left{%- endif -%}
+            </span>
+        </div>
+    </div>
+    <div class="macro-bar-row">
+        <div class="macro-bar-top">
+            <span class="macro-bar-label prot">Protein</span>
+            <span class="macro-bar-readout" id="mb-prot-readout">
+                {{ prot | round | int }}g<span class="goal"> / {{ prot_goal | round | int }}g</span>
+            </span>
+        </div>
+        <div class="macro-bar-track">
+            <div class="macro-bar-fill prot{% if prot_over %} over{% endif %}" id="mb-prot-fill"
+                 style="width: {{ [prot_pct, 100] | min if prot_goal > 0 else 0 }}%"></div>
+        </div>
+        <div class="macro-bar-sub">
+            <span id="mb-prot-pct">{{ prot_pct | round | int }}%</span>
+            <span id="mb-prot-rem"{% if prot_over %} class="over"{% endif %}>
+                {%- if prot_goal <= 0 -%}no goal
+                {%- elif prot_over -%}+{{ (prot - prot_goal) | round | int }}g
+                {%- else -%}{{ (prot_goal - prot) | round | int }}g left{%- endif -%}
+            </span>
+        </div>
+    </div>
+</div>
+
+<script>
+{# Live updater — called by the food logger after add/delete so calories+protein
+   in the shared bar refresh without a reload. Mirrors the Jinja logic above. #}
+window.macroBarUpdate = function (cal, calGoal, prot, protGoal) {
+    function paint(prefix, val, goal, unit, fillCls) {
+        var fill = document.getElementById('mb-' + prefix + '-fill');
+        var readout = document.getElementById('mb-' + prefix + '-readout');
+        var pctEl = document.getElementById('mb-' + prefix + '-pct');
+        var remEl = document.getElementById('mb-' + prefix + '-rem');
+        if (!fill) return;
+        val = +val || 0; goal = +goal || 0;
+        var over = goal > 0 && val > goal;
+        var pct = goal > 0 ? (val / goal * 100) : 0;
+        fill.style.width = (goal > 0 ? Math.min(pct, 100) : 0) + '%';
+        fill.classList.toggle('over', over);
+        var valTxt = (unit === 'g') ? (Math.round(val) + 'g') : Math.round(val).toLocaleString();
+        var goalTxt = (unit === 'g') ? (Math.round(goal) + 'g') : (Math.round(goal).toLocaleString() + ' kcal');
+        if (readout) readout.innerHTML = valTxt + '<span class="goal"> / ' + goalTxt + '</span>';
+        if (pctEl) pctEl.textContent = Math.round(pct) + '%';
+        if (remEl) {
+            remEl.classList.toggle('over', over);
+            if (goal <= 0) remEl.textContent = 'no goal';
+            else if (over) remEl.textContent = '+' + Math.round(val - goal) + (unit === 'g' ? 'g' : ' kcal');
+            else remEl.textContent = Math.round(goal - val) + (unit === 'g' ? 'g left' : ' kcal left');
+        }
+    }
+    paint('cal', cal, calGoal, 'kcal', 'cal');
+    paint('prot', prot, protGoal, 'g', 'prot');
+};
+</script>
