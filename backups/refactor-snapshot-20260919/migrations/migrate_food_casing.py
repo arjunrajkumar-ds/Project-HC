@@ -1,8 +1,3 @@
-import os as _mig_os, sys as _mig_sys
-_REPO_ROOT = _mig_os.path.dirname(_mig_os.path.dirname(_mig_os.path.abspath(__file__)))
-if _REPO_ROOT not in _mig_sys.path:
-    _mig_sys.path.insert(0, _REPO_ROOT)
-
 """One-time casing cleanup for tracker.db.
 
 Normalises existing food names to the same consistent Title Case now applied on write
@@ -19,7 +14,7 @@ import shutil
 import sqlite3
 from datetime import datetime
 
-from gymtracker import database as d
+import database as d
 
 DB = d.DB_PATH
 

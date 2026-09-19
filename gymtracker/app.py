@@ -1,0 +1,2186 @@
+
+import json as _json
+import os as _os
+import re as _re
+import secrets as _secrets
+from urllib.parse import quote as _urlquote
+from datetime import date as date_type, timedelta
+from flask import Flask, render_template, request, redirect, url_for, session, abort
+from datetime import datetime as _datetime
+from .database import init_db, get_db, get_session_cardio, get_cardio_choices, log_cardio_session, get_muscle_group_activity, bank_scope_for_profile, get_fatigue_state, get_sessions_with_headlines, get_session_detail_with_progression, get_macro_goals, set_macro_goals, sync_food_log_from_library, get_food_log, add_food_entry, log_food_entry, delete_food_entry, get_pending_foods, define_food_item, delete_food_item, get_food_history, get_recent_foods, get_food_library, get_food_components, get_food_component_mode, save_food_components, save_food_components_pct, get_profiles, _parse_qty_name, _parse_gram_prefix, _food_key, log_food_reconciliation, get_food_reconciliations, log_body_weight, get_body_weight, get_body_weight_history, get_pilates_session, get_mission_progress, clear_mission_stage, get_exercise_tallies, bump_exercise_tally, ack_exercise_tally, get_crew_status, get_food_types, create_food_type, update_food_type, delete_food_type, count_foods_with_type, get_distinct_source_names, enrich_log_entries
+from .swim_routes import bp as swim_bp
+from .pilates_routes import bp as pilates_bp
+from .gym_bank import get_gym_bank, get_gym_bank_grouped, get_gym_exercise, gym_add_exercise, gym_update_exercise, gym_set_enabled, gym_archive_exercise, gym_unarchive_exercise, gym_delete_exercise, gym_reorder_function, get_gym_functions, gym_add_function, log_gym_set, get_today_tally, undo_last_today, get_or_create_today_gym_session, get_exercise_prefill, get_live_session_state, apply_session_rollover, TRACKING_TYPES, TIER_LABELS
+app = Flask(__name__,
+            template_folder=_os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'templates'),
+            static_folder=_os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'static'))
+app.secret_key = _os.environ.get('SECRET_KEY', 'gymtracker-local-secret-key')
+app.jinja_env.filters['enumerate'] = enumerate
+app.jinja_env.filters['fromjson'] = _json.loads
+
+app.jinja_env.filters['urlencode'] = lambda s: _urlquote(str(s), safe='')
+
+app.jinja_env.filters['strip_food_prefix'] = lambda s: _re.sub('^\\d+(?:\\.\\d+)?\\s*(?:g|ml|kg|l|oz|x)\\s+', '', s, flags=_re.IGNORECASE).strip()
+app.jinja_env.filters['food_key'] = _food_key
+_MONTHS = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec']
+_FUZZY_QTY_RE = _re.compile('^(\\d+(?:\\.\\d+)?)\\s+(g|ml|kg|l|oz|lb)\\b', _re.IGNORECASE)
+
+def _normalize_food_name(name):
+    """Collapse '<number> <unit>' → '<number><unit>'. Returns (normalized, changed)."""
+    normalized = _FUZZY_QTY_RE.sub('\\1\\2', name.strip(), count=1)
+    return (normalized, normalized != name.strip())
+
+_DAYS = [
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+    'Sun']
+
+def _fmt_date(iso_str):
+    """'2026-05-22' -> 'Fri 22 May'"""
+    try:
+        from datetime import date as _d
+        d = _d.fromisoformat(iso_str)
+        return f"{_DAYS[d.weekday()]} {d.day} {_MONTHS[d.month-1]}"
+    except Exception:
+        return iso_str
+
+app.jinja_env.filters['fmt_date'] = _fmt_date
+app.register_blueprint(swim_bp)
+app.register_blueprint(pilates_bp)
+
+def _csrf_token():
+    if 'csrf_token' not in session:
+        session['csrf_token'] = _secrets.token_hex(32)
+    return session['csrf_token']
+
+app.jinja_env.globals['csrf_token'] = _csrf_token
+
+def _validate_date(date_str, fallback=None):
+    try:
+        date_type.fromisoformat(str(date_str))
+        return str(date_str)
+    except (ValueError, TypeError):
+        return fallback if fallback is not None else date_type.today().isoformat()
+
+
+def _safe_float(value, default=0.0):
+    try:
+        if value is None or value == '':
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(value, default=0):
+    try:
+        if value is None or value == '':
+            return default
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def _profile_id():
+    return session.get('profile_id', 1)
+
+
+@app.context_processor
+def inject_profile():
+    pid = session.get('profile_id')
+    if pid:
+        db = get_db()
+        profile = db.execute('SELECT * FROM profiles WHERE id=?', (pid,)).fetchone()
+        db.close()
+        return {'current_profile': dict(profile) if profile else None}
+    return {'current_profile': None}
+_GAYATHRI_BLOCKED = {
+    'analytics',
+    'exercises',
+    'train',
+    'progression',
+    'session_new',
+    'exercise_delete',
+    'progression_advance',
+    'progression_set_weight'}
+# Gayathri trains at home with no equipment. Every exercise is bodyweight and
+# chosen for a 60-year-old building foundational strength. Routines are retired
+# in favour of the all-day tap-to-log flow, so _GAYATHRI_ROUTINES is empty (kept
+# for the legacy routine routes, which now simply no-op).
+_GAYATHRI_ROUTINES = {}
+
+_GAYATHRI_CARDIO = []  # legacy static list — cardio is now a proper group panel
+
+# Human-baseline + benchmark-ladder model. Each ladder has a baseline movement
+# (something any regular adult should manage) gated behind one or more easier
+# "benchmark" regressions that must be cleared in order (easiest first) before
+# the baseline unlocks for logging. Standalone exercises have no ladder — always
+# loggable, never locked.
+_GAYATHRI_LADDERS = [
+    {'key': 'push_pushups', 'category': 'Push',
+     'baseline': {'name': 'Pushups', 'timed': False},
+     'benchmarks': [
+         {'name': 'Wall Pushups',   'timed': False},
+         {'name': 'Drawer Pushups', 'timed': False},
+         {'name': 'Chair Dips',     'timed': False},
+         {'name': 'Knee Pushups',   'timed': False},
+     ],
+     'initial_cleared': 1},
+    {'key': 'pull_deadhang', 'category': 'Pull',
+     'baseline': {'name': 'Dead Hang', 'timed': True},
+     'benchmarks': [
+         {'name': 'Scapula Presses', 'timed': False},
+         {'name': 'Supermans',       'timed': False},
+     ],
+     'initial_cleared': 0},
+    {'key': 'legs_squat', 'category': 'Legs',
+     'baseline': {'name': 'Squat', 'timed': False},
+     'benchmarks': [
+         {'name': 'Sit-and-Stands', 'timed': False},
+         {'name': 'Box Squats',     'timed': False},
+     ],
+     'initial_cleared': 0},
+    {'key': 'legs_jump', 'category': 'Legs',
+     'baseline': {'name': 'Jump', 'timed': False},
+     'benchmarks': [
+         {'name': 'Calf Raises',           'timed': False},
+         {'name': '30s Calf Stretch',      'timed': True},
+         {'name': 'Elevated Calf Raises',  'timed': False},
+     ],
+     'initial_cleared': 0},
+    {'key': 'stability_situp', 'category': 'Stability',
+     'baseline': {'name': 'Sit-Up', 'timed': False},
+     'benchmarks': [
+         {'name': 'Deadbugs', 'timed': False},
+     ],
+     'initial_cleared': 0},
+]
+
+# name, category, timed(bool). No ladder — always loggable.
+_GAYATHRI_STANDALONE = [
+    {'category': 'Stability', 'name': '10x Stepdown', 'timed': False, 'step': 10,
+     'desc': 'Variations: front, side, backwards'},
+    {'category': 'Mobility', 'name': '1min Squat Hold',          'timed': True,  'step': 60},
+    {'category': 'Mobility', 'name': '30s Stand on One Foot',    'timed': True,  'step': 30},
+    {'category': 'Mobility', 'name': '10x Beanbag Throws',       'timed': False, 'step': 10},
+    {'category': 'Mobility', 'name': '10x Floor Angels',         'timed': False, 'step': 10},
+    {'category': 'Mobility', 'name': '10x Neck Rolls',           'timed': False, 'step': 10},
+    {'category': 'Mobility', 'name': '30s Hip Flexor Stretch',   'timed': True,  'step': 30},
+    {'category': 'Cardio', 'name': '1KM Walk', 'timed': False, 'step': 1,
+     'desc': '1 lap around the neighbourhood. 10 minutes'},
+    {'category': 'Cardio', 'name': 'YouTube Routine #1', 'timed': False, 'step': 1,
+     'desc': 'Follow-along cardio video'},
+]
+
+# Missions: milestone movements Gayathri works up to, one stage at a time.
+_GAYATHRI_MISSIONS = [
+    {'key': 'first_pushup', 'title': 'First Push-up', 'icon': '💪',
+     'blurb': 'Build up to a single full push-up.',
+     'stages': [{'label': 'Wall Push-up', 'target': '5 reps'},
+                {'label': 'Incline Push-up', 'target': '5 reps'},
+                {'label': 'Knee Push-up', 'target': '3 reps'},
+                {'label': 'Full Push-up', 'target': '1 rep', 'goal': True}]},
+    {'key': 'first_squat', 'title': 'First Squat', 'icon': '🦵',
+     'blurb': 'Work toward a full bodyweight squat.',
+     'stages': [{'label': 'Sit-to-Stand', 'target': '5 reps'},
+                {'label': 'Chair Squat', 'target': '5 reps'},
+                {'label': 'Half Squat', 'target': '5 reps'},
+                {'label': 'Bodyweight Squat', 'target': '1 rep', 'goal': True}]},
+    {'key': 'first_starjump', 'title': 'First Star Jump', 'icon': '⭐',
+     'blurb': 'Build the power and balance for a star jump.',
+     'stages': [{'label': 'Step-Touch', 'target': '10 reps'},
+                {'label': 'Heel Raises', 'target': '10 reps'},
+                {'label': 'Half Jump', 'target': '3 reps'},
+                {'label': 'Star Jump', 'target': '1 rep', 'goal': True}]},
+]
+
+def _gayathri_missions_map():
+    return {m['key']: m for m in _GAYATHRI_MISSIONS}
+
+
+def _gayathri_missions_with_progress(profile_id):
+    """Return the mission list annotated with cleared-stage count + done flag."""
+    prog = get_mission_progress(profile_id)
+    out = []
+    for m in _GAYATHRI_MISSIONS:
+        cleared = prog.get(m['key'], 0)
+        total = len(m['stages'])
+        out.append({**m, 'cleared': cleared, 'total': total, 'done': cleared >= total})
+    return out
+
+
+@app.route('/missions')
+def missions():
+    if _profile_id() not in (2, 3):
+        return redirect(url_for('dashboard'))
+    return render_template('missions.html',
+                           missions=_gayathri_missions_with_progress(_profile_id()))
+
+
+@app.route('/missions/clear', methods=['POST'])
+def missions_clear():
+    if _profile_id() not in (2, 3):
+        return {'error': 'not_allowed'}, 403
+    data = request.get_json(silent=True) or {}
+    key = str(data.get('key', '')).strip()
+    stage = _safe_int(data.get('stage'), -1)
+    mission = _gayathri_missions_map().get(key)
+    if not mission or stage < 0 or stage >= len(mission['stages']):
+        return {'error': 'bad_request'}, 400
+    cleared = clear_mission_stage(_profile_id(), key, stage)
+    total = len(mission['stages'])
+    return {'key': key, 'cleared': cleared, 'total': total, 'done': cleared >= total}
+_CSRF_EXEMPT = {
+    None,
+    'static',
+    'profiles',
+    'profiles_select'}
+
+def require_profile():
+    if request.endpoint in _CSRF_EXEMPT:
+        return None
+    if request.method == 'POST':
+        token = session.get('csrf_token')
+        if token:
+            submitted = request.headers.get('X-CSRF-Token') or request.form.get('_csrf')
+            if not submitted or not _secrets.compare_digest(token, submitted):
+                abort(403)
+    if 'profile_id' not in session:
+        return redirect(url_for('profiles'))
+    ep = request.endpoint or ''
+    if session['profile_id'] in (2, 3):
+        if ep in _GAYATHRI_BLOCKED or ep.startswith('swim.') or ep.startswith('pilates.'):
+            return redirect(url_for('food'))
+    return None
+
+app.before_request(require_profile)
+
+def get_activity_calendar():
+    '''Return {date_iso: [type, ...]} for the past ~54 weeks.'''
+    db = get_db()
+    rows = db.execute("SELECT date, type FROM sessions WHERE date >= date('now','-371 days') AND profile_id = ? ORDER BY date", (_profile_id(),)).fetchall()
+    db.close()
+    cal = { }
+    for r in rows:
+        d = r['date']
+        if d not in cal:
+            cal[d] = []
+        if r['type'] not in cal[d]:
+            cal[d].append(r['type'])
+    return cal
+
+
+@app.route('/profiles')
+def profiles():
+    return render_template('profiles.html', profiles=get_profiles(), crew=get_crew_status())
+
+
+@app.route('/profiles/select', methods=[ 'POST'])
+def profiles_select():
+    pid_str = request.form.get('profile_id', '').strip()
+    if not pid_str.isdigit():
+        return redirect(url_for('profiles'))
+    pid = int(pid_str)
+    db = get_db()
+    row = db.execute('SELECT id FROM profiles WHERE id=?', (pid,)).fetchone()
+    db.close()
+    if not row:
+        return redirect(url_for('profiles'))
+    session['profile_id'] = pid
+    return redirect(url_for('dashboard'))
+
+
+@app.route('/')
+def dashboard():
+    if _profile_id() in (2, 3):
+        today = date_type.today()
+        today_iso = today.isoformat()
+        monday = (today - timedelta(days=today.weekday())).isoformat()
+        db = get_db()
+        food_row = db.execute('SELECT COALESCE(SUM(calories),0) AS cal, COALESCE(SUM(protein_g),0) AS prot FROM food_log WHERE date=? AND profile_id=?', (today_iso, _profile_id())).fetchone()
+        total_cal = round(food_row['cal'])
+        total_prot = round(food_row['prot'])
+        goals = get_macro_goals(_profile_id())
+        today_weight = get_body_weight(today_iso, _profile_id())
+        weight_history = get_body_weight_history(_profile_id(), days=30)
+        week_rows = db.execute("SELECT DISTINCT date FROM sessions WHERE date BETWEEN ? AND ? AND profile_id=? AND type='gym'", (monday, today_iso, _profile_id())).fetchall()
+        week_active = {r['date'] for r in week_rows}
+        monday_date = today - timedelta(days=today.weekday())
+        week_days = []
+        for i in range(7):
+            day = monday_date + timedelta(days=i)
+            week_days.append({
+                'iso': day.isoformat(),
+                'day_short': day.strftime('%a'),
+                'day_num': day.day,
+                'is_today': day == today,
+                'is_past': day < today,
+                'active': day.isoformat() in week_active })
+        last_sess = db.execute("\n            SELECT s.id, s.date, s.notes, s.type,\n                   GROUP_CONCAT(DISTINCT e.name) AS exercise_names,\n                   COUNT(DISTINCT sl.id) AS total_sets,\n                   COALESCE(SUM(sl.reps * sl.weight_kg), 0.0) AS total_volume\n            FROM sessions s\n            LEFT JOIN session_lifts sl ON sl.session_id = s.id\n            LEFT JOIN exercises e ON e.id = sl.exercise_id\n            WHERE s.profile_id = ? AND s.type = 'gym'\n            GROUP BY s.id ORDER BY s.date DESC, s.id DESC LIMIT 1\n        ", (_profile_id(),)).fetchone()
+        food_entries = [dict(r) for r in get_food_log(today_iso, _profile_id())]
+        recent_foods = get_recent_foods(_profile_id(), limit=8)
+        food_library = [dict(r) for r in get_food_library() if r['calories'] > 0]
+        macro = {'cal': total_cal, 'cal_goal': (goals.get('calories') or 0),
+                 'prot': total_prot, 'prot_goal': (goals.get('protein_g') or 0)}
+        db.close()
+        return render_template('home_gayathri.html', today=today_iso, macro=macro, total_cal=total_cal, total_prot=total_prot, goals=goals, today_weight=today_weight, weight_history=[dict(r) for r in (weight_history or [])], week_days=week_days, last_session=dict(last_sess) if last_sess else None,
+                               food_entries=food_entries, recent_foods=recent_foods, food_library=food_library)
+
+    # Support date navigation via ?date= param
+    actual_today = date_type.today()
+    date_param = request.args.get('date', '')
+    try:
+        today = date_type.fromisoformat(date_param) if date_param else actual_today
+    except (ValueError, TypeError):
+        today = actual_today
+    today = min(today, actual_today)  # Can't go into the future
+    is_today = (today == actual_today)
+    prev_date = (today - timedelta(days=1)).isoformat()
+    next_date = (today + timedelta(days=1)).isoformat() if today < actual_today else None
+    week_start = (today - timedelta(days=today.weekday())).isoformat()
+    db = get_db()
+    last_session = db.execute('\n        SELECT s.*,\n               COALESCE(sw_agg.distance_m, 0) AS distance_m,\n               COALESCE(agg.total_sets,   0)   AS total_sets,\n               COALESCE(agg.total_volume, 0.0) AS total_volume,\n               COALESCE(cd.cardio_dist, 0)     AS cardio_dist,\n               COALESCE(cd.cardio_dur,  0)     AS cardio_dur,\n               (SELECT e.name FROM session_cardio sc JOIN exercises e ON e.id = sc.exercise_id\n                WHERE sc.session_id = s.id ORDER BY sc.id LIMIT 1) AS cardio_name\n        FROM sessions s\n        LEFT JOIN (\n            SELECT session_id, SUM(distance_m) AS distance_m\n            FROM swim_logs GROUP BY session_id\n        ) sw_agg ON sw_agg.session_id = s.id\n        LEFT JOIN (\n            SELECT session_id,\n                   COUNT(*)              AS total_sets,\n                   SUM(reps * weight_kg) AS total_volume\n            FROM session_lifts\n            GROUP BY session_id\n        ) agg ON agg.session_id = s.id\n        LEFT JOIN (\n            SELECT session_id, SUM(distance_m) AS cardio_dist, SUM(duration_s) AS cardio_dur\n            FROM session_cardio GROUP BY session_id\n        ) cd ON cd.session_id = s.id\n        WHERE s.profile_id = ?\n        ORDER BY s.date DESC, s.id DESC\n        LIMIT 1\n    ', (_profile_id(),)).fetchone()
+    today_weight = get_body_weight(today.isoformat(), _profile_id())
+    weight_history = get_body_weight_history(_profile_id(), days=30)
+    food_goals = get_macro_goals(_profile_id())
+    # Date being viewed on the "cumulative calories" chart — independent of `today`,
+    # which stays anchored to the real date for the weekly stats above.
+    food_date = _validate_date(request.args.get('date', ''))
+    food_d = date_type.fromisoformat(food_date)
+    food_prev_date = (food_d - timedelta(days=1)).isoformat()
+    food_next_date = (food_d + timedelta(days=1)).isoformat()
+    food_is_today = food_d == today
+    if food_is_today:
+        food_date_label = 'Today'
+    elif food_d == today - timedelta(days=1):
+        food_date_label = 'Yesterday'
+    else:
+        food_date_label = food_d.strftime('%a, %b %-d')
+    food_rows = get_food_log(food_date, _profile_id())
+    food_totals = {
+        'calories': round(sum((r['calories'] or 0) for r in food_rows), 1),
+        'protein_g': round(sum((r['protein_g'] or 0) for r in food_rows), 1),
+        'carbs_g': round(sum((r['carbs_g'] or 0) for r in food_rows), 1),
+        'fat_g': round(sum((r['fat_g'] or 0) for r in food_rows), 1) }
+    food_entries = [dict(r) for r in food_rows]
+    enrich_log_entries(food_entries)   # attach source/type/std-serving for the food card
+    recent_foods = get_recent_foods(_profile_id(), limit=8)
+    monday = today - timedelta(days=today.weekday())
+    week_session_rows = db.execute('SELECT date, type FROM sessions WHERE date BETWEEN ? AND ? AND profile_id = ?', (monday.isoformat(), (monday + timedelta(days=6)).isoformat(), _profile_id())).fetchall()
+    db.close()
+    week_activity = { }
+    for r in week_session_rows:
+        d = r['date']
+        if d not in week_activity:
+            week_activity[d] = []
+        if r['type'] not in week_activity[d]:
+            week_activity[d].append(r['type'])
+    week_days = []
+    for i in range(7):
+        day = monday + timedelta(days=i)
+        day_iso = day.isoformat()
+        week_days.append({
+            'date': day_iso,
+            'day_short': day.strftime('%a'),
+            'day_num': day.day,
+            'is_today': day == today,
+            'is_past': day < today,
+            'activities': week_activity.get(day_iso, []),
+            'active': 'gym' in week_activity.get(day_iso, []) })
+
+    macro = {'cal': (food_totals.get('calories') or 0), 'cal_goal': ((food_goals or {}).get('calories') or 0),
+             'prot': (food_totals.get('protein_g') or 0), 'prot_goal': ((food_goals or {}).get('protein_g') or 0)}
+
+    return render_template('dashboard.html', last_session=last_session, today=today.isoformat(), is_today=is_today, prev_date=prev_date, next_date=next_date, week_days=week_days, today_weight=today_weight, weight_history=[dict(r) for r in (weight_history or [])], food_goals=food_goals, macro=macro, food_date=food_date, food_prev_date=food_prev_date, food_next_date=food_next_date, food_date_label=food_date_label, food_is_today=food_is_today, food_entries=food_entries, recent_foods=recent_foods)
+
+
+@app.route('/session/new')
+def session_new():
+    return redirect(url_for('train'))
+
+
+def _gayathri_item_shape(name, timed, default=None, desc='', location='home'):
+    timed = bool(timed)
+    val = default if default is not None else (30 if timed else 8)
+    rng = [max(5, val - 30), val + 60] if timed else [max(1, val - 5), val + 20]
+    return {
+        'name': name, 'timed': timed, 'location': location,
+        'reps': val, 'sets': 3,
+        'reps_range': rng, 'sets_range': [1, 5],
+        'desc': desc,
+    }
+
+
+def _gayathri_tally_fill(count):
+    """10-box tile fill count for a lifetime occurrence count. The 10th log
+    fills all 10 tiles; the 11th wraps back to 1 filled, etc."""
+    return 0 if count == 0 else ((count - 1) % 10) + 1
+
+
+def _gayathri_annotate_tally(items, profile_id):
+    """Mutate a list of exercise-shaped dicts (each with a 'name' key) in
+    place, adding tally_count / tally_filled / tally_pending fields based on
+    the lifetime exercise_tally table. Never creates exercises or
+    exercise_tally rows merely from viewing — a never-logged exercise simply
+    reads as count 0 / filled 0 / pending False."""
+    if not items:
+        return items
+    if not profile_id:
+        for it in items:
+            it['tally_count'] = 0
+            it['tally_filled'] = 0
+            it['tally_pending'] = False
+        return items
+    names = [it['name'] for it in items]
+    db = get_db()
+    placeholders = ','.join('?' for _ in names)
+    rows = db.execute(f'SELECT id, name FROM exercises WHERE name COLLATE NOCASE IN ({placeholders})', names).fetchall()
+    db.close()
+    name_to_id = {r['name'].lower(): r['id'] for r in rows}
+    tallies = get_exercise_tallies(profile_id)
+    for it in items:
+        ex_id = name_to_id.get(it['name'].lower())
+        t = tallies.get(ex_id) if ex_id is not None else None
+        t = t or {'count': 0, 'last_prompted': 0}
+        count = t['count']
+        it['tally_count'] = count
+        it['tally_filled'] = _gayathri_tally_fill(count)
+        it['tally_pending'] = bool(count > 0 and count % 10 == 0 and count != t['last_prompted'])
+    return items
+
+
+def _gayathri_ladder_lookup_by_name(name):
+    """Given an exercise name, return (ladder_key, stage_index) if it matches
+    the current benchmark rung or the currently-unlocked baseline of some
+    ladder for the active profile; else None (i.e. it's standalone)."""
+    lname = name.strip().lower()
+    for ladder in _gayathri_ladder_state(_profile_id()):
+        current_bench = next((b for b in ladder['benchmarks'] if b['status'] == 'current'), None)
+        if current_bench is not None and current_bench['name'].strip().lower() == lname:
+            return ladder['key'], current_bench['index']
+        if ladder['baseline']['status'] == 'unlocked' and ladder['baseline']['name'].strip().lower() == lname:
+            return ladder['key'], ladder['baseline']['index']
+    return None
+
+
+def _gayathri_standalone_by_group():
+    by = {g: [] for g in _GAYATHRI_GROUPS}
+    items = []
+    for ex in _GAYATHRI_STANDALONE:
+        shaped = _gayathri_item_shape(ex['name'], ex['timed'], ex.get('step'), ex.get('desc', ''))
+        shaped['muscle_group'] = ex['category']
+        items.append(shaped)
+        by.setdefault(ex['category'], []).append(shaped)
+    _gayathri_annotate_tally(items, _profile_id())
+    return {g: by[g] for g in _GAYATHRI_GROUPS if by[g]}
+
+
+# ── Gayathri: all-day "tap a set" model ─────────────────────────────────────
+_GAYATHRI_GROUPS = ['Push', 'Pull', 'Legs', 'Stability', 'Mobility', 'Cardio']
+_GAYATHRI_GROUP_LABELS = {'Mobility': 'Mobility + Coordination'}
+_GAYATHRI_GROUP_MAP = {
+    'Push': 'Push', 'Chest': 'Push', 'Shoulders': 'Push', 'Triceps': 'Push', 'Arms': 'Push',
+    'Pull': 'Pull', 'Back': 'Pull', 'Upper Back': 'Pull', 'Biceps': 'Pull',
+    'Legs': 'Legs', 'Posterior Chain': 'Legs',
+    'Stability': 'Stability', 'Core': 'Stability', 'Balance': 'Stability',
+    'Mobility': 'Mobility',
+    'Cardio': 'Cardio',
+}
+
+def _gayathri_display_group(mg):
+    return _GAYATHRI_GROUP_MAP.get(mg, 'Mobility')
+
+
+def _gayathri_ladder_state(profile_id):
+    """Return _GAYATHRI_LADDERS annotated with live progress for profile_id."""
+    prog = get_mission_progress(profile_id) if profile_id else {}
+    out = []
+    all_items = []
+    for ladder in _GAYATHRI_LADDERS:
+        mkey = f"ladder__{ladder['key']}"
+        cleared = prog.get(mkey, ladder['initial_cleared'])
+        n_bench = len(ladder['benchmarks'])
+        benchmarks = []
+        for i, b in enumerate(ladder['benchmarks']):
+            status = 'cleared' if i < cleared else ('current' if i == cleared else 'locked')
+            shaped = _gayathri_item_shape(b['name'], b['timed'])
+            benchmarks.append({**shaped, 'index': i, 'status': status})
+        if cleared >= n_bench + 1:
+            baseline_status = 'achieved'
+        elif cleared >= n_bench:
+            baseline_status = 'unlocked'
+        else:
+            baseline_status = 'locked'
+        baseline_shaped = _gayathri_item_shape(ladder['baseline']['name'], ladder['baseline']['timed'])
+        baseline = {**baseline_shaped, 'index': n_bench, 'status': baseline_status}
+        all_items.extend(benchmarks)
+        all_items.append(baseline)
+        out.append({
+            'key': ladder['key'],
+            'category': ladder['category'],
+            'baseline': baseline,
+            'benchmarks': benchmarks,
+            'benchmarks_display': list(reversed(benchmarks)),
+            'cleared': cleared,
+            'total_stages': n_bench + 1,
+            'complete': baseline_status == 'achieved',
+        })
+    _gayathri_annotate_tally(all_items, profile_id)
+    return out
+
+
+def _gayathri_exercises():
+    """Flat, loggable exercise list for the Today quick-tap panel: the single
+    currently-actionable item per ladder (current benchmark, or the baseline
+    once unlocked) plus every standalone exercise."""
+    seen, out = set(), []
+    def add(name, category, timed, location='home', step=None, desc='',
+            kind='standalone', ladder_key=None, stage_index=None):
+        if name in seen:
+            return
+        seen.add(name)
+        st = step if step is not None else (30 if timed else 10)
+        out.append({'name': name, 'group': _gayathri_display_group(category),
+                    'timed': timed, 'location': location, 'step': st, 'desc': desc,
+                    'tally_kind': kind, 'ladder_key': ladder_key, 'stage_index': stage_index})
+    for ladder in _gayathri_ladder_state(_profile_id()):
+        current_bench = next((b for b in ladder['benchmarks'] if b['status'] == 'current'), None)
+        if current_bench is not None:
+            add(current_bench['name'], ladder['category'], current_bench['timed'],
+                kind='ladder', ladder_key=ladder['key'], stage_index=current_bench['index'])
+        elif ladder['baseline']['status'] == 'unlocked':
+            add(ladder['baseline']['name'], ladder['category'], ladder['baseline']['timed'],
+                kind='ladder', ladder_key=ladder['key'], stage_index=ladder['baseline']['index'])
+        # if 'achieved', nothing new to surface on the quick-tap panel
+    for ex in _GAYATHRI_STANDALONE:
+        add(ex['name'], ex['category'], ex['timed'], step=ex.get('step'), desc=ex.get('desc', ''))
+    _gayathri_annotate_tally(out, _profile_id())
+    return out
+
+
+def _gayathri_exercises_by_group():
+    by = {g: [] for g in _GAYATHRI_GROUPS}
+    for ex in _gayathri_exercises():
+        by[ex['group']].append(ex)
+    return {g: by[g] for g in _GAYATHRI_GROUPS if by[g]}
+
+
+def _gayathri_today_session(db, date_iso, create=False):
+    row = db.execute("SELECT id FROM sessions WHERE date=? AND type='gym' AND profile_id=? ORDER BY id LIMIT 1",
+                     (date_iso, _profile_id())).fetchone()
+    if row:
+        return row['id']
+    if not create:
+        return None
+    return db.execute('INSERT INTO sessions (date, type, notes, started_at, profile_id) VALUES (?,?,?,?,?)',
+                      (date_iso, 'gym', 'daily', _datetime.utcnow().isoformat() + 'Z', _profile_id())).lastrowid
+
+
+def _gayathri_today_tallies(db, date_iso):
+    sid = _gayathri_today_session(db, date_iso, create=False)
+    tallies, covered = {}, set()
+    if sid is None:
+        return tallies, covered
+    rows = db.execute("""
+        SELECT e.name AS name, e.muscle_group AS mg,
+               COUNT(sl.id) AS sets, COALESCE(SUM(sl.reps), 0) AS total
+        FROM session_lifts sl JOIN exercises e ON e.id = sl.exercise_id
+        WHERE sl.session_id = ?
+        GROUP BY sl.exercise_id
+    """, (sid,)).fetchall()
+    for r in rows:
+        tallies[r['name']] = {'sets': r['sets'], 'total': r['total']}
+        covered.add(_gayathri_display_group(r['mg']))
+    return tallies, covered
+
+
+def _gayathri_ensure_exercise(db, name):
+    row = db.execute('SELECT id FROM exercises WHERE name=? COLLATE NOCASE', (name,)).fetchone()
+    if row:
+        return row['id']
+    spec = next((e for e in _gayathri_exercises() if e['name'].lower() == name.lower()), None)
+    if not spec:
+        return None
+    return db.execute('INSERT INTO exercises (name, tier, muscle_group, day_type, reps_only, is_timed) VALUES (?,?,?,?,?,?)',
+                      (spec['name'], 3, spec['group'], 'any', 1, 1 if spec['timed'] else 0)).lastrowid
+
+
+@app.route('/workout/quick-set', methods=['POST'])
+def workout_quick_set():
+    if _profile_id() not in (2, 3):
+        return {'error': 'not_allowed'}, 403
+    data = request.get_json(silent=True) or {}
+    name = str(data.get('exercise', '')).strip()
+    amount = _safe_int(data.get('amount'), 0)
+    if not name or amount <= 0:
+        return {'error': 'bad_request'}, 400
+    date_iso = date_type.today().isoformat()
+    profile_id = _profile_id()
+    db = get_db()
+    ex_id = _gayathri_ensure_exercise(db, name)
+    if ex_id is None:
+        db.close()
+        return {'error': 'unknown_exercise'}, 400
+    sid = _gayathri_today_session(db, date_iso, create=True)
+    next_set = (db.execute('SELECT COALESCE(MAX(set_number), 0) AS mx FROM session_lifts WHERE session_id=? AND exercise_id=?',
+                           (sid, ex_id)).fetchone()['mx']) + 1
+    new_id = db.execute('INSERT INTO session_lifts (session_id, exercise_id, set_number, reps, weight_kg) VALUES (?,?,?,?,?)',
+                        (sid, ex_id, next_set, amount, 0.0)).lastrowid
+    db.execute('UPDATE sessions SET ended_at=? WHERE id=?', (_datetime.utcnow().isoformat() + 'Z', sid))
+    db.commit()
+    tallies, covered = _gayathri_today_tallies(db, date_iso)
+    prior_row = db.execute('SELECT last_prompted FROM exercise_tally WHERE profile_id=? AND exercise_id=?',
+                           (profile_id, ex_id)).fetchone()
+    prior_last_prompted = prior_row['last_prompted'] if prior_row else 0
+    db.close()
+    tally = tallies.get(name, {'sets': 0, 'total': 0})
+
+    new_count = bump_exercise_tally(profile_id, ex_id, 1)
+    tally_pending = bool(new_count > 0 and new_count % 10 == 0 and new_count != prior_last_prompted)
+    ladder_match = _gayathri_ladder_lookup_by_name(name)
+    if ladder_match:
+        tally_kind, (ladder_key, stage_index) = 'ladder', ladder_match
+    else:
+        tally_kind, ladder_key, stage_index = 'standalone', None, None
+
+    return {'id': new_id, 'exercise': name, 'sets': tally['sets'], 'total': tally['total'],
+            'covered': sorted(covered), 'covered_count': len(covered),
+            'group_count': len(_gayathri_exercises_by_group()),
+            'tally_count': new_count, 'tally_filled': _gayathri_tally_fill(new_count),
+            'tally_pending': tally_pending, 'tally_kind': tally_kind,
+            'ladder_key': ladder_key, 'stage_index': stage_index}
+
+
+@app.route('/workout/quick-set/<int:lift_id>', methods=['DELETE'])
+def workout_quick_set_delete(lift_id):
+    if _profile_id() not in (2, 3):
+        return {'error': 'not_allowed'}, 403
+    date_iso = date_type.today().isoformat()
+    db = get_db()
+    row = db.execute("""
+        SELECT sl.id, e.name AS name
+        FROM session_lifts sl
+        JOIN sessions s  ON s.id = sl.session_id
+        JOIN exercises e ON e.id = sl.exercise_id
+        WHERE sl.id = ? AND s.date = ? AND s.type = 'gym' AND s.profile_id = ?
+    """, (lift_id, date_iso, _profile_id())).fetchone()
+    if not row:
+        db.close()
+        return {'error': 'not_found'}, 404
+    db.execute('DELETE FROM session_lifts WHERE id = ?', (lift_id,))
+    db.commit()
+    tallies, covered = _gayathri_today_tallies(db, date_iso)
+    db.close()
+    tally = tallies.get(row['name'], {'sets': 0, 'total': 0})
+    return {'exercise': row['name'], 'sets': tally['sets'], 'total': tally['total'],
+            'covered': sorted(covered), 'covered_count': len(covered),
+            'group_count': len(_gayathri_exercises_by_group())}
+
+
+@app.route('/workout/log/new')
+def workout_log_new():
+    if _profile_id() not in (2, 3):
+        return redirect(url_for('dashboard'))
+    today_iso = date_type.today().isoformat()
+    return render_template('workout_log_new.html', today=today_iso,
+                           groups=_GAYATHRI_GROUPS, group_labels=_GAYATHRI_GROUP_LABELS,
+                           ladders=_gayathri_ladder_state(_profile_id()),
+                           standalone_by_group=_gayathri_standalone_by_group())
+
+
+@app.route('/workout/ladder/advance', methods=['POST'])
+def workout_ladder_advance():
+    if _profile_id() not in (2, 3):
+        return {'error': 'not_allowed'}, 403
+    data = request.get_json(silent=True) or {}
+    ladder_key = str(data.get('ladder_key', '')).strip()
+    stage_index = _safe_int(data.get('stage_index'), -1)
+    ladder = next((l for l in _GAYATHRI_LADDERS if l['key'] == ladder_key), None)
+    if not ladder or stage_index < 0 or stage_index >= len(ladder['benchmarks']) + 1:
+        return {'error': 'bad_request'}, 400
+    profile_id = _profile_id()
+    prog = get_mission_progress(profile_id)
+    mkey = f'ladder__{ladder_key}'
+    current_cleared = prog.get(mkey, ladder['initial_cleared'])
+    if stage_index != current_cleared:
+        return {'error': 'not_next_stage', 'current_cleared': current_cleared}, 400
+    clear_mission_stage(profile_id, mkey, stage_index)
+    state = next(l for l in _gayathri_ladder_state(profile_id) if l['key'] == ladder_key)
+    return {'ladder_key': ladder_key, 'cleared': state['cleared'],
+            'baseline_status': state['baseline']['status'], 'complete': state['complete']}
+
+
+@app.route('/workout/tally/ack', methods=['POST'])
+def workout_tally_ack():
+    if _profile_id() not in (2, 3):
+        return {'error': 'not_allowed'}, 403
+    data = request.get_json(silent=True) or {}
+    name = str(data.get('exercise_name', '')).strip()
+    if not name:
+        return {'error': 'bad_request'}, 400
+    db = get_db()
+    row = db.execute('SELECT id FROM exercises WHERE name=? COLLATE NOCASE', (name,)).fetchone()
+    db.close()
+    if not row:
+        # Never logged (no exercises row) — nothing to acknowledge.
+        return {'ok': True}
+    ack_exercise_tally(_profile_id(), row['id'])
+    return {'ok': True}
+
+
+@app.route('/workout/log', methods=[ 'POST'])
+def workout_log():
+    if _profile_id() not in (2, 3):
+        return redirect(url_for('dashboard'))
+    routine_key = request.form.get('routine', '').strip()
+    date_val = request.form.get('date', date_type.today().isoformat()).strip()
+    routine = _GAYATHRI_ROUTINES.get(routine_key)
+    if not routine:
+        return redirect(url_for('workout'))
+    db = get_db()
+    warmup = routine.get('warmup')
+    notes = 'Warmup: ' + warmup if warmup else None
+    sess_id = db.execute('INSERT INTO sessions (date, type, notes, started_at, profile_id) VALUES (?,?,?,?,?)',
+                         (date_val, 'gym', notes, _datetime.utcnow().isoformat() + 'Z', _profile_id())).lastrowid
+    any_lifts = False
+    for i, ex_spec in enumerate(routine['exercises']):
+        ex = db.execute('SELECT id FROM exercises WHERE name=? COLLATE NOCASE', (ex_spec['name'],)).fetchone()
+        if not ex:
+            continue
+        weight = 0.0
+        if ex_spec['weighted']:
+            w_str = request.form.get(f'weight_{i}', '').strip()
+            try:
+                weight = float(w_str) if w_str else 0.0
+            except ValueError:
+                weight = 0.0
+        for set_num in range(1, ex_spec['sets'] + 1):
+            db.execute('INSERT INTO session_lifts (session_id, exercise_id, set_number, reps, weight_kg) VALUES (?,?,?,?,?)',
+                       (sess_id, ex['id'], set_num, ex_spec['reps'], weight))
+            any_lifts = True
+    if not any_lifts:
+        db.rollback()
+        db.close()
+        return redirect(url_for('workout'))
+    db.execute('UPDATE sessions SET ended_at=? WHERE id=? AND ended_at IS NULL',
+               (_datetime.utcnow().isoformat() + 'Z', sess_id))
+    db.commit()
+    db.close()
+    return redirect(url_for('workout', done=1))
+
+
+@app.route('/workout/custom/log', methods=[ 'POST'])
+def workout_custom_log():
+    if _profile_id() not in (2, 3):
+        return redirect(url_for('dashboard'))
+    date_val = _validate_date(request.form.get('date', ''))
+    ex_names = request.form.getlist('ex_name')
+    ex_reps = request.form.getlist('ex_reps')
+    ex_sets = request.form.getlist('ex_sets')
+    db = get_db()
+    continuing = False
+    existing_max_sets = {}
+    continue_id_str = request.form.get('continue_session_id', '').strip()
+    if continue_id_str and continue_id_str.isdigit():
+        csid = int(continue_id_str)
+        existing = db.execute('SELECT id FROM sessions WHERE id=? AND type="gym" AND profile_id=?',
+                              (csid, _profile_id())).fetchone()
+        if existing:
+            sess_id = csid
+            continuing = True
+            for row in db.execute('SELECT exercise_id, MAX(set_number) AS mx FROM session_lifts WHERE session_id=? GROUP BY exercise_id',
+                                  (sess_id,)).fetchall():
+                existing_max_sets[row['exercise_id']] = row['mx']
+    if not continuing:
+        if not ex_names:
+            db.close()
+            return redirect(url_for('workout_log_new'))
+        now = _datetime.utcnow().isoformat() + 'Z'
+        sess_id = db.execute('INSERT INTO sessions (date, type, notes, started_at, profile_id) VALUES (?,?,?,?,?)',
+                             (date_val, 'gym', 'custom', now, _profile_id())).lastrowid
+    any_lifts = False
+    for name, reps_str, sets_str in zip(ex_names, ex_reps, ex_sets):
+        ex = db.execute('SELECT id FROM exercises WHERE name=? COLLATE NOCASE', (name,)).fetchone()
+        if not ex:
+            continue
+        try:
+            reps = max(1, int(reps_str))
+            sets = max(1, int(sets_str))
+        except (ValueError, TypeError):
+            continue
+        set_offset = existing_max_sets.get(ex['id'], 0)
+        for set_num in range(1, sets + 1):
+            db.execute('INSERT INTO session_lifts (session_id, exercise_id, set_number, reps, weight_kg) VALUES (?,?,?,?,?)',
+                       (sess_id, ex['id'], set_num + set_offset, reps, 0.0))
+            any_lifts = True
+        bump_exercise_tally(_profile_id(), ex['id'], sets)
+    if not any_lifts:
+        if continuing:
+            db.close()
+            return redirect(url_for('session_detail', session_id=sess_id))
+        db.rollback()
+        db.close()
+        return redirect(url_for('workout_log_new'))
+    db.execute('UPDATE sessions SET ended_at = ? WHERE id = ? AND ended_at IS NULL',
+               (_datetime.utcnow().isoformat() + 'Z', sess_id))
+    db.commit()
+    db.close()
+    return redirect(url_for('workout', done=1))
+
+
+@app.route('/workout/session/start', methods=[ 'POST'])
+def workout_session_start():
+    if _profile_id() not in (2, 3):
+        return redirect(url_for('dashboard'))
+    routine_key = request.form.get('routine', '').strip()
+    date_val = _validate_date(request.form.get('date', ''))
+    if routine_key not in _GAYATHRI_ROUTINES and routine_key != 'custom':
+        return redirect(url_for('workout'))
+    db = get_db()
+    sess_id = db.execute('INSERT INTO sessions (date, type, notes, started_at, profile_id) VALUES (?,?,?,?,?)', (date_val, 'gym', f'''routine:{routine_key}''', _datetime.utcnow().isoformat() + 'Z', _profile_id())).lastrowid
+    db.commit()
+    db.close()
+    return redirect(url_for('workout_session', session_id=sess_id))
+
+
+@app.route('/workout/session/<int:session_id>')
+def workout_session(session_id):
+    if _profile_id() not in (2, 3):
+        return redirect(url_for('dashboard'))
+    db = get_db()
+    sess = db.execute('SELECT * FROM sessions WHERE id=?', (session_id,)).fetchone()
+    if not sess or sess['type'] != 'gym' or sess['profile_id'] != _profile_id():
+        db.close()
+        return redirect(url_for('workout'))
+    notes = sess['notes'] or ''
+    routine_key = notes[len('routine:'):] if notes.startswith('routine:') else None
+    routine = _GAYATHRI_ROUTINES.get(routine_key) if routine_key and routine_key != 'custom' else None
+    lift_rows = db.execute('''
+        SELECT sl.id AS lift_id, sl.exercise_id, sl.set_number, sl.reps, sl.weight_kg,
+               e.name AS ex_name, e.muscle_group
+        FROM session_lifts sl
+        JOIN exercises e ON e.id = sl.exercise_id
+        WHERE sl.session_id = ?
+        ORDER BY (SELECT MIN(sl2.id) FROM session_lifts sl2
+                  WHERE sl2.session_id = sl.session_id
+                    AND sl2.exercise_id = sl.exercise_id),
+                 sl.set_number
+    ''', (session_id,)).fetchall()
+    logged_by_exid = {}
+    for r in lift_rows:
+        eid = r['exercise_id']
+        if eid not in logged_by_exid:
+            logged_by_exid[eid] = []
+        logged_by_exid[eid].append({
+            'lift_id': r['lift_id'], 'set_number': r['set_number'],
+            'reps': r['reps'], 'weight_kg': r['weight_kg']})
+    exercises = []
+    routine_ex_ids = set()
+    _g_by_name = {ex['name']: ex for rtn in _GAYATHRI_ROUTINES.values() for ex in rtn['exercises']}
+    if routine:
+        for ex in routine['exercises']:
+            row = db.execute('SELECT id FROM exercises WHERE name=? COLLATE NOCASE', (ex['name'],)).fetchone()
+            if row:
+                eid = row['id']
+                routine_ex_ids.add(eid)
+                exercises.append({**ex, 'exercise_id': eid,
+                                  'sets_logged': logged_by_exid.get(eid, [])})
+    for eid, sets in logged_by_exid.items():
+        if eid not in routine_ex_ids:
+            ex_row = db.execute('SELECT name, muscle_group FROM exercises WHERE id=?', (eid,)).fetchone()
+            if ex_row:
+                template = _g_by_name.get(ex_row['name'], {})
+                exercises.append({
+                    'exercise_id': eid, 'name': ex_row['name'], 'muscle_group': ex_row['muscle_group'],
+                    'weighted': template.get('weighted', True), 'timed': template.get('timed', False),
+                    'reps': template.get('reps', 8), 'sets': template.get('sets', 3),
+                    'reps_range': template.get('reps_range', [6, 15]),
+                    'sets_range': template.get('sets_range', [2, 4]),
+                    'sets_logged': sets})
+    in_session = {e['exercise_id'] for e in exercises}
+    bank_scope = bank_scope_for_profile(_profile_id())
+    picker_rows = db.execute(
+        'SELECT e.id, e.name, COALESCE(cfg.muscle_group, e.muscle_group) AS muscle_group '
+        'FROM exercises e '
+        'LEFT JOIN exercise_bank_config cfg '
+        'ON cfg.exercise_id = e.id AND cfg.bank_scope = ? '
+        'WHERE COALESCE(cfg.is_enabled, 1) = 1 '
+        'ORDER BY COALESCE(cfg.muscle_group, e.muscle_group), e.name',
+        (bank_scope,)
+    ).fetchall()
+    db.close()
+    picker_exs = []
+    for r in picker_rows:
+        if r['id'] in in_session:
+            continue
+        tmpl = _g_by_name.get(r['name'], {})
+        picker_exs.append({
+            'id': r['id'], 'name': r['name'], 'mg': r['muscle_group'],
+            'weighted': tmpl.get('weighted', True), 'timed': tmpl.get('timed', False),
+            'reps': tmpl.get('reps', 8), 'sets': tmpl.get('sets', 3),
+            'reps_range': tmpl.get('reps_range', [6, 15]),
+            'sets_range': tmpl.get('sets_range', [2, 4])})
+    return render_template('workout_session.html', session=dict(sess), routine=routine,
+                           routine_key=routine_key, exercises=exercises,
+                           picker_exs_json=_json.dumps(picker_exs),
+                           today=date_type.today().isoformat())
+
+@app.route('/sessions')
+def sessions():
+    _d = date_type
+    _td = timedelta
+    rows = get_sessions_with_headlines(_profile_id())
+    today = _d.today()
+    for r in rows:
+        d = _d.fromisoformat(r['date'])
+        r['date_fmt'] = _fmt_date(r['date'])
+        iso = d.isocalendar()
+        r['week_group'] = f'''{iso[0]}-W{iso[1]:02d}'''
+        monday = d - _td(days=d.weekday())
+        sunday = monday + _td(days=6)
+        days_ago = (today - monday).days
+        if days_ago < 7:
+            r['week_display'] = 'This week'
+            continue
+        if days_ago < 14:
+            r['week_display'] = 'Last week'
+            continue
+        if monday.month == sunday.month:
+            r['week_display'] = f'''{_DAYS[0]} {monday.day} – {_DAYS[6]} {sunday.day} {_MONTHS[monday.month - 1]} {monday.year if monday.year != today.year else ''}'''.strip()
+            continue
+        r['week_display'] = f'''{monday.day} {_MONTHS[monday.month - 1]} – {sunday.day} {_MONTHS[sunday.month - 1]}'''
+    return render_template('sessions.html', sessions=rows)
+
+
+@app.route('/cardio', methods=[ 'GET', 'POST'])
+def cardio():
+    date_val = _validate_date(request.args.get('date', '') or request.form.get('date', ''))
+    if request.method == 'POST':
+        ex_str = request.form.get('exercise_id', '').strip()
+        if not ex_str.isdigit():
+            return redirect(url_for('cardio', date=date_val))
+        ex_id = int(ex_str)
+        distance = _safe_float(request.form.get('distance_m'), None)
+        duration_min = _safe_float(request.form.get('duration_min'), None)
+        duration_s = int(duration_min * 60) if duration_min else None
+        resistance = _safe_float(request.form.get('resistance'), None)
+        speed = _safe_float(request.form.get('speed'), None)
+        log_cardio_session(_profile_id(), date_val, ex_id,
+                           distance_m=distance, duration_s=duration_s,
+                           resistance=resistance, speed=speed)
+        return redirect(url_for('dashboard'))
+    return render_template('cardio.html', date_str=date_val, choices=get_cardio_choices(_profile_id()))
+
+
+@app.route('/session/<int:session_id>')
+def session_detail(session_id):
+    (sess, lifts, duration_min) = get_session_detail_with_progression(session_id)
+    if sess is None:
+        return ('Session not found', 404)
+    if sess['profile_id'] != _profile_id():
+        abort(403)
+    if sess['type'] == 'pilates':
+        detail = get_pilates_session(session_id)
+        if detail is None:
+            return ('Session not found', 404)
+        return render_template('pilates/pilates_session.html', session=sess, detail=detail)
+    cardio = get_session_cardio(session_id) if sess['type'] in ('gym', 'cardio') else []
+    swim_dist = None
+    if sess['type'] == 'swim':
+        db = get_db()
+        rows = db.execute('SELECT distance_m, rep_distance_m, sets FROM swim_logs WHERE session_id = ? ORDER BY id', (session_id,)).fetchall()
+        db.close()
+        if rows:
+            swim_dist = {
+                'groups': [{'sets': r['sets'], 'rep_distance': r['rep_distance_m'], 'distance': r['distance_m']} for r in rows],
+                'total': sum(r['distance_m'] for r in rows) }
+    return render_template('session_detail.html', session=sess, lifts=lifts, cardio=cardio, swim_dist=swim_dist, duration_min=duration_min)
+
+
+@app.route('/session/<int:session_id>/finish', methods=[ 'POST'])
+def session_finish(session_id):
+    '''Called by JS when user navigates away from session logging.'''
+    db = get_db()
+    sess = db.execute('SELECT profile_id FROM sessions WHERE id=?', (session_id,)).fetchone()
+    if not sess or sess['profile_id'] != _profile_id():
+        db.close()
+        return ('', 403)
+    db.execute('UPDATE sessions SET ended_at = ? WHERE id = ? AND ended_at IS NULL', (_datetime.utcnow().isoformat() + 'Z', session_id))
+    db.commit()
+    db.close()
+    return ('', 204)
+
+
+@app.route('/session/<int:session_id>/lift/<int:lift_id>/edit', methods=[ 'POST'])
+def lift_edit(session_id, lift_id):
+    """Inline set edit from session detail."""
+    data = request.get_json(silent=True) or {}
+    try:
+        reps = int(data['reps'])
+        weight_kg = float(data['weight_kg'])
+    except (KeyError, ValueError):
+        return _json.dumps({'error': 'invalid'}), 400, {'Content-Type': 'application/json'}
+    db = get_db()
+    sess = db.execute('SELECT profile_id FROM sessions WHERE id=?', (session_id,)).fetchone()
+    if not sess or sess['profile_id'] != _profile_id():
+        db.close()
+        return _json.dumps({'error': 'forbidden'}), 403, {'Content-Type': 'application/json'}
+    db.execute('UPDATE session_lifts SET reps = ?, weight_kg = ? WHERE id = ? AND session_id = ?',
+               (reps, weight_kg, lift_id, session_id))
+    db.commit()
+    db.close()
+    return _json.dumps({'ok': True, 'reps': reps, 'weight_kg': weight_kg}), 200, {'Content-Type': 'application/json'}
+
+
+@app.route('/session/<int:session_id>/add_set', methods=[ 'POST'])
+def add_set(session_id):
+    """Add a set to an existing exercise in a session."""
+    data = request.get_json(silent=True) or {}
+    try:
+        exercise_id = int(data['exercise_id'])
+        reps = int(data['reps'])
+        weight_kg = float(data['weight_kg'])
+    except (KeyError, ValueError):
+        return _json.dumps({'error': 'invalid'}), 400, {'Content-Type': 'application/json'}
+    db = get_db()
+    sess = db.execute('SELECT profile_id FROM sessions WHERE id=?', (session_id,)).fetchone()
+    if not sess or sess['profile_id'] != _profile_id():
+        db.close()
+        return _json.dumps({'error': 'forbidden'}), 403, {'Content-Type': 'application/json'}
+    next_set = db.execute('SELECT COALESCE(MAX(set_number), 0) + 1 FROM session_lifts WHERE session_id = ? AND exercise_id = ?',
+                          (session_id, exercise_id)).fetchone()[0]
+    try:
+        lift_id = db.execute('INSERT INTO session_lifts (session_id, exercise_id, set_number, reps, weight_kg) VALUES (?,?,?,?,?)',
+                             (session_id, exercise_id, next_set, reps, weight_kg)).lastrowid
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        db.close()
+        return _json.dumps({'error': str(e)}), 400, {'Content-Type': 'application/json'}
+    db.close()
+    return _json.dumps({'ok': True, 'lift_id': lift_id, 'set_number': next_set}), 201, {'Content-Type': 'application/json'}
+
+
+@app.route('/session/<int:session_id>/delete', methods=[ 'POST'])
+def session_delete(session_id):
+    db = get_db()
+    sess = db.execute('SELECT profile_id FROM sessions WHERE id=?', (session_id,)).fetchone()
+    if not sess or sess['profile_id'] != _profile_id():
+        db.close()
+        abort(403)
+    db.execute('DELETE FROM sessions WHERE id = ?', (session_id,))
+    db.commit()
+    db.close()
+    return redirect(url_for('sessions'))
+
+
+# ── GYM Exercise Bank: TRAIN screen ─────────────────────────────────────────
+# Groups exercises by muscle_group with Gayathri-style accordion UI.
+# Replaces the old /exercises and /exercise-bank routes for Arjun's profile.
+
+_GYM_GROUP_ORDER = ['chest', 'shoulders', 'back', 'legs', 'core', 'arms', 'stability', 'muay_thai', 'cardio']
+_GYM_GROUP_LABELS = {
+    'chest': 'Chest', 'shoulders': 'Shoulders', 'back': 'Back',
+    'legs': 'Legs', 'core': 'Core', 'arms': 'Arms', 'stability': 'Stability',
+    'muay_thai': 'Muay Thai', 'cardio': 'Cardio',
+}
+# Muay Thai exercises are one-touch loggable straight from the Train page —
+# no separate "start a workout session" step. See api_gym_quick_log below.
+_GYM_ONE_TOUCH_GROUPS = {'muay_thai'}
+
+# ── Muscle taxonomy (static, code-only — NO schema change) ───────────────────
+# Three classes govern how a muscle behaves on the live Train page:
+#   PRIMARY  — selectable as the day's muscle (pick -> function checklist).
+#   CONSTANT — never selectable; always rendered as standing checklist strips
+#              on every session (arms/core/shoulders), full function breakdown.
+#   loggable-only — everything else (stability, muay_thai): not selectable, no
+#              strip, still loggable from the databank. Muay Thai keeps its
+#              existing one-touch flow (_GYM_ONE_TOUCH_GROUPS) untouched.
+_GYM_PRIMARY_MUSCLES = ['chest', 'back', 'legs', 'cardio']
+_GYM_CONSTANT_MUSCLES = ['arms', 'core', 'shoulders']
+
+
+@app.route('/train')
+def train():
+    """Live workout engine — a "working out right now" surface.
+
+    Rewrite of the old browse-and-log Train page. On load we:
+      - apply the lazy ~4 AM roll-over stamp (via get_live_session_state),
+      - rehydrate today's open session (all logged sets + derived muscles +
+        per-muscle function checklist + the current open exercise) so a phone
+        refresh never loses confirmed sets, and
+      - hand the frontend the full muscle -> function -> exercise bank so a new
+        muscle group can be added mid-session without a round-trip.
+
+    Every set is persisted the instant it's logged via /api/gym/log-set; there
+    is no client-only workout state. Muscle groups are DERIVED from the sets
+    logged against the session, not stored on it."""
+    tree = get_gym_bank_grouped()
+
+    # Flatten bank into a JSON-friendly shape for the live picker. Only enabled,
+    # non-archived, non-Fa-Jin (tier != 4) exercises are loggable in the engine.
+    bank = []
+    for group in tree:
+        functions = []
+        for fn in group['functions']:
+            exs = [
+                {
+                    'id': e['id'], 'name': e['name'], 'tier': e['tier'],
+                    'tracking_type': e.get('tracking_type', 'weight_reps'),
+                    'function': fn['key'], 'function_label': fn['label'],
+                    'engagement': _cardio_spec(e.get('engagement')),
+                    'notes': e.get('notes'),
+                }
+                for e in fn['exercises']
+                if e.get('is_enabled') and not e.get('archived_at') and e['tier'] != 4
+            ]
+            if exs:
+                functions.append({'key': fn['key'], 'label': fn['label'], 'exercises': exs})
+        if functions:
+            bank.append({'key': group['key'], 'label': group['label'], 'functions': functions})
+
+    # Fa Jin (tier 4) exercises are deliberately kept OUT of the main `bank`
+    # picker above. They surface only as a contextual recommendation popup:
+    # when a T1-T3 exercise is selected, the frontend offers the Fa Jin that
+    # pairs with that muscle+function. Hand the frontend a flat lookup here.
+    fajin = []
+    for group in tree:
+        for fn in group['functions']:
+            for e in fn['exercises']:
+                if e['tier'] == 4 and e.get('is_enabled') and not e.get('archived_at'):
+                    fajin.append({
+                        'id': e['id'], 'name': e['name'],
+                        'muscle_group': group['key'], 'muscle_label': group['label'],
+                        'function': fn['key'], 'function_label': fn['label'],
+                        'tracking_type': e.get('tracking_type', 'weight_reps'),
+                    })
+
+    live = get_live_session_state()
+    total_enabled = sum(g['active_count'] for g in tree)
+    taxonomy = {'primary': _GYM_PRIMARY_MUSCLES,
+                'constant': _GYM_CONSTANT_MUSCLES}
+    return render_template('train.html', bank=bank, live=live, fajin=fajin,
+                           taxonomy=taxonomy, total_enabled=total_enabled)
+
+
+@app.route('/api/gym/exercise/<int:exercise_id>', methods=['POST'])
+def api_gym_exercise_update(exercise_id):
+    """Update a gym exercise's metadata. Accepts tracking_type / sort_order /
+    archived_at in addition to the original fields — gym_update_exercise
+    whitelists them and keeps the deprecated is_weighted flag in sync."""
+    data = request.get_json(silent=True) or {}
+    # Only forward known keys; ignore anything unexpected the client sends.
+    ok, err = gym_update_exercise(exercise_id, **data)
+    if not ok:
+        return {'ok': False, 'error': err}, 400
+    return {'ok': True}
+
+
+@app.route('/api/gym/exercise/<int:exercise_id>', methods=['DELETE'])
+def api_gym_exercise_delete(exercise_id):
+    """Hard delete — refused with 409 if the exercise has logged history.
+    The UI must offer Archive in that case; the API enforces it regardless."""
+    ok, err = gym_delete_exercise(exercise_id)
+    if not ok:
+        # 409 Conflict when it has history; 404 when it doesn't exist.
+        status = 404 if err == 'Exercise not found.' else 409
+        return {'ok': False, 'error': err}, status
+    return {'ok': True}
+
+
+@app.route('/api/gym/exercise/<int:exercise_id>/archive', methods=['POST'])
+def api_gym_exercise_archive(exercise_id):
+    """Archive / unarchive. Body: {archived: true|false}."""
+    data = request.get_json(silent=True) or {}
+    if bool(data.get('archived', True)):
+        gym_archive_exercise(exercise_id)
+    else:
+        gym_unarchive_exercise(exercise_id)
+    return {'ok': True}
+
+
+@app.route('/api/gym/exercise/reorder', methods=['POST'])
+def api_gym_exercise_reorder():
+    """Persist a new sort_order for exercises within one function.
+    Body: {function: <key|null>, order: [id, id, ...]}."""
+    data = request.get_json(silent=True) or {}
+    order = data.get('order') or []
+    if not isinstance(order, list) or not all(isinstance(i, int) for i in order):
+        return {'ok': False, 'error': 'order must be a list of exercise ids'}, 400
+    ok, err = gym_reorder_function(data.get('function'), order)
+    if not ok:
+        return {'ok': False, 'error': err}, 400
+    return {'ok': True}
+
+
+@app.route('/api/gym/functions', methods=['GET', 'POST'])
+def api_gym_functions():
+    """GET: list all function rows. POST: add one
+    ({muscle_group, key, label, sort_order?})."""
+    if request.method == 'GET':
+        return {'functions': get_gym_functions()}
+    data = request.get_json(silent=True) or {}
+    ok, err = gym_add_function(
+        muscle_group=data.get('muscle_group', ''),
+        key=data.get('key', ''),
+        label=data.get('label', ''),
+        sort_order=(_safe_int(data.get('sort_order'), None) if data.get('sort_order') not in (None, '') else None),
+    )
+    if not ok:
+        return {'ok': False, 'error': err}, 400
+    return {'ok': True}
+
+
+@app.route('/api/gym/exercise/add', methods=['POST'])
+def api_gym_exercise_add():
+    """Add a new gym exercise."""
+    data = request.get_json(silent=True) or {}
+    ok, err = gym_add_exercise(
+        name=data.get('name', ''),
+        tier=_safe_int(data.get('tier'), 2),
+        muscle_group=data.get('muscle_group', ''),
+        function=data.get('function') or None,
+        is_enabled=bool(data.get('is_enabled', True)),
+        notes=data.get('notes') or None,
+        tracking_type=data.get('tracking_type') or 'weight_reps',
+        sort_order=_safe_int(data.get('sort_order'), 0),
+        exercise_class=data.get('exercise_class') or 'strength',
+    )
+    if not ok:
+        return {'ok': False, 'error': err}, 400
+    return {'ok': True}
+
+
+@app.route('/api/gym/exercise/<int:exercise_id>/toggle', methods=['POST'])
+def api_gym_exercise_toggle(exercise_id):
+    """Toggle enabled/disabled."""
+    data = request.get_json(silent=True) or {}
+    gym_set_enabled(exercise_id, bool(data.get('enabled', True)))
+    return {'ok': True}
+
+
+# Legacy redirect — old /exercises URL points to /train now
+@app.route('/exercises')
+def exercises():
+    return redirect(url_for('train'))
+
+
+
+@app.route('/session/log')
+def session_log():
+    """Legacy redirect — old /session/log URL now points to the live Train engine."""
+    return redirect(url_for('train'))
+
+
+@app.route('/api/gym/history/<int:exercise_id>')
+def api_gym_history(exercise_id):
+    """Return the last several logged sets for an exercise (for list + chart)."""
+    from .gym_bank import get_gym_history
+    history = get_gym_history(exercise_id, limit=8)
+    return {'history': history}
+
+
+
+
+
+def _tracking_type_for(exercise_id):
+    """Fetch an exercise's tracking_type (defaults to weight_reps)."""
+    ex = get_gym_exercise(exercise_id)
+    return (ex or {}).get('tracking_type', 'weight_reps')
+
+
+def _cardio_spec(engagement):
+    """Normalise an exercise's engagement column into a dict. Cardio exercises
+    store their per-activity field spec here, e.g.
+    {"duration": true, "distance": "m", "setting": true}. Tolerates a JSON
+    string, an already-parsed dict, or None/blank."""
+    if isinstance(engagement, dict):
+        return engagement
+    if not engagement:
+        return {}
+    try:
+        return _json.loads(engagement)
+    except (ValueError, TypeError):
+        return {}
+
+
+@app.route('/api/gym/log-set', methods=['POST'])
+def api_gym_log_set():
+    """Log one set for the live workout engine (§5).
+
+    Resolves today's open session via get_or_create_today_gym_session() (no
+    separate Start step), persists the set immediately via log_gym_set, and
+    returns enough state to update workout-so-far + the function checklist
+    without a full reload.
+
+    Request: {exercise_id, weight_kg?, reps?, duration_s?, successful=true}.
+    Fields present per tracking_type:
+      weight_reps -> weight_kg + reps       reps -> reps
+      weight_time -> weight_kg + duration_s  time -> duration_s
+    Response: {ok, id, workout_so_far, checklist}. On failure returns a non-2xx
+    so the client shows the failed ✓ state and retries (§6) — a confirmed set is
+    never silently dropped."""
+    data = request.get_json(silent=True) or {}
+    exercise_id = _safe_int(data.get('exercise_id'), 0)
+    if not exercise_id:
+        return {'ok': False, 'error': 'Missing exercise_id'}, 400
+
+    tt = _tracking_type_for(exercise_id)
+    weight_kg = _safe_float(data.get('weight_kg'), 0.0)
+    reps = _safe_int(data.get('reps'), 0)
+    duration_s = _safe_int(data.get('duration_s'), 0) or None
+    distance_m = _safe_int(data.get('distance_m'), 0) or None
+    setting = (data.get('setting') or '').strip() or None
+    successful = bool(data.get('successful', True))
+
+    # Per-tracking-type minimum validity so we never persist an empty set.
+    if tt in ('weight_reps', 'reps') and reps <= 0:
+        return {'ok': False, 'error': 'reps required'}, 400
+    if tt in ('time', 'weight_time') and not duration_s:
+        return {'ok': False, 'error': 'duration required'}, 400
+    if tt == 'cardio' and not duration_s:
+        return {'ok': False, 'error': 'duration required'}, 400
+
+    session_id = get_or_create_today_gym_session()
+    log_id = log_gym_set(
+        exercise_id, weight_kg, reps, sets=1, successful=successful,
+        session_id=session_id, duration_s=duration_s,
+        distance_m=distance_m, setting=setting,
+    )
+    live = get_live_session_state()
+    return {'ok': True, 'id': log_id,
+            'workout_so_far': live, 'checklist': live['muscles']}
+
+
+@app.route('/api/gym/log-set/undo', methods=['POST'])
+def api_gym_log_set_undo():
+    """Walk back the last set for an exercise today (§5), then return the
+    refreshed live state so workout-so-far + checklist update in place."""
+    data = request.get_json(silent=True) or {}
+    exercise_id = _safe_int(data.get('exercise_id'), 0)
+    if not exercise_id:
+        return {'ok': False, 'error': 'Missing exercise_id'}, 400
+    removed = undo_last_today(exercise_id)
+    live = get_live_session_state()
+    return {'ok': True, 'removed': removed,
+            'workout_so_far': live, 'checklist': live['muscles']}
+
+
+@app.route('/api/gym/live-session')
+def api_gym_live_session():
+    """Today's live-session state for rehydrate on load/refresh (§4.5).
+    Applies the ~4 AM lazy roll-over stamp (inside get_live_session_state)."""
+    return get_live_session_state()
+
+
+@app.route('/api/gym/exercise/<int:exercise_id>/prefill')
+def api_gym_exercise_prefill(exercise_id):
+    """Pre-fill payload when an exercise opens (§3): most-recent set (drives the
+    pre-filled working set) + best recent set (reference only)."""
+    ex = get_gym_exercise(exercise_id)
+    if not ex:
+        return {'ok': False, 'error': 'Exercise not found'}, 404
+    pf = get_exercise_prefill(exercise_id)
+    return {'ok': True,
+            'tracking_type': ex.get('tracking_type', 'weight_reps'),
+            'name': ex.get('name'),
+            'engagement': _cardio_spec(ex.get('engagement')),
+            'most_recent': pf['most_recent'],
+            'best_recent': pf['best_recent']}
+
+
+@app.route('/api/gym/quick-log', methods=['POST'])
+def api_gym_quick_log():
+    """One-touch set logging for Train page exercises (currently Muay Thai).
+    Unlike /api/gym/log-set, this doesn't require an already-started session
+    — it transparently drops into (or starts) today's open gym session, so a
+    single tap is enough. Unweighted drills log reps=1 per tap; the weighted
+    quick-entry form on the Train page passes its own weight_kg/reps."""
+    data = request.get_json(silent=True) or {}
+    exercise_id = _safe_int(data.get('exercise_id'), 0)
+    reps = _safe_int(data.get('reps'), 1)
+    weight_kg = _safe_float(data.get('weight_kg'), 0.0)
+
+    if not exercise_id or reps <= 0:
+        return {'ok': False, 'error': 'Invalid data'}, 400
+
+    session_id = get_or_create_today_gym_session()
+    log_id = log_gym_set(exercise_id, weight_kg, reps, sets=1, successful=True, session_id=session_id)
+    tally = get_today_tally(exercise_id)
+    return {'ok': True, 'id': log_id, 'today_sets': tally['sets'], 'today_reps': tally['reps']}
+
+
+@app.route('/api/gym/quick-log/undo', methods=['POST'])
+def api_gym_quick_log_undo():
+    """Undo the most recent one-touch tap for an exercise (today only) —
+    lets a misclick on the Train page be walked back instantly."""
+    data = request.get_json(silent=True) or {}
+    exercise_id = _safe_int(data.get('exercise_id'), 0)
+    if not exercise_id:
+        return {'ok': False, 'error': 'Invalid data'}, 400
+    removed = undo_last_today(exercise_id)
+    tally = get_today_tally(exercise_id)
+    return {'ok': True, 'removed': removed, 'today_sets': tally['sets'], 'today_reps': tally['reps']}
+
+
+@app.route('/api/gym/log-cardio', methods=['POST'])
+def api_gym_log_cardio():
+    """Log a cardio entry using the existing session_cardio table."""
+    data = request.get_json(silent=True) or {}
+    exercise_name = (data.get('exercise_name') or '').strip()
+    exercise_id = _safe_int(data.get('exercise_id'), 0) or None
+    duration_min = _safe_int(data.get('duration_min'), 0)
+    distance_m = _safe_int(data.get('distance_m'), 0)
+
+    if not exercise_name:
+        return {'ok': False, 'error': 'No exercise name'}, 400
+
+    pid = _profile_id()
+    db = get_db()
+
+    # Resolve exercise_id if not provided (e.g. "Kicks + Run" first time)
+    if not exercise_id:
+        row = db.execute("SELECT id FROM exercises WHERE name=? COLLATE NOCASE", (exercise_name,)).fetchone()
+        if row:
+            exercise_id = row['id']
+        else:
+            # Create the exercise in the exercises table as tier 4 cardio
+            exercise_id = db.execute(
+                "INSERT INTO exercises (name, tier, muscle_group, day_type, cardio_metrics) "
+                "VALUES (?, 4, 'Cardio', 'any', ?)",
+                (exercise_name, '{"time":true,"distance":"m"}')
+            ).lastrowid
+
+    duration_s = duration_min * 60 if duration_min else None
+    log_cardio_session(pid, date_type.today().isoformat(), exercise_id,
+                       distance_m=distance_m if distance_m else None,
+                       duration_s=duration_s)
+    db.close()
+    return {'ok': True}
+
+
+@app.route('/api/import-history', methods=['POST'])
+def api_import_history():
+    """Import training history from pasted text."""
+    data = request.get_json(silent=True) or {}
+    text = data.get('text', '')
+    dry_run = bool(data.get('dry_run', False))
+    if not text.strip():
+        return {'days': 0, 'lifts': 0, 'cardio': 0, 'errors': ['No text provided']}, 400
+    try:
+        from .import_history import run_import as _do_import
+        summary = _do_import(text, profile_id=_profile_id(), dry_run=dry_run)
+        return summary
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {'days': 0, 'lifts': 0, 'cardio': 0, 'errors': [str(e)]}, 500
+
+
+@app.route('/analytics')
+def analytics():
+    today = date_type.today()
+    db = get_db()
+    pid = _profile_id()
+    # PRs from gym_progression
+    prs = db.execute('''
+        SELECT ge.name, ge.muscle_group, ge.tier,
+               gp.weight_kg AS best_weight, gp.reps, gp.recorded_at AS date
+        FROM gym_progression gp
+        JOIN gym_exercises ge ON ge.id = gp.exercise_id
+        WHERE gp.weight_kg = (
+            SELECT MAX(gp2.weight_kg) FROM gym_progression gp2
+            WHERE gp2.exercise_id = gp.exercise_id
+        )
+        GROUP BY gp.exercise_id
+        ORDER BY gp.weight_kg DESC
+    ''').fetchall()
+    # Progression history from gym_progression
+    prog_rows = db.execute('''
+        SELECT ge.name, gp.recorded_at AS date, gp.weight_kg AS max_weight
+        FROM gym_progression gp
+        JOIN gym_exercises ge ON ge.id = gp.exercise_id
+        WHERE gp.weight_kg > 0
+        ORDER BY ge.name, gp.recorded_at
+    ''').fetchall()
+    progression = { }
+    for r in prog_rows:
+        name = r['name']
+        if name not in progression:
+            progression[name] = {
+                'dates': [],
+                'weights': [] }
+        progression[name]['dates'].append(r['date'])
+        progression[name]['weights'].append(r['max_weight'])
+    exercise_names = sorted(progression.keys())
+    week_labels = []
+    volume_data = []
+    swim_data = []
+    for i in range(11, -1, -1):
+        ws = today - timedelta(days=today.weekday()) - timedelta(weeks=i)
+        we = ws + timedelta(days=6)
+        week_labels.append(ws.strftime('%b %-d'))
+        # Volume from gym_progression
+        vol = db.execute("""
+            SELECT COALESCE(SUM(gp.weight_kg * gp.sets * gp.reps), 0) AS v
+            FROM gym_progression gp
+            WHERE DATE(gp.recorded_at) BETWEEN ? AND ?
+        """, (ws.isoformat(), we.isoformat())).fetchone()['v']
+        volume_data.append(round(float(vol), 1))
+        dist = db.execute('\n            SELECT COALESCE(SUM(sw.distance_m), 0) AS d\n            FROM swim_logs sw\n            JOIN sessions s ON s.id = sw.session_id\n            WHERE s.date BETWEEN ? AND ? AND s.profile_id = ?\n        ', (ws.isoformat(), we.isoformat(), pid)).fetchone()['d']
+        swim_data.append(int(dist))
+    db.close()
+
+    return render_template('analytics.html', prs=prs, progression_json=_json.dumps(progression), exercise_names=exercise_names, week_labels=_json.dumps(week_labels), volume_data=_json.dumps(volume_data), swim_data=_json.dumps(swim_data), heatmap_json=_json.dumps(get_activity_calendar()))
+
+
+# /exercise-bank now points to the databank management page (was /train).
+@app.route('/exercise-bank')
+def exercise_bank():
+    return redirect(url_for('exercise_db'))
+
+
+@app.route('/exercise-db')
+def exercise_db():
+    """Databank management page — browse, add, edit, reorder, archive, delete.
+    Arjun-only (profile 1); Gayathri/Raj are redirected to dashboard."""
+    if _profile_id() in (2, 3):
+        return redirect(url_for('dashboard'))
+    tree = get_gym_bank_grouped(include_archived=True)
+    # Split active vs archived for the two-section layout. A group's functions
+    # keep only active exercises; archived ones are collected into a flat list.
+    archived = []
+    active_total = 0
+    for group in tree:
+        kept_fns = []
+        for fn in group['functions']:
+            active_exs = []
+            for e in fn['exercises']:
+                if e.get('archived_at'):
+                    archived.append(e)
+                else:
+                    active_exs.append(e)
+                    active_total += 1
+            if active_exs:
+                kept_fns.append({**fn, 'exercises': active_exs})
+        group['functions'] = kept_fns
+        group['active_count'] = sum(len(fn['exercises']) for fn in kept_fns)
+    # Drop groups that ended up with no active functions (their only members
+    # were archived) — but keep the archived rows in the Archived section.
+    groups = [g for g in tree if g['functions']]
+    archived.sort(key=lambda e: (e['muscle_group'], e['name']))
+    functions_by_muscle = {mg: get_gym_functions(mg) for mg in _GYM_GROUP_ORDER}
+
+    # ── Group the active bank by exercise class (bodyweight / strength) ──
+    # Each class section carries its own muscle→function→exercise sub-tree,
+    # filtered to that class. Empty functions/groups are pruned per section so a
+    # section only lists muscles that actually contain exercises of that class.
+    def _filter_groups_by_class(src_groups, cls):
+        out = []
+        for g in src_groups:
+            fns = []
+            for fn in g['functions']:
+                exs = [e for e in fn['exercises'] if (e.get('exercise_class') or 'strength') == cls]
+                if exs:
+                    fns.append({**fn, 'exercises': exs})
+            if fns:
+                cnt = sum(len(fn['exercises']) for fn in fns)
+                out.append({**g, 'functions': fns, 'active_count': cnt})
+        return out
+
+    class_sections = [
+        {'class': 'bodyweight', 'label': 'Bodyweight',
+         'groups': _filter_groups_by_class(groups, 'bodyweight')},
+        {'class': 'strength', 'label': 'Strength',
+         'groups': _filter_groups_by_class(groups, 'strength')},
+    ]
+    return render_template('exercise_db.html',
+                           groups=groups,
+                           class_sections=class_sections,
+                           archived=archived,
+                           active_total=active_total,
+                           archived_count=len(archived),
+                           muscle_groups=list(_GYM_GROUP_LABELS.keys()),
+                           functions_by_muscle=functions_by_muscle,
+                           exercise_classes=['bodyweight', 'strength'],
+                           tracking_types=list(TRACKING_TYPES))
+
+
+@app.route('/food/shared')
+def food_shared():
+    date_str = request.args.get('date', date_type.today().isoformat())
+    d = date_type.fromisoformat(date_str)
+    today = date_type.today()
+    prev_date = (d - timedelta(days=1)).isoformat()
+    next_date = (d + timedelta(days=1)).isoformat()
+    if d == today:
+        date_label = 'Today'
+    elif d == today - timedelta(days=1):
+        date_label = 'Yesterday'
+    else:
+        date_label = d.strftime('%a, %b %-d')
+    profiles_data = []
+    for pid, pname in ((1, 'Arjun'), (2, 'Gayathri')):
+        sync_food_log_from_library(date_str, pid)
+        goals = get_macro_goals(pid)
+        entries = [ dict(e) for e in get_food_log(date_str, pid)]
+        profiles_data.append({
+            'id': pid,
+            'name': pname,
+            'goals': goals,
+            'entries': entries })
+    return render_template('food_shared.html', date_str=date_str, date_label=date_label, prev_date=prev_date, next_date=next_date, is_today=d == today, profiles=profiles_data)
+
+
+@app.route('/food')
+def food():
+    pid = _profile_id()
+    date_str = _validate_date(request.args.get('date', ''))
+    d = date_type.fromisoformat(date_str)
+    today = date_type.today()
+    prev_date = (d - timedelta(days=1)).isoformat()
+    next_date = (d + timedelta(days=1)).isoformat()
+    if d == today:
+        date_label = 'Today'
+    elif d == today - timedelta(days=1):
+        date_label = 'Yesterday'
+    else:
+        date_label = d.strftime('%a, %b %-d')
+    sync_food_log_from_library(date_str, pid)
+    goals = get_macro_goals(pid)
+    _rows = get_food_log(date_str, pid)
+    entries = [ dict(e) for e in _rows ]
+    enrich_log_entries(entries)   # attach source/type/std-serving/unit_type for the food card
+    totals = {
+        'calories': round(sum(e['calories'] for e in entries), 1),
+        'protein_g': round(sum(e['protein_g'] for e in entries), 1),
+        'carbs_g': round(sum(e['carbs_g'] for e in entries), 1),
+        'fat_g': round(sum(e['fat_g'] for e in entries), 1) }
+    library = [dict(r) for r in get_food_library() if r['calories'] > 0]
+    food_map = {r['name'].lower(): r for r in library}
+    components = get_food_components()
+    weight_history = get_body_weight_history(pid, days=30)
+    is_today = d == today
+    pending = get_pending_foods(pid)
+    history = get_food_history(pid)
+    return render_template('food.html', date_str=date_str, date_label=date_label, prev_date=prev_date, next_date=next_date, is_today=is_today, goals=goals, entries=entries, totals=totals, pending=pending, history=history, food_library=library, food_map=food_map, food_components=components, weight_history=weight_history)
+
+
+@app.route('/food/log', methods=[ 'POST'])
+def food_log_add():
+    date_str = _validate_date(request.form.get('date', ''))
+    raw_name = request.form.get('food_entry', '').strip()
+    quantity = _safe_float(request.form.get('quantity'))
+    if not raw_name:
+        return redirect(url_for('food', date=date_str))
+    pid = _profile_id()
+    (name, was_normalized) = _normalize_food_name(raw_name)
+    if was_normalized:
+        log_food_reconciliation(raw_name, name, pid)
+    log_food_entry(date_str, name, profile_id=pid, quantity=quantity or None)
+    return redirect(url_for('food', date=date_str))
+
+
+@app.route('/food/api/entry/<int:entry_id>/meal', methods=[ 'POST'])
+def food_api_entry_meal(entry_id):
+    data = request.get_json(silent=True) or {}
+    meal_type = data.get('meal_type', 'snack')
+    if meal_type not in ('breakfast', 'lunch', 'dinner', 'snack'):
+        return (_json.dumps({
+            'error': 'invalid meal_type' }), 400, {
+            'Content-Type': 'application/json' })
+    conn = get_db()
+    row = conn.execute('SELECT profile_id FROM food_log WHERE id=?', (entry_id,)).fetchone()
+    if not row or row['profile_id'] != _profile_id():
+        conn.close()
+        return (_json.dumps({
+            'error': 'forbidden' }), 403, {
+            'Content-Type': 'application/json' })
+    conn.execute('UPDATE food_log SET meal_type=? WHERE id=?', (meal_type, entry_id))
+    conn.commit()
+    conn.close()
+    return (_json.dumps({
+        'ok': True,
+        'meal_type': meal_type }), 200, {
+        'Content-Type': 'application/json' })
+
+
+@app.route('/food/api/entry/<int:entry_id>/update', methods=[ 'POST'])
+def food_api_entry_update(entry_id):
+    """Edit a logged entry's name and/or macros in place (ownership-checked)."""
+    data = request.get_json(silent=True) or {}
+    conn = get_db()
+    row = conn.execute('SELECT * FROM food_log WHERE id=?', (entry_id,)).fetchone()
+    if not row or row['profile_id'] != _profile_id():
+        conn.close()
+        return (_json.dumps({
+            'error': 'forbidden' }), 403, {
+            'Content-Type': 'application/json' })
+    name = row['name']
+    cal = round(_safe_float(data.get('calories'), row['calories']), 1)
+    pro = round(_safe_float(data.get('protein_g'), row['protein_g']), 1)
+    carb = round(_safe_float(data.get('carbs_g'), row['carbs_g']), 1)
+    fat = round(_safe_float(data.get('fat_g'), row['fat_g']), 1)
+    conn.execute('UPDATE food_log SET name=?, calories=?, protein_g=?, carbs_g=?, fat_g=? WHERE id=?', (name, cal, pro, carb, fat, entry_id))
+    conn.commit()
+    updated = conn.execute('SELECT * FROM food_log WHERE id=?', (entry_id,)).fetchone()
+    conn.close()
+    return (_json.dumps({
+        'entry': {
+            'id': updated['id'],
+            'name': updated['name'],
+            'meal_type': updated['meal_type'],
+            'calories': updated['calories'],
+            'protein_g': updated['protein_g'],
+            'carbs_g': updated['carbs_g'],
+            'fat_g': updated['fat_g'],
+            'logged_at': updated['logged_at'] } }), 200, {
+        'Content-Type': 'application/json' })
+
+
+@app.route('/food/api/entry', methods=[ 'POST'])
+def food_api_entry():
+    data = request.get_json(silent=True) or {}
+    pid = _profile_id()
+    date_str = _validate_date(data.get('date', ''), date_type.today().isoformat())
+    raw_name = (data.get('name') or '').strip()
+    meal_type = data.get('meal_type', 'snack')
+    if meal_type not in ('breakfast', 'lunch', 'dinner', 'snack'):
+        meal_type = 'snack'
+    if not raw_name:
+        return (_json.dumps({
+            'error': 'name required' }), 400, {
+            'Content-Type': 'application/json' })
+    (name, was_normalized) = _normalize_food_name(raw_name)
+    if was_normalized:
+        log_food_reconciliation(raw_name, name, pid)
+    explicit = {
+        'calories': _safe_float(data.get('calories')),
+        'protein_g': _safe_float(data.get('protein_g')),
+        'carbs_g': _safe_float(data.get('carbs_g')),
+        'fat_g': _safe_float(data.get('fat_g')) }
+    quantity = data.get('quantity')
+    row = log_food_entry(date_str, name, profile_id=pid, meal_type=meal_type, quantity=quantity, explicit_macros=explicit)
+    return (_json.dumps({
+        'entry': {
+            'id': row['id'],
+            'name': row['name'],
+            'meal_type': row['meal_type'],
+            'calories': row['calories'],
+            'protein_g': row['protein_g'],
+            'carbs_g': row['carbs_g'],
+            'fat_g': row['fat_g'],
+            'logged_at': row['logged_at'] } }), 201, {
+        'Content-Type': 'application/json' })
+
+
+@app.route('/food/api/define', methods=[ 'POST'])
+def food_api_define():
+    """Define macros for a food inline (from the 'define it now?' prompt shown after
+    logging an undefined food). Backfills any matching 0-cal log rows — including the
+    just-logged entry — and returns that entry's fresh values so the client can animate
+    the calorie/protein bars without a full page reload."""
+    data = request.get_json(silent=True) or {}
+    pid = _profile_id()
+    name = (data.get('name') or '').strip()
+    if not name:
+        return (_json.dumps({
+            'error': 'name required' }), 400, {
+            'Content-Type': 'application/json' })
+    unit_type = 'unit' if data.get('unit_type') == 'unit' else 'g'
+    cal  = _safe_float(data.get('calories'))
+    pro  = _safe_float(data.get('protein_g'))
+    carb = _safe_float(data.get('carbs_g'))
+    fat  = _safe_float(data.get('fat_g'))
+    define_food_item(name, cal, pro, carb, fat, unit_type)
+
+    entry = None
+    entry_id = data.get('entry_id')
+    if entry_id:
+        conn = get_db()
+        row = conn.execute('SELECT * FROM food_log WHERE id=? AND profile_id=?', (entry_id, pid)).fetchone()
+        conn.close()
+        if row:
+            entry = {
+                'id': row['id'],
+                'name': row['name'],
+                'meal_type': row['meal_type'],
+                'calories': row['calories'],
+                'protein_g': row['protein_g'],
+                'carbs_g': row['carbs_g'],
+                'fat_g': row['fat_g'],
+                'logged_at': row['logged_at'] }
+    return (_json.dumps({
+        'ok': True,
+        'entry': entry }), 200, {
+        'Content-Type': 'application/json' })
+
+
+@app.route('/food/delete/<int:entry_id>', methods=[ 'POST'])
+def food_log_delete(entry_id):
+    date_str = request.form.get('date', date_type.today().isoformat())
+    conn = get_db()
+    row = conn.execute('SELECT profile_id FROM food_log WHERE id=?', (entry_id,)).fetchone()
+    conn.close()
+    if not row or row['profile_id'] != _profile_id():
+        abort(403)
+    delete_food_entry(entry_id)
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return (_json.dumps({
+            'ok': True }), 200, {
+            'Content-Type': 'application/json' })
+    return redirect(url_for('food', date=date_str))
+
+
+@app.route('/food/goals', methods=[ 'POST'])
+def food_goals_set():
+    pid = _profile_id()
+    current = get_macro_goals(pid)
+    set_macro_goals(_safe_float(request.form.get('calories'), current['calories']), _safe_float(request.form.get('protein_g'), current['protein_g']), _safe_float(request.form.get('carbs_g'), current['carbs_g']), _safe_float(request.form.get('fat_g'), current['fat_g']), pid)
+    return redirect(url_for('food'))
+
+
+@app.route('/food/meal', methods=[ 'POST'])
+def food_meal_log():
+    '''Create/refresh a reusable recipe (whole-recipe compound food) from its
+    ingredients, then optionally log a portion today as a percentage of the whole.'''
+    date_str = _validate_date(request.form.get('date', ''))
+    meal_name = request.form.get('meal_name', '').strip()
+    meal_type = request.form.get('meal_type', 'snack')
+    if meal_type not in ('breakfast', 'lunch', 'dinner', 'snack'):
+        meal_type = 'snack'
+    log_percent = _safe_float(request.form.get('log_percent'), 100)
+    ings = request.form.getlist('ing')
+    qtys = request.form.getlist('qty')
+    components = []
+    for ing, qty_s in zip(ings, qtys):
+        ing = ing.strip()
+        qty = _safe_float(qty_s)
+        if ing and qty > 0:
+            components.append((ing, qty))
+    if not meal_name or not components:
+        return redirect(url_for('food', date=date_str))
+    pid = _profile_id()
+    save_food_components(meal_name, components)
+    fraction = max(0, log_percent) / 100
+    if fraction > 0:
+        name = meal_name if abs(fraction - 1) < 1e-09 else f'''{fraction:g}x {meal_name}'''
+        log_food_entry(date_str, name, profile_id=pid, meal_type=meal_type)
+    return redirect(url_for('food', date=date_str))
+
+
+@app.route('/food/components/<path:name>', methods=[ 'POST'])
+def food_components_save(name):
+    date_str = request.form.get('date', date_type.today().isoformat())
+    mode = 'pct' if request.form.get('recipe_mode') == 'pct' else 'quantity'
+    ings = request.form.getlist('ing')
+    if mode == 'pct':
+        pcts = request.form.getlist('pct')
+        components = [(ing.strip(), _safe_float(p)) for ing, p in zip(ings, pcts)]
+        components = [(ing, p) for ing, p in components if ing and p > 0]
+        save_food_components_pct(name, components)
+    else:
+        qtys = request.form.getlist('qty')
+        components = [(ing.strip(), _safe_float(q)) for ing, q in zip(ings, qtys)]
+        components = [(ing, q) for ing, q in components if ing and q > 0]
+        save_food_components(name, components)
+    return redirect(url_for('food_edit', name=name))
+
+
+@app.route('/food/database')
+def food_database():
+    pid = _profile_id()
+    library = [dict(r) for r in get_food_library()]
+    lib_names_lower = {item['name'].lower() for item in library}
+    for pname in get_pending_foods(pid):
+        if pname.lower() not in lib_names_lower:
+            library.append({'name': pname, 'calories': 0, 'protein_g': 0, 'carbs_g': 0, 'fat_g': 0, 'unit_type': 'g'})
+    comps_map = get_food_components()
+    recipe_keys = set(comps_map.keys())
+    composite_keys = {k for k, v in comps_map.items() if any((c.get('pct') or 0) > 0 for c in v)}
+    types = get_food_types()
+    type_map = {t['id']: t for t in types}
+    for item in library:
+        nl = item['name'].lower()
+        item['is_pending'] = item['calories'] == 0
+        item['is_composite'] = nl in composite_keys
+        # 'recipe' now means a fixed-portion recipe; percentage composites get their own badge.
+        item['is_recipe'] = nl in recipe_keys and not item['is_composite']
+        t = type_map.get(item.get('type_id'))
+        item['type_name'] = t['name'] if t else None
+        item['type_color'] = t['color'] if t else None
+    library.sort(key=lambda x: (not x['is_pending'], x['name'].lower()))
+    counts = {'all': len(library), 'defined': sum(1 for i in library if not i['is_pending']), 'pending': sum(1 for i in library if i['is_pending']), 'recipes': sum(1 for i in library if i['is_recipe']), 'composites': sum(1 for i in library if i['is_composite'])}
+    return render_template('food_database.html', food_library=library, counts=counts, food_types=types)
+
+
+@app.route('/food/edit/new', methods=['GET', 'POST'])
+def food_edit_new():
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        if not name:
+            return redirect(url_for('food_edit_new'))
+        unit_type = 'unit' if request.form.get('unit_type') == 'unit' else 'g'
+        _meta = _read_food_meta(request.form, unit_type)
+        define_food_item(name,
+            float(request.form.get('calories', 0) or 0),
+            float(request.form.get('protein_g', 0) or 0),
+            float(request.form.get('carbs_g', 0) or 0),
+            float(request.form.get('fat_g', 0) or 0),
+            unit_type, **_meta)
+        return redirect(url_for('food_edit', name=name))
+    return render_template('food_edit.html', mode='new', name='',
+                           existing=None, components=[], food_library=[], macros_json='{}',
+                           food_types=get_food_types(), source_names=get_distinct_source_names())
+
+
+@app.route('/food/edit/<path:name>', methods=['GET', 'POST'])
+def food_edit(name):
+    pid = _profile_id()
+    conn = get_db()
+    existing = conn.execute('SELECT * FROM food_items WHERE name=? COLLATE NOCASE', (name,)).fetchone()
+    conn.close()
+    existing_dict = dict(existing) if existing else None
+    if request.method == 'POST':
+        unit_type = 'unit' if request.form.get('unit_type') == 'unit' else 'g'
+        _meta = _read_food_meta(request.form, unit_type)
+        define_food_item(name,
+            float(request.form.get('calories', 0) or 0),
+            float(request.form.get('protein_g', 0) or 0),
+            float(request.form.get('carbs_g', 0) or 0),
+            float(request.form.get('fat_g', 0) or 0),
+            unit_type, **_meta)
+        sync_food_log_from_library(date_type.today().isoformat(), pid)
+        return redirect(url_for('food_edit', name=name))
+    comps = get_food_components().get(name.lower(), [])
+    recipe_mode = get_food_component_mode(name) or 'pct'
+    library = get_food_library()
+    macros_json = _json.dumps({item['name'].lower(): {
+        'calories': item['calories'], 'protein_g': item['protein_g'],
+        'carbs_g': item['carbs_g'], 'fat_g': item['fat_g'],
+        'unit_type': item['unit_type']} for item in library})
+    if existing_dict is None:
+        mode = 'pending'
+    elif existing_dict['calories'] == 0:
+        mode = 'pending'
+    else:
+        mode = 'existing'
+    return render_template('food_edit.html', mode=mode, name=name,
+                           existing=existing_dict, components=comps,
+                           recipe_mode=recipe_mode,
+                           food_library=library, macros_json=macros_json,
+                           food_types=get_food_types(), source_names=get_distinct_source_names())
+
+
+@app.route('/food/delete/<path:name>', methods=['POST'])
+def food_delete(name):
+    delete_food_item(name)
+    return redirect(url_for('food_database'))
+
+
+@app.route('/food/define/<path:name>')
+def food_define_redirect(name):
+    return redirect(url_for('food_edit', name=name), 301)
+
+
+def _read_food_meta(form, unit_type):
+    """Extract the optional source/type/std-serving fields from a food-edit POST.
+    Empty strings -> None (stored NULL). std_serving_g is ignored for unit-type foods."""
+    st = (form.get('source_type', '') or '').strip().lower()
+    source_type = st if st in ('restaurant', 'brand', 'homemade') else None
+    source_name = (form.get('source_name', '') or '').strip() or None
+    if source_type == 'homemade' or source_type is None:
+        source_name = None if source_type == 'homemade' else source_name
+    tid_raw = (form.get('type_id', '') or '').strip()
+    try:
+        type_id = int(tid_raw) if tid_raw else None
+    except ValueError:
+        type_id = None
+    std_raw = (form.get('std_serving_g', '') or '').strip()
+    if unit_type == 'unit':
+        std_serving_g = None            # ignored for count-based foods
+    else:
+        try:
+            std_serving_g = float(std_raw) if std_raw else None
+        except ValueError:
+            std_serving_g = None
+    return {'source_type': source_type, 'source_name': source_name,
+            'type_id': type_id, 'std_serving_g': std_serving_g}
+
+
+# ── Managed food types ──────────────────────────────────────────────────────────
+@app.route('/food/types')
+def food_types():
+    types = get_food_types()
+    # attach usage counts so the manage screen can show "N foods" and the delete confirm.
+    for t in types:
+        t['count'] = count_foods_with_type(t['id'])
+    return render_template('food_types.html', food_types=types)
+
+
+@app.route('/food/types', methods=['POST'])
+def food_types_create():
+    name = request.form.get('name', '')
+    color = request.form.get('color', '') or '#888888'
+    _id, err = create_food_type(name, color)
+    if err == 'duplicate':
+        # Re-render with an inline error rather than a bare 409 page.
+        types = get_food_types()
+        for t in types:
+            t['count'] = count_foods_with_type(t['id'])
+        return render_template('food_types.html', food_types=types,
+                               error='A type called "%s" already exists.' % name.strip()), 409
+    return redirect(url_for('food_types'))
+
+
+@app.route('/food/types/<int:type_id>/edit', methods=['POST'])
+def food_types_edit(type_id):
+    name = request.form.get('name', '')
+    color = request.form.get('color', '') or '#888888'
+    ok, err = update_food_type(type_id, name, color)
+    if err == 'duplicate':
+        types = get_food_types()
+        for t in types:
+            t['count'] = count_foods_with_type(t['id'])
+        return render_template('food_types.html', food_types=types,
+                               error='A type called "%s" already exists.' % name.strip()), 409
+    return redirect(url_for('food_types'))
+
+
+@app.route('/food/types/<int:type_id>/delete', methods=['POST'])
+def food_types_delete(type_id):
+    delete_food_type(type_id)   # nulls out referencing food_items.type_id; never deletes foods
+    return redirect(url_for('food_types'))
+
+
+@app.route('/command-centre')
+def command_centre():
+    if _profile_id() != 1:
+        return redirect(url_for('food'))
+    return render_template('command_centre.html', reconciliations=get_food_reconciliations())
+
+
+@app.route('/command-centre/reconciliation/<int:rec_id>/dismiss', methods=['POST'])
+def reconciliation_dismiss(rec_id):
+    db = get_db()
+    db.execute('DELETE FROM food_reconciliations WHERE id=?', (rec_id,))
+    db.commit()
+    db.close()
+    return redirect(url_for('command_centre'))
+
+
+@app.route('/body-weight', methods=['POST'])
+def body_weight_log():
+    pid = _profile_id()
+    weight_str = request.form.get('weight_kg', '').strip()
+    date_str = _validate_date(request.form.get('date', ''))
+    try:
+        weight_kg = float(weight_str)
+        if weight_kg > 0:
+            log_body_weight(date_str, weight_kg, pid)
+    except ValueError:
+        pass
+    ref = request.referrer or ''
+    if ref.startswith(request.host_url):
+        return redirect(ref)
+    return redirect(url_for('dashboard'))
+
+
+@app.route('/api/weight-history')
+def api_weight_history():
+    """Body-weight series for the home weight chart's range toggle.
+    Returns [{date, weight_kg}] newest-first, scoped to the active profile."""
+    try:
+        days = int(request.args.get('days', 30))
+    except (TypeError, ValueError):
+        days = 30
+    days = max(2, min(days, 3650))  # clamp: >=2 points meaningful, <=10y sane cap
+    history = get_body_weight_history(_profile_id(), days=days)
+    return _json.dumps([dict(r) for r in (history or [])]), 200, {'Content-Type': 'application/json'}
+
+
+@app.route('/info')
+def info():
+    return render_template('info.html')
+
+
+@app.route('/api/muscle-activity')
+def api_muscle_activity():
+    data = get_muscle_group_activity(21)
+    return _json.dumps(data), 200, {'Content-Type': 'application/json'}
+
+
+@app.route('/api/templates', methods=['GET'])
+def api_templates_list():
+    pid = _profile_id()
+    db = get_db()
+    rows = db.execute(
+        'SELECT id, name, exercises, created_at, last_used_at FROM session_templates WHERE profile_id=? ORDER BY last_used_at DESC NULLS LAST, created_at DESC',
+        (pid,)).fetchall()
+    db.close()
+    templates = []
+    for r in rows:
+        exs = _json.loads(r['exercises']) if r['exercises'] else []
+        templates.append({'id': r['id'], 'name': r['name'], 'exercise_count': len(exs),
+                          'last_used_at': r['last_used_at'], 'created_at': r['created_at']})
+    return _json.dumps({'templates': templates}), 200, {'Content-Type': 'application/json'}
+
+
+@app.route('/api/templates', methods=['POST'])
+def api_templates_create():
+    pid = _profile_id()
+    data = request.get_json(force=True)
+    name = (data.get('name') or '').strip()
+    exercises = data.get('exercises', [])
+    if not name or not exercises:
+        return _json.dumps({'error': 'Name and exercises required'}), 400, {'Content-Type': 'application/json'}
+    db = get_db()
+    db.execute('INSERT INTO session_templates (profile_id, name, exercises, created_at) VALUES (?,?,?,?)',
+               (pid, name, _json.dumps(exercises), _datetime.utcnow().isoformat() + 'Z'))
+    db.commit()
+    db.close()
+    return _json.dumps({'ok': True}), 201, {'Content-Type': 'application/json'}
+
+
+@app.route('/api/templates/<int:tid>', methods=['DELETE'])
+def api_templates_delete(tid):
+    pid = _profile_id()
+    db = get_db()
+    db.execute('DELETE FROM session_templates WHERE id=? AND profile_id=?', (tid, pid))
+    db.commit()
+    db.close()
+    return _json.dumps({'ok': True}), 200, {'Content-Type': 'application/json'}
+
+
+@app.route('/api/templates/<int:tid>/load', methods=['POST'])
+def api_templates_load(tid):
+    pid = _profile_id()
+    db = get_db()
+    row = db.execute('SELECT exercises FROM session_templates WHERE id=? AND profile_id=?', (tid, pid)).fetchone()
+    if not row:
+        db.close()
+        return _json.dumps({'error': 'Not found'}), 404, {'Content-Type': 'application/json'}
+    db.execute('UPDATE session_templates SET last_used_at=? WHERE id=?',
+               (_datetime.utcnow().isoformat() + 'Z', tid))
+    db.commit()
+    db.close()
+    exercises = _json.loads(row['exercises']) if row['exercises'] else []
+    return _json.dumps({'exercises': exercises}), 200, {'Content-Type': 'application/json'}
+
+

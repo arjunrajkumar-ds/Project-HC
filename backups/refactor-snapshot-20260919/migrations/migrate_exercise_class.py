@@ -21,8 +21,8 @@ import os
 import shutil
 from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tracker.db')
-BACKUP_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'backups')
+DB_PATH = os.path.join(os.path.dirname(__file__), 'tracker.db')
+BACKUP_DIR = os.path.join(os.path.dirname(__file__), 'backups')
 BACKUP_SUFFIX = f".bak-exerciseclass-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
 DEFAULT_CLASS = 'strength'

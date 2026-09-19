@@ -1,8 +1,3 @@
-import os as _mig_os, sys as _mig_sys
-_REPO_ROOT = _mig_os.path.dirname(_mig_os.path.dirname(_mig_os.path.abspath(__file__)))
-if _REPO_ROOT not in _mig_sys.path:
-    _mig_sys.path.insert(0, _REPO_ROOT)
-
 """One-time cleanup of messy food_items rows in tracker.db.
 
 Removes quantity/gram-prefixed names that polluted the food library (e.g.
@@ -24,7 +19,7 @@ import shutil
 import sqlite3
 from datetime import datetime
 
-from gymtracker import database as d
+import database as d
 
 DB = d.DB_PATH
 

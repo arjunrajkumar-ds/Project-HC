@@ -22,7 +22,7 @@ import os
 import shutil
 from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'tracker.db')
+DB_PATH = os.path.join(os.path.dirname(__file__), 'tracker.db')
 BACKUP_SUFFIX = f".bak-muaythai-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
 
