@@ -33,6 +33,81 @@ DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 # e.g. Rowing) a distance in metres.
 TRACKING_TYPES = ('weight_reps', 'reps', 'time', 'weight_time', 'cardio')
 
+# ── Per-type field model ─────────────────────────────────────────────────────
+# tracking_type is the SINGLE AUTHORITY for how a set of a given exercise is
+# logged. TRACKING_FIELDS maps each type to the gym_progression columns it uses,
+# split into 'required' (must be present + non-null on a logged set) and
+# 'optional' (accepted, may be null). Every other progression column is ignored
+# for that type. The Add/Edit form, the set-logging validation, and the
+# round-trip tests all read from this one spec so they can never drift apart.
+#
+#   weight_reps  — loaded strength: weight × reps × sets   (e.g. Bench Press)
+#   reps         — bodyweight reps: reps × sets            (e.g. Push-up, Muay
+#                  Thai straight sets counted as reps)
+#   time         — timed hold / duration per set           (e.g. Plank)
+#   weight_time  — load held for a duration per set        (e.g. Farmer's Carry)
+#   cardio       — duration + free-text machine setting, optional distance
+#                  (e.g. Rowing, Bike)
+#
+# Column universe on gym_progression: weight_kg, reps, sets, duration_s,
+# distance_m, setting.
+TRACKING_FIELDS = {
+    'weight_reps': {'required': ('weight_kg', 'reps', 'sets'),
+                    'optional': ()},
+    'reps':        {'required': ('reps', 'sets'),
+                    'optional': ()},
+    'time':        {'required': ('duration_s',),
+                    'optional': ('sets',)},
+    'weight_time': {'required': ('weight_kg', 'duration_s'),
+                    'optional': ('sets',)},
+    'cardio':      {'required': ('duration_s',),
+                    'optional': ('distance_m', 'setting')},
+}
+
+# Human labels for the per-type fields — used by the form to render the right
+# inputs and by error messages.
+PROGRESSION_FIELD_LABELS = {
+    'weight_kg': 'Weight (kg)',
+    'reps': 'Reps',
+    'sets': 'Sets',
+    'duration_s': 'Duration (s)',
+    'distance_m': 'Distance (m)',
+    'setting': 'Setting',
+}
+
+
+def tracking_field_spec(tracking_type):
+    """Return {'required': (...), 'optional': (...)} for a tracking_type.
+    Unknown types fall back to weight_reps so the caller never KeyErrors."""
+    return TRACKING_FIELDS.get(tracking_type, TRACKING_FIELDS['weight_reps'])
+
+
+def validate_progression_fields(tracking_type, values):
+    """Validate a dict of proposed per-set values against the type's spec.
+
+    Returns (ok, error). Enforces that every 'required' field for the type is
+    present and non-null; fields outside required+optional are ignored (not an
+    error — the caller may pass a superset). Numeric fields must be numbers.
+    """
+    if tracking_type not in TRACKING_TYPES:
+        return False, f'Invalid tracking type "{tracking_type}".'
+    spec = tracking_field_spec(tracking_type)
+    for field in spec['required']:
+        v = values.get(field)
+        if v is None or (isinstance(v, str) and v.strip() == ''):
+            label = PROGRESSION_FIELD_LABELS.get(field, field)
+            return False, f'{label} is required for {tracking_type} exercises.'
+    # Type-check the numeric columns when supplied.
+    for field in ('weight_kg', 'reps', 'sets', 'duration_s', 'distance_m'):
+        v = values.get(field)
+        if v is not None and v != '' and not isinstance(v, (int, float)):
+            try:
+                float(v)
+            except (TypeError, ValueError):
+                label = PROGRESSION_FIELD_LABELS.get(field, field)
+                return False, f'{label} must be a number.'
+    return True, None
+
 # Tier labels for display
 TIER_LABELS = {
     1: 'T1 — Main',
@@ -48,6 +123,32 @@ def _gym_db():
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
+
+def _db_error_message(exc):
+    """Translate a raw sqlite3.Error into an actionable, user-facing message.
+
+    The most common failure in this app is schema drift — the code writes a
+    column the live tracker.db never got (a migration wasn't run). SQLite
+    reports that as OperationalError: 'no such column: X'. Surface exactly
+    which column and point at the fix, instead of a generic 'failed'.
+    """
+    msg = str(exc)
+    low = msg.lower()
+    if 'no such column' in low:
+        col = msg.split(':', 1)[1].strip() if ':' in msg else msg
+        return (f'Database schema is out of date — missing column "{col}". '
+                f'Run the pending migration in migrations/ (e.g. '
+                f'python migrations/migrate_exercise_class.py) and retry.')
+    if 'no such table' in low:
+        return (f'Database schema is out of date — {msg}. '
+                f'Run the migrations in migrations/ and retry.')
+    if 'not null constraint failed' in low:
+        return f'A required field is missing: {msg.split(":",1)[-1].strip()}.'
+    if 'datatype mismatch' in low:
+        return f'A field has the wrong type: {msg}.'
+    # Fall back to the raw reason — still far better than a generic "failed".
+    return f'Database error: {msg}'
 
 
 def _iw_from_tracking(tracking_type):
@@ -182,9 +283,11 @@ def get_gym_bank_grouped(include_archived=False):
             k = e.get('function')
             if k and k not in present_keys:
                 present_keys.append(k)
-        # Compose ordering: seeded keys (in seed order) that are present, then
-        # any present-but-unseeded keys (alphabetical), then None (Unassigned).
-        ordered_keys = [k for k in seeded_keys if k in present_keys]
+        # Compose ordering: ALL seeded keys (in seed order) — including ones
+        # with zero exercises so a freshly-created function is visible in the
+        # databank before anything is filed under it — then any
+        # present-but-unseeded keys (alphabetical), then None (Unassigned).
+        ordered_keys = list(seeded_keys)
         ordered_keys += sorted(k for k in present_keys if k not in seeded_keys)
 
         functions = []
@@ -473,6 +576,8 @@ def gym_add_exercise(name, tier, muscle_group, function=None, is_enabled=True,
         return True, None
     except sqlite3.IntegrityError:
         return False, f'An exercise named "{name}" already exists.'
+    except sqlite3.Error as e:
+        return False, _db_error_message(e)
     finally:
         conn.close()
 
@@ -503,6 +608,8 @@ def gym_update_exercise(exercise_id, **kwargs):
         return True, None
     except sqlite3.IntegrityError as e:
         return False, str(e)
+    except sqlite3.Error as e:
+        return False, _db_error_message(e)
     finally:
         conn.close()
 

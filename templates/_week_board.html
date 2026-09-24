@@ -1,0 +1,138 @@
+{# ── This-week board — Home redesign 1b ────────────────────────────────────
+   Full-width 7-day calendar (tall activity tiles) + streak chip + a stat-tile
+   row (calorie adherence · protein adherence · streak). Sits below the rings.
+   Expects:
+     week_days = 7 × {day_short, day_num, is_today, is_past, active,
+                      activities?}   — `activities` optional list of session
+                      types (gym/swim/pilates/cardio). Typed+coloured tiles when
+                      present (Arjun); single active/rest fallback otherwise
+                      (Gayathri v1).
+     workouts  = {done, target}      — "N / M done" badge
+     adherence = {cal_pct, prot_pct, cal_days, prot_days, days_elapsed}
+     streak    = {days}
+   Aesthetic: elevation cards, --font-display numbers, --font-mono labels,
+   Material Symbols activity glyphs. Colours: gym→--green, swim→--blue,
+   pilates→--purple, cardio→--waiting.
+#}
+<style>
+.wb-card {
+    background: var(--panel-alt); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); box-shadow: var(--elev-1); padding: 16px;
+}
+.wb-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.wb-head-label {
+    font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--dim);
+}
+.wb-streak {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--purple);
+}
+.wb-streak .msym { font-size: 16px; }
+.wb-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.wb-day { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.wb-day-name {
+    font-family: var(--font-mono); font-size: 9px; font-weight: 600;
+    text-transform: uppercase; color: var(--dim);
+}
+.wb-day-name.today { color: var(--accent); font-weight: 700; }
+.wb-day-num { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--text-strong); line-height: 1; }
+.wb-day-num.muted { color: var(--muted); }
+.wb-tile {
+    width: 100%; height: 34px; border-radius: var(--radius-sm); box-sizing: border-box;
+    display: flex; align-items: center; justify-content: center;
+}
+.wb-tile .msym { font-size: 16px; color: #fff; }
+.wb-tile.gym     { background: var(--green); }
+.wb-tile.swim    { background: var(--blue); }
+.wb-tile.pilates { background: var(--purple); }
+.wb-tile.cardio  { background: var(--waiting); }
+.wb-tile.active  { background: var(--accent); }
+.wb-tile.active .msym, .wb-tile.gym .msym, .wb-tile.swim .msym,
+.wb-tile.pilates .msym, .wb-tile.cardio .msym { color: #fff; }
+.wb-tile.today { border: 2px solid var(--text-strong); }
+.wb-tile.empty { background: var(--panel-soft); border: 1px dashed var(--border); }
+.wb-tile.empty.today { border: 2px solid var(--accent); }
+.wb-tile.empty .msym { font-size: 15px; color: var(--dimmer); }
+
+.wb-legend { display: flex; gap: 14px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.wb-legend-item { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.wb-legend-dot { width: 9px; height: 9px; border-radius: 2px; }
+.wb-legend-dot.gym { background: var(--green); }
+.wb-legend-dot.swim { background: var(--blue); }
+.wb-legend-dot.pilates { background: var(--purple); }
+
+.wb-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
+.wb-stat {
+    background: var(--panel-alt); border: 1px solid var(--border);
+    border-radius: var(--radius-md); box-shadow: var(--elev-1); padding: 13px;
+}
+.wb-stat-top { display: flex; align-items: center; gap: 6px; }
+.wb-stat-top .msym { font-size: 16px; }
+.wb-stat-top.cal .msym { color: var(--accent); }
+.wb-stat-top.prot .msym { color: var(--blue); }
+.wb-stat-top.streak .msym { color: var(--purple); }
+.wb-stat-label { font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--dim); }
+.wb-stat-val { font-family: var(--font-display); font-size: 22px; font-weight: 700; color: var(--text-strong); margin-top: 6px; line-height: 1; letter-spacing: -0.01em; }
+.wb-stat-val .unit { font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--dim); }
+.wb-stat-sub { font-family: var(--font-mono); font-size: 9px; color: var(--dimmer); margin-top: 4px; }
+</style>
+
+{%- set icons = {'gym':'fitness_center','swim':'pool','pilates':'self_improvement','cardio':'directions_run'} -%}
+{%- set ns = namespace(any_typed=false) -%}
+{%- for d in week_days -%}{%- if d.activities and d.activities|length > 0 -%}{%- set ns.any_typed = true -%}{%- endif -%}{%- endfor -%}
+
+<section class="section">
+    <div class="wb-card">
+        <div class="wb-head">
+            <span class="wb-head-label">This week</span>
+            {% if streak.days and streak.days > 0 %}
+            <span class="wb-streak"><span class="msym fill">local_fire_department</span>{{ streak.days }}-day streak</span>
+            {% else %}
+            <span class="wb-streak" style="color:var(--green);">{{ workouts.done }} / {{ workouts.target }} done</span>
+            {% endif %}
+        </div>
+        <div class="wb-grid">
+            {% for d in week_days %}
+            {%- set acts = d.activities or [] -%}
+            {%- set primary = ('gym' if 'gym' in acts else ('swim' if 'swim' in acts else ('pilates' if 'pilates' in acts else ('cardio' if 'cardio' in acts else None)))) -%}
+            <div class="wb-day">
+                <span class="wb-day-name{% if d.is_today %} today{% endif %}">{{ d.day_short[:1] }}</span>
+                <span class="wb-day-num{% if not d.is_today and not d.active and not primary %} muted{% endif %}">{{ d.day_num }}</span>
+                {% if primary %}
+                    <div class="wb-tile {{ primary }}{% if d.is_today %} today{% endif %}"><span class="msym fill">{{ icons[primary] }}</span></div>
+                {% elif d.active %}
+                    <div class="wb-tile active{% if d.is_today %} today{% endif %}"><span class="msym fill">fitness_center</span></div>
+                {% else %}
+                    <div class="wb-tile empty{% if d.is_today %} today{% endif %}">{% if not d.is_past and not d.is_today %}<span class="msym">bed</span>{% endif %}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% if ns.any_typed %}
+        <div class="wb-legend">
+            <span class="wb-legend-item"><span class="wb-legend-dot gym"></span>Gym</span>
+            <span class="wb-legend-item"><span class="wb-legend-dot swim"></span>Swim</span>
+            <span class="wb-legend-item"><span class="wb-legend-dot pilates"></span>Pilates</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="wb-stats">
+        <div class="wb-stat">
+            <div class="wb-stat-top cal"><span class="msym">restaurant</span><span class="wb-stat-label">Cal wk</span></div>
+            <div class="wb-stat-val">{% if adherence.cal_pct is none %}—{% else %}{{ adherence.cal_pct }}<span class="unit">%</span>{% endif %}</div>
+            <div class="wb-stat-sub">{% if adherence.cal_pct is none %}no goal{% else %}{{ adherence.cal_days }}/{{ adherence.days_elapsed }} days on target{% endif %}</div>
+        </div>
+        <div class="wb-stat">
+            <div class="wb-stat-top prot"><span class="msym">egg_alt</span><span class="wb-stat-label">Protein wk</span></div>
+            <div class="wb-stat-val">{% if adherence.prot_pct is none %}—{% else %}{{ adherence.prot_pct }}<span class="unit">%</span>{% endif %}</div>
+            <div class="wb-stat-sub">{% if adherence.prot_pct is none %}no goal{% else %}{{ adherence.prot_days }}/{{ adherence.days_elapsed }} days hit{% endif %}</div>
+        </div>
+        <div class="wb-stat">
+            <div class="wb-stat-top streak"><span class="msym fill">local_fire_department</span><span class="wb-stat-label">Streak</span></div>
+            <div class="wb-stat-val">{{ streak.days }}<span class="unit">{% if streak.days == 1 %}day{% else %}days{% endif %}</span></div>
+            <div class="wb-stat-sub">{% if streak.days > 0 %}keep it going{% else %}log a session{% endif %}</div>
+        </div>
+    </div>
+</section>

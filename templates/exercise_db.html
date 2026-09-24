@@ -152,6 +152,7 @@
 
 .delete-reason { font-family: var(--font-mono); font-size: 9px; color: var(--dimmer); }
 .row-error { font-family: var(--font-mono); font-size: 10px; color: var(--red, #c97064); margin-top: 6px; display: none; }
+.track-hint { font-family: var(--font-mono); font-size: 10px; color: var(--muted, #9a9a9a); opacity: 0.85; }
 .row-error.show { display: block; }
 
 /* ── Add panel ───────────────────────────────────────────────────────────── */
@@ -234,12 +235,14 @@
         <div class="edit-field"><label>Function</label>
             <select id="add-fn"></select></div>
         <div class="edit-field"><label>Tracking</label>
-            <select id="add-tracking">
+            <select id="add-tracking" onchange="updateTrackingHint('add')">
                 <option value="weight_reps">Weight × reps</option>
                 <option value="reps">Reps only</option>
                 <option value="time">Time</option>
                 <option value="weight_time">Weight × time</option>
+                <option value="cardio">Cardio</option>
             </select></div>
+        <div class="edit-field grow"><label>Logs</label><span class="track-hint" id="add-track-hint"></span></div>
         <div class="edit-field"><label>Class</label>
             <select id="add-class">
                 <option value="strength" selected>Strength</option>
@@ -314,12 +317,14 @@
                 <div class="edit-field"><label>Function</label>
                     <select id="ed-fn-{{ ex.id }}" data-current="{{ ex.function or '' }}"></select></div>
                 <div class="edit-field"><label>Tracking</label>
-                    <select id="ed-tracking-{{ ex.id }}">
+                    <select id="ed-tracking-{{ ex.id }}" onchange="updateTrackingHint('ed', {{ ex.id }})">
                         <option value="weight_reps"{% if ex.tracking_type == 'weight_reps' %} selected{% endif %}>Weight × reps</option>
                         <option value="reps"{% if ex.tracking_type == 'reps' %} selected{% endif %}>Reps only</option>
                         <option value="time"{% if ex.tracking_type == 'time' %} selected{% endif %}>Time</option>
                         <option value="weight_time"{% if ex.tracking_type == 'weight_time' %} selected{% endif %}>Weight × time</option>
+                        <option value="cardio"{% if ex.tracking_type == 'cardio' %} selected{% endif %}>Cardio</option>
                     </select></div>
+                <div class="edit-field grow"><label>Logs</label><span class="track-hint" id="ed-track-hint-{{ ex.id }}"></span></div>
                 <div class="edit-field"><label>Class</label>
                     <select id="ed-class-{{ ex.id }}">
                         {% set _ec = ex.exercise_class or 'strength' %}
@@ -403,6 +408,8 @@
 <script>
 // Function metadata by muscle, for dependent selects + "new function" option.
 const FUNCTIONS_BY_MUSCLE = {{ functions_by_muscle | tojson }};
+const TRACKING_FIELDS = {{ tracking_fields | tojson }};
+const PROGRESSION_FIELD_LABELS = {{ progression_field_labels | tojson }};
 
 // ── CSRF-aware API helpers (never hand-roll headers per call site) ─────────
 async function apiPost(url, body) {
@@ -448,8 +455,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.ex-edit-panel').forEach(panel => {
         const id = panel.id.replace('edit-', '');
         populateFn('ed', parseInt(id));
+        updateTrackingHint('ed', parseInt(id));
     });
     populateFn('add');
+    updateTrackingHint('add');
 });
 
 // ── Dependent function select ──────────────────────────────────────────────
@@ -463,8 +472,14 @@ function populateFn(scope, id) {
     const current = fnSel.dataset.current || '';
     const fns = FUNCTIONS_BY_MUSCLE[muscle] || [];
     let html = '';
+    // Disambiguate options that share a display label (e.g. a stray duplicate
+    // function) by appending the raw key, so every entry is distinct and
+    // nothing silently looks "missing" behind an identical twin.
+    const labelCounts = {};
+    fns.forEach(f => { labelCounts[f.label] = (labelCounts[f.label] || 0) + 1; });
     fns.forEach(f => {
-        html += `<option value="${f.key}"${f.key === current ? ' selected' : ''}>${f.label}</option>`;
+        const text = labelCounts[f.label] > 1 ? `${f.label} (${f.key})` : f.label;
+        html += `<option value="${f.key}"${f.key === current ? ' selected' : ''}>${text}</option>`;
     });
     // Preserve a current key even if it's not (yet) in gym_functions
     if (current && !fns.some(f => f.key === current)) {
@@ -482,6 +497,27 @@ function populateFn(scope, id) {
     if (nf) nf.classList.toggle('open', fnSel.value === '__new__');
 }
 
+// ── Per-type field hint ─────────────────────────────────────────────────────
+// Show which per-set fields the chosen tracking_type will log, sourced from the
+// backend TRACKING_FIELDS spec so the form can never disagree with what the
+// logger actually persists. This is a HINT for the databank (metadata) screen;
+// the fields themselves are captured at log time on the Train page.
+function updateTrackingHint(scope, id) {
+    const trackSel = scope === 'add' ? document.getElementById('add-tracking')
+                                     : document.getElementById('ed-tracking-' + id);
+    const hintEl = scope === 'add' ? document.getElementById('add-track-hint')
+                                   : document.getElementById('ed-track-hint-' + id);
+    if (!trackSel || !hintEl) return;
+    const spec = TRACKING_FIELDS[trackSel.value];
+    if (!spec) { hintEl.textContent = ''; return; }
+    const lbl = k => PROGRESSION_FIELD_LABELS[k] || k;
+    const req = (spec.required || []).map(lbl);
+    const opt = (spec.optional || []).map(lbl);
+    let txt = req.join(' + ');
+    if (opt.length) txt += ` (optional: ${opt.join(', ')})`;
+    hintEl.textContent = 'Logs: ' + (txt || '—');
+}
+
 // Resolve the chosen function; if "__new__", POST it to /api/gym/functions first.
 async function resolveFunction(scope, id, muscle) {
     const fnSel = scope === 'add' ? document.getElementById('add-fn')
@@ -492,8 +528,17 @@ async function resolveFunction(scope, id, muscle) {
     const key = (keyEl.value || '').trim().toLowerCase();
     const label = (labelEl.value || '').trim();
     if (!key || !label) return { ok: false, error: 'New function needs a key and a label.' };
+    // If this key already exists for the muscle, just use it instead of
+    // erroring — the user's intent ("file under <key>") is satisfiable.
+    const existing = (FUNCTIONS_BY_MUSCLE[muscle] || []).find(f => f.key === key);
+    if (existing) return { ok: true, key };
     const r = await apiPost('/api/gym/functions', { muscle_group: muscle, key, label });
-    if (!r.ok) return { ok: false, error: (r.data && r.data.error) || 'Could not add function.' };
+    if (!r.ok) {
+        // A 409-style "already exists" is benign here — fall back to the key.
+        const msg = (r.data && r.data.error) || '';
+        if (/already exists/i.test(msg)) return { ok: true, key };
+        return { ok: false, error: msg || 'Could not add function.' };
+    }
     // cache locally so subsequent selects see it
     FUNCTIONS_BY_MUSCLE[muscle] = FUNCTIONS_BY_MUSCLE[muscle] || [];
     FUNCTIONS_BY_MUSCLE[muscle].push({ key, label });
@@ -567,7 +612,14 @@ async function doDelete(id) {
 }
 
 // ── Add ──────────────────────────────────────────────────────────────────────
-function toggleAdd() { document.getElementById('add-section').classList.toggle('open'); }
+function toggleAdd() {
+    const opened = document.getElementById('add-section').classList.toggle('open');
+    // Always sync the Function dropdown to the currently-selected muscle when
+    // the panel is opened — the muscle <select> may hold a browser-restored
+    // value whose 'change' event never fired, which would otherwise leave the
+    // function list empty/stale (e.g. muay_thai → Conditioning not showing).
+    if (opened) { populateFn('add'); updateTrackingHint('add'); }
+}
 
 async function addExercise() {
     const muscle = document.getElementById('add-muscle').value;

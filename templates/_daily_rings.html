@@ -1,0 +1,148 @@
+{# ── Daily rings (hero) — Home redesign 1a ─────────────────────────────────
+   Three SVG progress rings: calories · protein · workouts (this week), in an
+   elevation card matching the wireframe aesthetic. Replaces _macro_bar.html.
+   Expects:
+     macro    = {cal, cal_goal, prot, prot_goal}          (today's totals)
+     workouts = {done, target}                            (this week)
+   Aesthetic: --font-display for the big numbers, --font-mono for the x/y
+   readout, --bg-elevation card with --elev-1 shadow + --radius-lg.
+   Colours: calories → --accent, protein → --blue, workouts → --green.
+   Guards goal<=0 (empty ring). Geometry r=40 → circumference 251.33.
+   Defines window.macroBarUpdate(cal,calGoal,prot,protGoal) — SAME name as the
+   retired macro bar so the food logger's guarded calls refresh the rings.
+#}
+<style>
+.rings-card {
+    background: var(--panel-alt); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); box-shadow: var(--elev-1);
+    padding: 22px 16px;
+}
+.rings-row { display: flex; justify-content: space-around; gap: 6px; }
+.ring { display: flex; flex-direction: column; align-items: center; gap: 11px; }
+.ring-svg { position: relative; width: 92px; height: 92px; }
+.ring-svg svg { width: 92px; height: 92px; transform: rotate(-90deg); }
+.ring-track { stroke: var(--panel-soft); }
+.ring-fill  { transition: stroke-dashoffset .5s cubic-bezier(.22,.61,.36,1); }
+.ring-fill.cal  { stroke: var(--accent); }
+.ring-fill.prot { stroke: var(--blue); }
+.ring-fill.work { stroke: var(--green); }
+.ring-fill.over { stroke: var(--red); }
+.ring-centre {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+}
+.ring-val {
+    font-family: var(--font-display); font-size: 24px; font-weight: 700;
+    color: var(--text-strong); line-height: 1; letter-spacing: -0.01em;
+}
+.ring-unit { font-size: 9px; font-weight: 600; color: var(--dim); margin-top: 1px; }
+.ring-cap { text-align: center; }
+.ring-label {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--dim);
+}
+.ring-detail {
+    font-family: var(--font-mono); font-size: 11px; color: var(--muted);
+    margin-top: 3px;
+}
+</style>
+
+{%- set C = 251.33 -%}
+{%- set cal = (macro.cal or 0) -%}{%- set cal_goal = (macro.cal_goal or 0) -%}
+{%- set cal_pct = ((cal / cal_goal) if cal_goal > 0 else 0) -%}
+{%- set cal_over = cal_goal > 0 and cal > cal_goal -%}
+{%- set cal_off = (C * (1 - ([cal_pct, 1] | min))) if cal_goal > 0 else C -%}
+{%- set prot = (macro.prot or 0) -%}{%- set prot_goal = (macro.prot_goal or 0) -%}
+{%- set prot_pct = ((prot / prot_goal) if prot_goal > 0 else 0) -%}
+{%- set prot_over = prot_goal > 0 and prot > prot_goal -%}
+{%- set prot_off = (C * (1 - ([prot_pct, 1] | min))) if prot_goal > 0 else C -%}
+{%- set w_done = (workouts.done or 0) -%}{%- set w_target = (workouts.target or 0) -%}
+{%- set w_pct = ((w_done / w_target) if w_target > 0 else 0) -%}
+{%- set w_off = (C * (1 - ([w_pct, 1] | min))) if w_target > 0 else C -%}
+
+<div class="rings-card" id="daily-rings">
+    <div class="rings-row">
+        {# Calories #}
+        <div class="ring">
+            <div class="ring-svg">
+                <svg viewBox="0 0 92 92">
+                    <circle class="ring-track" cx="46" cy="46" r="40" fill="none" stroke-width="8"/>
+                    <circle class="ring-fill cal{% if cal_over %} over{% endif %}" id="ring-cal"
+                            cx="46" cy="46" r="40" fill="none" stroke-width="8" stroke-linecap="round"
+                            stroke-dasharray="{{ C }}" stroke-dashoffset="{{ cal_off | round(1) }}"/>
+                </svg>
+                <div class="ring-centre">
+                    <span class="ring-val" id="ring-cal-val">{{ (cal_pct * 100) | round | int if cal_goal > 0 else 0 }}</span>
+                    <span class="ring-unit">%</span>
+                </div>
+            </div>
+            <div class="ring-cap">
+                <div class="ring-label">Calories</div>
+                <div class="ring-detail" id="ring-cal-detail">{{ '{:,}'.format(cal | round | int) }} / {{ '{:,}'.format(cal_goal | round | int) }}</div>
+            </div>
+        </div>
+        {# Protein #}
+        <div class="ring">
+            <div class="ring-svg">
+                <svg viewBox="0 0 92 92">
+                    <circle class="ring-track" cx="46" cy="46" r="40" fill="none" stroke-width="8"/>
+                    <circle class="ring-fill prot{% if prot_over %} over{% endif %}" id="ring-prot"
+                            cx="46" cy="46" r="40" fill="none" stroke-width="8" stroke-linecap="round"
+                            stroke-dasharray="{{ C }}" stroke-dashoffset="{{ prot_off | round(1) }}"/>
+                </svg>
+                <div class="ring-centre">
+                    <span class="ring-val" id="ring-prot-val">{{ (prot_pct * 100) | round | int if prot_goal > 0 else 0 }}</span>
+                    <span class="ring-unit">%</span>
+                </div>
+            </div>
+            <div class="ring-cap">
+                <div class="ring-label">Protein</div>
+                <div class="ring-detail" id="ring-prot-detail">{{ prot | round | int }} / {{ prot_goal | round | int }} g</div>
+            </div>
+        </div>
+        {# Workouts #}
+        <div class="ring">
+            <div class="ring-svg">
+                <svg viewBox="0 0 92 92">
+                    <circle class="ring-track" cx="46" cy="46" r="40" fill="none" stroke-width="8"/>
+                    <circle class="ring-fill work" id="ring-work"
+                            cx="46" cy="46" r="40" fill="none" stroke-width="8" stroke-linecap="round"
+                            stroke-dasharray="{{ C }}" stroke-dashoffset="{{ w_off | round(1) }}"/>
+                </svg>
+                <div class="ring-centre">
+                    <span class="ring-val">{{ w_done }}</span>
+                    <span class="ring-unit">of {{ w_target }}</span>
+                </div>
+            </div>
+            <div class="ring-cap">
+                <div class="ring-label">Workouts</div>
+                <div class="ring-detail">this week</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+window.macroBarUpdate = function (cal, calGoal, prot, protGoal) {
+    var C = 251.33;
+    function paint(id, valId, detailId, val, goal, unit) {
+        var ring = document.getElementById(id);
+        if (!ring) return;
+        val = +val || 0; goal = +goal || 0;
+        var over = goal > 0 && val > goal;
+        var pct = goal > 0 ? (val / goal) : 0;
+        ring.style.strokeDashoffset = (goal > 0 ? C * (1 - Math.min(pct, 1)) : C).toFixed(1);
+        ring.classList.toggle('over', over);
+        var v = document.getElementById(valId);
+        if (v) v.textContent = goal > 0 ? Math.round(pct * 100) : 0;
+        var d = document.getElementById(detailId);
+        if (d) {
+            var vt = unit === 'g' ? Math.round(val) : Math.round(val).toLocaleString();
+            var gt = unit === 'g' ? (Math.round(goal) + ' g') : Math.round(goal).toLocaleString();
+            d.textContent = vt + ' / ' + gt;
+        }
+    }
+    paint('ring-cal', 'ring-cal-val', 'ring-cal-detail', cal, calGoal, '');
+    paint('ring-prot', 'ring-prot-val', 'ring-prot-detail', prot, protGoal, 'g');
+};
+</script>

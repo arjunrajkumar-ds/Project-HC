@@ -7,12 +7,12 @@
    fixed floated whole-kg-tick y-axis (never zero-based), <2-pt empty state.
 #}
 <style>
-.wc-card { background: var(--panel); border: 1px solid var(--border);
-           border-radius: var(--radius-md); padding: 12px 14px; }
+.wc-card { background: var(--panel-alt); border: 1px solid var(--border);
+           border-radius: var(--radius-lg); box-shadow: var(--elev-1); padding: 14px; }
 .wc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
 .wc-title { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em;
             text-transform: uppercase; color: var(--dim); }
-.wc-seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.wc-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
 .wc-seg button {
     background: transparent; border: none; cursor: pointer; color: var(--dim);
     font-family: var(--font-mono); font-size: 9px; letter-spacing: .04em; text-transform: uppercase;
@@ -29,6 +29,7 @@
             font-style: italic; text-align: center; padding: 28px 10px; }
 </style>
 <section class="section">
+    <p class="home-eyebrow">Weight</p>
     <div class="wc-card">
         <div class="wc-head">
             <span class="wc-title">weight over time</span>

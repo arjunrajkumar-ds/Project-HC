@@ -10,7 +10,7 @@ from datetime import datetime as _datetime
 from .database import init_db, get_db, get_session_cardio, get_cardio_choices, log_cardio_session, get_muscle_group_activity, bank_scope_for_profile, get_fatigue_state, get_sessions_with_headlines, get_session_detail_with_progression, get_macro_goals, set_macro_goals, sync_food_log_from_library, get_food_log, add_food_entry, log_food_entry, delete_food_entry, get_pending_foods, define_food_item, delete_food_item, get_food_history, get_recent_foods, get_food_library, get_food_components, get_food_component_mode, save_food_components, save_food_components_pct, get_profiles, _parse_qty_name, _parse_gram_prefix, _food_key, log_food_reconciliation, get_food_reconciliations, log_body_weight, get_body_weight, get_body_weight_history, get_pilates_session, get_mission_progress, clear_mission_stage, get_exercise_tallies, bump_exercise_tally, ack_exercise_tally, get_crew_status, get_food_types, create_food_type, update_food_type, delete_food_type, count_foods_with_type, get_distinct_source_names, enrich_log_entries
 from .swim_routes import bp as swim_bp
 from .pilates_routes import bp as pilates_bp
-from .gym_bank import get_gym_bank, get_gym_bank_grouped, get_gym_exercise, gym_add_exercise, gym_update_exercise, gym_set_enabled, gym_archive_exercise, gym_unarchive_exercise, gym_delete_exercise, gym_reorder_function, get_gym_functions, gym_add_function, log_gym_set, get_today_tally, undo_last_today, get_or_create_today_gym_session, get_exercise_prefill, get_live_session_state, apply_session_rollover, TRACKING_TYPES, TIER_LABELS
+from .gym_bank import get_gym_bank, get_gym_bank_grouped, get_gym_exercise, gym_add_exercise, gym_update_exercise, gym_set_enabled, gym_archive_exercise, gym_unarchive_exercise, gym_delete_exercise, gym_reorder_function, get_gym_functions, gym_add_function, log_gym_set, get_today_tally, undo_last_today, get_or_create_today_gym_session, get_exercise_prefill, get_live_session_state, apply_session_rollover, TRACKING_TYPES, TRACKING_FIELDS, PROGRESSION_FIELD_LABELS, TIER_LABELS
 app = Flask(__name__,
             template_folder=_os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'templates'),
             static_folder=_os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'static'))
@@ -306,6 +306,70 @@ def profiles_select():
     return redirect(url_for('dashboard'))
 
 
+# ── Home redesign: weekly rings / board metrics ──────────────────────────────
+# Adherence "on-target" bands (tunable): a day counts toward calorie adherence
+# when logged calories are 80–110% of goal; toward protein adherence when
+# logged protein is ≥ 80% of goal. Streak = consecutive days (back from today)
+# with a gym session.
+_ADH_CAL_LO, _ADH_CAL_HI = 0.80, 1.10
+_ADH_PROT_LO = 0.80
+
+
+def _home_week_metrics(profile_id, today, monday, goals, week_days):
+    """Compute {workouts, adherence, streak} for the home hero rings + board.
+
+    Opens its own short-lived DB connection (callers may have already closed
+    theirs). `week_days` is the already-built 7-day list; workouts_done is
+    counted from its `active` flags so gym-day logic stays in one place.
+    """
+    workouts_done = sum(1 for d in week_days if d.get('active'))
+    target = int((goals or {}).get('workout_target') or 5)
+    workouts = {'done': workouts_done, 'target': target}
+
+    cal_goal = (goals or {}).get('calories') or 0
+    prot_goal = (goals or {}).get('protein_g') or 0
+
+    db = get_db()
+    # Per-day calorie/protein totals for the current week (Mon → today).
+    rows = db.execute(
+        'SELECT date, COALESCE(SUM(calories),0) AS cal, COALESCE(SUM(protein_g),0) AS prot '
+        'FROM food_log WHERE date BETWEEN ? AND ? AND profile_id=? GROUP BY date',
+        (monday.isoformat(), today.isoformat(), profile_id)).fetchall()
+    by_day = {r['date']: r for r in rows}
+
+    days_elapsed = (today - monday).days + 1  # 1..7
+    cal_hits = prot_hits = 0
+    for i in range(days_elapsed):
+        d = (monday + timedelta(days=i)).isoformat()
+        r = by_day.get(d)
+        day_cal = (r['cal'] if r else 0) or 0
+        day_prot = (r['prot'] if r else 0) or 0
+        if cal_goal > 0 and _ADH_CAL_LO * cal_goal <= day_cal <= _ADH_CAL_HI * cal_goal:
+            cal_hits += 1
+        if prot_goal > 0 and day_prot >= _ADH_PROT_LO * prot_goal:
+            prot_hits += 1
+
+    cal_pct = round(cal_hits / days_elapsed * 100) if (days_elapsed and cal_goal > 0) else None
+    prot_pct = round(prot_hits / days_elapsed * 100) if (days_elapsed and prot_goal > 0) else None
+    adherence = {'cal_pct': cal_pct, 'prot_pct': prot_pct,
+                 'cal_days': cal_hits, 'prot_days': prot_hits, 'days_elapsed': days_elapsed}
+
+    # Streak: consecutive days with a gym session, counting back from today.
+    gym_rows = db.execute(
+        "SELECT DISTINCT date FROM sessions WHERE profile_id=? AND type='gym' ORDER BY date DESC LIMIT 400",
+        (profile_id,)).fetchall()
+    gym_dates = {r['date'] for r in gym_rows}
+    streak_days = 0
+    cur = today
+    while cur.isoformat() in gym_dates:
+        streak_days += 1
+        cur = cur - timedelta(days=1)
+    streak = {'days': streak_days}
+    db.close()
+
+    return workouts, adherence, streak
+
+
 @app.route('/')
 def dashboard():
     if _profile_id() in (2, 3):
@@ -339,7 +403,9 @@ def dashboard():
         macro = {'cal': total_cal, 'cal_goal': (goals.get('calories') or 0),
                  'prot': total_prot, 'prot_goal': (goals.get('protein_g') or 0)}
         db.close()
+        _workouts, _adherence, _streak = _home_week_metrics(_profile_id(), today, monday_date, goals, week_days)
         return render_template('home_gayathri.html', today=today_iso, macro=macro, total_cal=total_cal, total_prot=total_prot, goals=goals, today_weight=today_weight, weight_history=[dict(r) for r in (weight_history or [])], week_days=week_days, last_session=dict(last_sess) if last_sess else None,
+                               workouts=_workouts, adherence=_adherence, streak=_streak,
                                food_entries=food_entries, recent_foods=recent_foods, food_library=food_library)
 
     # Support date navigation via ?date= param
@@ -407,7 +473,9 @@ def dashboard():
     macro = {'cal': (food_totals.get('calories') or 0), 'cal_goal': ((food_goals or {}).get('calories') or 0),
              'prot': (food_totals.get('protein_g') or 0), 'prot_goal': ((food_goals or {}).get('protein_g') or 0)}
 
-    return render_template('dashboard.html', last_session=last_session, today=today.isoformat(), is_today=is_today, prev_date=prev_date, next_date=next_date, week_days=week_days, today_weight=today_weight, weight_history=[dict(r) for r in (weight_history or [])], food_goals=food_goals, macro=macro, food_date=food_date, food_prev_date=food_prev_date, food_next_date=food_next_date, food_date_label=food_date_label, food_is_today=food_is_today, food_entries=food_entries, recent_foods=recent_foods)
+    _workouts, _adherence, _streak = _home_week_metrics(_profile_id(), today, monday, food_goals, week_days)
+
+    return render_template('dashboard.html', last_session=last_session, today=today.isoformat(), is_today=is_today, prev_date=prev_date, next_date=next_date, week_days=week_days, today_weight=today_weight, weight_history=[dict(r) for r in (weight_history or [])], food_goals=food_goals, macro=macro, workouts=_workouts, adherence=_adherence, streak=_streak, food_date=food_date, food_prev_date=food_prev_date, food_next_date=food_next_date, food_date_label=food_date_label, food_is_today=food_is_today, food_entries=food_entries, recent_foods=recent_foods)
 
 
 @app.route('/session/new')
@@ -1186,7 +1254,10 @@ def api_gym_exercise_update(exercise_id):
     whitelists them and keeps the deprecated is_weighted flag in sync."""
     data = request.get_json(silent=True) or {}
     # Only forward known keys; ignore anything unexpected the client sends.
-    ok, err = gym_update_exercise(exercise_id, **data)
+    try:
+        ok, err = gym_update_exercise(exercise_id, **data)
+    except Exception as e:  # never leak an opaque 500 to the client
+        return {'ok': False, 'error': f'Unexpected error: {e}'}, 400
     if not ok:
         return {'ok': False, 'error': err}, 400
     return {'ok': True}
@@ -1251,17 +1322,20 @@ def api_gym_functions():
 def api_gym_exercise_add():
     """Add a new gym exercise."""
     data = request.get_json(silent=True) or {}
-    ok, err = gym_add_exercise(
-        name=data.get('name', ''),
-        tier=_safe_int(data.get('tier'), 2),
-        muscle_group=data.get('muscle_group', ''),
-        function=data.get('function') or None,
-        is_enabled=bool(data.get('is_enabled', True)),
-        notes=data.get('notes') or None,
-        tracking_type=data.get('tracking_type') or 'weight_reps',
-        sort_order=_safe_int(data.get('sort_order'), 0),
-        exercise_class=data.get('exercise_class') or 'strength',
-    )
+    try:
+        ok, err = gym_add_exercise(
+            name=data.get('name', ''),
+            tier=_safe_int(data.get('tier'), 2),
+            muscle_group=data.get('muscle_group', ''),
+            function=data.get('function') or None,
+            is_enabled=bool(data.get('is_enabled', True)),
+            notes=data.get('notes') or None,
+            tracking_type=data.get('tracking_type') or 'weight_reps',
+            sort_order=_safe_int(data.get('sort_order'), 0),
+            exercise_class=data.get('exercise_class') or 'strength',
+        )
+    except Exception as e:  # never leak an opaque 500 to the client
+        return {'ok': False, 'error': f'Unexpected error: {e}'}, 400
     if not ok:
         return {'ok': False, 'error': err}, 400
     return {'ok': True}
@@ -1619,7 +1693,9 @@ def exercise_db():
                            muscle_groups=list(_GYM_GROUP_LABELS.keys()),
                            functions_by_muscle=functions_by_muscle,
                            exercise_classes=['bodyweight', 'strength'],
-                           tracking_types=list(TRACKING_TYPES))
+                           tracking_types=list(TRACKING_TYPES),
+                           tracking_fields=TRACKING_FIELDS,
+                           progression_field_labels=PROGRESSION_FIELD_LABELS)
 
 
 @app.route('/food/shared')

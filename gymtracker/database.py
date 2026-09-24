@@ -784,9 +784,14 @@ def init_db():
             calories   REAL NOT NULL DEFAULT 2000,
             protein_g  REAL NOT NULL DEFAULT 150,
             carbs_g    REAL NOT NULL DEFAULT 200,
-            fat_g      REAL NOT NULL DEFAULT 70
+            fat_g      REAL NOT NULL DEFAULT 70,
+            workout_target INTEGER NOT NULL DEFAULT 5
         )
     """)
+    # Additive migration: existing DBs won't have workout_target — add it in place.
+    _mg_cols2 = {r[1] for r in conn.execute('PRAGMA table_info(macro_goals)')}
+    if 'workout_target' not in _mg_cols2:
+        conn.execute('ALTER TABLE macro_goals ADD COLUMN workout_target INTEGER NOT NULL DEFAULT 5')
     conn.execute("""
         INSERT OR IGNORE INTO macro_goals (profile_id, calories, protein_g, carbs_g, fat_g)
         VALUES (1, 2000, 150, 200, 70)
@@ -2735,7 +2740,7 @@ def get_session_detail_with_progression(session_id):
 def get_macro_goals(profile_id=1):
     conn = get_db()
     row = conn.execute('SELECT * FROM macro_goals WHERE profile_id = ?', (profile_id,)).fetchone()
-    goals = dict(row) if row else {'calories': 2000, 'protein_g': 150, 'carbs_g': 200, 'fat_g': 70}
+    goals = dict(row) if row else {'calories': 2000, 'protein_g': 150, 'carbs_g': 200, 'fat_g': 70, 'workout_target': 5}
 
     # Dynamic protein goal: 1g per pound of bodyweight from most recent weigh-in
     latest_weight = conn.execute(
@@ -2750,14 +2755,20 @@ def get_macro_goals(profile_id=1):
     return goals
 
 
-def set_macro_goals(calories, protein_g, carbs_g, fat_g, profile_id=1):
+def set_macro_goals(calories, protein_g, carbs_g, fat_g, profile_id=1, workout_target=None):
+    # workout_target=None → preserve the existing value (keeps the food-goals form,
+    # which passes only the 4 macros + profile_id, working unchanged).
     conn = get_db()
+    if workout_target is None:
+        _row = conn.execute('SELECT workout_target FROM macro_goals WHERE profile_id = ?', (profile_id,)).fetchone()
+        workout_target = _row['workout_target'] if _row else 5
     conn.execute("""
-        INSERT INTO macro_goals (profile_id, calories, protein_g, carbs_g, fat_g) VALUES (?,?,?,?,?)
+        INSERT INTO macro_goals (profile_id, calories, protein_g, carbs_g, fat_g, workout_target) VALUES (?,?,?,?,?,?)
         ON CONFLICT(profile_id) DO UPDATE SET
             calories=excluded.calories, protein_g=excluded.protein_g,
-            carbs_g=excluded.carbs_g,   fat_g=excluded.fat_g
-    """, (profile_id, calories, protein_g, carbs_g, fat_g))
+            carbs_g=excluded.carbs_g,   fat_g=excluded.fat_g,
+            workout_target=excluded.workout_target
+    """, (profile_id, calories, protein_g, carbs_g, fat_g, workout_target))
     conn.commit()
     conn.close()
 

@@ -210,6 +210,43 @@
     transition: background .1s, color .1s, border-color .1s;
 }
 .unit-btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   HOME REDESIGN — aesthetic overrides (shared with dashboard.html)
+   ═══════════════════════════════════════════════════════════════════════ */
+.dash-header { align-items: center; margin-bottom: 6px; }
+.eyebrow { font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+.dash-title { font-family: var(--font-display); font-size: 30px; font-weight: 700;
+    letter-spacing: -0.02em; color: var(--text-strong); margin-top: 2px; }
+.mini-weight { height: 36px; padding: 0 12px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--panel-alt); box-shadow: var(--elev-1); gap: 6px; }
+.mw-icon.msym { font-size: 17px; color: var(--dim); }
+.mw-val { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--text-strong); }
+.mw-val-unit { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--dim); }
+.btn-info { width: 36px; height: 36px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--panel-alt); box-shadow: var(--elev-1); color: var(--dim); }
+.btn-info .msym { font-size: 18px; }
+.switch-user { border-radius: 999px; }
+.home-eyebrow { font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--dim); margin: 0 2px 10px; }
+.fl-grid { gap: 12px; }
+.fl-col { border-radius: var(--radius-lg); box-shadow: var(--elev-1); background: var(--panel-alt); overflow: hidden; }
+.fl-col-header { padding: 12px 14px 10px; }
+.fl-col-title { display: inline-flex; align-items: center; gap: 6px; }
+.fl-col-title::before { content: ""; width: 9px; height: 9px; border-radius: 3px; background: var(--meal-col); flex-shrink: 0; }
+.fl-entry { padding: 7px 6px; border-radius: var(--radius-md); }
+.fl-add-btn { border-radius: var(--radius-md); padding: 9px 0; background: var(--panel-soft); }
+.fl-add-btn::before { font-family: "Material Symbols Rounded"; content: "add"; font-size: 15px; vertical-align: middle; margin-right: 4px; }
+.fl-name-input, .fl-submit-btn { border-radius: var(--radius-md); }
+.fl-recent-chip { border-radius: 999px; }
+.define-dialog, .food-card-dialog { border-radius: var(--radius-lg) !important; box-shadow: var(--elev-3) !important; }
+.section { margin-bottom: 16px; }
+/* Gayathri stat cards → elevation aesthetic */
+.stats-row { gap: 12px; }
+.stat-card { background: var(--panel-alt); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); box-shadow: var(--elev-1); }
+.stat-val { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.01em; }
 </style>
 {% endblock %}
 
@@ -225,7 +262,7 @@
     <div class="dash-header-right">
         <form method="POST" action="/body-weight" class="mini-weight" id="mini-weight">
             <input type="hidden" name="date" value="{{ today }}">
-            <span class="mw-icon">⚖</span>
+            <span class="mw-icon msym">monitor_weight</span>
             {% if today_weight %}
               <span class="mw-val" id="mw-val" onclick="editWeight()">{{ today_weight | int if today_weight == today_weight | int else today_weight }}</span>
               <span class="mw-val-unit" id="mw-unit">kg</span>
@@ -236,19 +273,19 @@
               <button type="submit" class="mw-save">save</button>
             {% endif %}
         </form>
-        <a href="/info" class="btn-info" title="How it works">?</a>
+        <a href="/info" class="btn-info" title="How it works"><span class="msym">help</span></a>
     </div>
 </div>
 
 {# ── This week (shared partial) — directly under header ─────────────── #}
-{% include '_week_strip.html' %}
+{% include '_daily_rings.html' %}
 
 {# ── Macro bar · Viz 1 (shared partial) ────────────────────────────── #}
-{% include '_macro_bar.html' %}
+{% include '_week_board.html' %}
 
 {# ── Food log · today ─────────────────────────────────────────────── #}
 <section class="section">
-    <p class="section-title">food · today</p>
+    <p class="home-eyebrow">Food · today</p>
     <div id="fl-grid" class="fl-grid"></div>
 </section>
 
