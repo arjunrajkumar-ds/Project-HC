@@ -1,0 +1,153 @@
+{# ──────────────────────────────────────────────────────────────────────────
+   Private nicotine-pouch counter — capability-gated panel (Profile Convergence §9)
+   Included by home.html ONLY when 'nicotine_counter' in profile_caps. Visible to,
+   and readable by, the owning profile alone. Pure daily tally: +1 tap, undo (−1).
+   Tap-to-expand reveals a Mon–Sun daily-count heatmap (Melbourne-local week).
+   Context: nicotine_today (int), nicotine_week (list of {date, count}).
+   Styling uses body.pandora tokens only.
+   ────────────────────────────────────────────────────────────────────────── #}
+<style>
+.nic-panel {
+    background: var(--panel-soft); border: 1px solid var(--border);
+    border-radius: var(--radius-lg, 14px); padding: 14px 15px; box-shadow: var(--elev-1);
+}
+.nic-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.nic-title {
+    font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--dim);
+}
+.nic-main { display: flex; align-items: center; gap: 14px; margin-top: 10px; }
+.nic-count {
+    font-family: var(--font-display, var(--font-sans)); font-size: 34px; font-weight: 700;
+    color: var(--text-strong); line-height: 1; min-width: 48px; text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+.nic-count-label {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--dimmer); margin-top: 4px; text-align: center;
+}
+.nic-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.nic-plus {
+    width: 52px; height: 52px; border-radius: 999px; border: none; cursor: pointer;
+    background: var(--accent); color: var(--bg); font-size: 26px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: var(--elev-2); -webkit-tap-highlight-color: transparent;
+}
+.nic-plus:active { opacity: .85; }
+.nic-undo {
+    background: transparent; border: 1px solid var(--border); border-radius: var(--radius-sm, 4px);
+    color: var(--dim); cursor: pointer; font-family: var(--font-mono); font-size: 11px;
+    padding: 6px 9px; -webkit-tap-highlight-color: transparent;
+}
+.nic-undo:active { color: var(--red); border-color: var(--red); }
+.nic-expand {
+    background: transparent; border: 1px solid var(--border); border-radius: var(--radius-sm, 4px);
+    color: var(--dim); cursor: pointer; font-family: var(--font-mono); font-size: 10px;
+    letter-spacing: .06em; text-transform: uppercase; padding: 4px 9px;
+    -webkit-tap-highlight-color: transparent;
+}
+.nic-expand:hover, .nic-expand.open { color: var(--accent); border-color: var(--accent); }
+.nic-week { display: none; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.nic-week.active { display: block; }
+.nic-heat { display: flex; gap: 6px; }
+.nic-cell { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.nic-box {
+    width: 100%; aspect-ratio: 1 / 1; border-radius: var(--radius-sm, 4px);
+    border: 1px solid var(--border); background: var(--panel-alt);
+}
+.nic-daylabel {
+    font-family: var(--font-mono); font-size: 9px; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--dimmer);
+}
+.nic-dayval { font-family: var(--font-mono); font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.nic-today-box { outline: 1px solid var(--accent); outline-offset: 1px; }
+</style>
+
+<section class="section">
+  <div class="nic-panel" id="nic-panel">
+    <div class="nic-head">
+      <span class="nic-title">Pouches</span>
+      <button type="button" class="nic-expand" id="nic-expand-btn" onclick="nicToggleWeek()">week</button>
+    </div>
+    <div class="nic-main">
+      <div>
+        <div class="nic-count" id="nic-count">{{ nicotine_today }}</div>
+        <div class="nic-count-label">today</div>
+      </div>
+      <div class="nic-actions">
+        <button type="button" class="nic-undo" onclick="nicUndo()" aria-label="Undo one">undo</button>
+        <button type="button" class="nic-plus" onclick="nicBump()" aria-label="Add one">+</button>
+      </div>
+    </div>
+    <div class="nic-week" id="nic-week">
+      <div class="nic-heat" id="nic-heat"></div>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  var NIC_WEEK = {{ nicotine_week | tojson }};
+  var TODAY_ISO = {{ today | tojson }};
+
+  function csrf() {
+    var m = document.querySelector('meta[name="csrf-token"]');
+    return m ? m.getAttribute('content') : (window._csrf || '');
+  }
+
+  // Shade a cell by count relative to the week's max (GitHub-contribution style).
+  function renderHeat() {
+    var heat = document.getElementById('nic-heat');
+    if (!heat) return;
+    var max = NIC_WEEK.reduce(function (m, d) { return Math.max(m, d.count); }, 0);
+    var dow = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    heat.innerHTML = NIC_WEEK.map(function (d, i) {
+      var intensity = max > 0 ? d.count / max : 0;
+      // faint floor so a zero day is still visible; denser accent as count grows
+      var alpha = d.count > 0 ? (0.18 + 0.72 * intensity).toFixed(3) : 0;
+      var bg = d.count > 0
+        ? 'background: color-mix(in srgb, var(--accent) ' + Math.round(alpha * 100) + '%, var(--panel-alt));'
+        : '';
+      var isToday = d.date === TODAY_ISO ? ' nic-today-box' : '';
+      return '<div class="nic-cell">'
+        + '<div class="nic-box' + isToday + '" style="' + bg + '" title="' + d.date + ': ' + d.count + '"></div>'
+        + '<div class="nic-daylabel">' + dow[i] + '</div>'
+        + '<div class="nic-dayval">' + d.count + '</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  window.nicToggleWeek = function () {
+    var box = document.getElementById('nic-week');
+    var btn = document.getElementById('nic-expand-btn');
+    var show = !box.classList.contains('active');
+    box.classList.toggle('active', show);
+    btn.classList.toggle('open', show);
+    if (show) renderHeat();
+  };
+
+  function setCount(n) {
+    document.getElementById('nic-count').textContent = n;
+    // keep today's cell in the week model in sync for a live heatmap
+    for (var i = 0; i < NIC_WEEK.length; i++) {
+      if (NIC_WEEK[i].date === TODAY_ISO) { NIC_WEEK[i].count = n; break; }
+    }
+    if (document.getElementById('nic-week').classList.contains('active')) renderHeat();
+  }
+
+  async function post(url) {
+    var res = await fetch(url, { method: 'POST', headers: { 'X-CSRF-Token': csrf() } });
+    if (!res.ok) throw new Error('request failed');
+    return res.json();
+  }
+
+  window.nicBump = async function () {
+    try { var d = await post('/nicotine/bump'); if (d && typeof d.count === 'number') setCount(d.count); }
+    catch (e) { /* leave UI unchanged on failure */ }
+  };
+  window.nicUndo = async function () {
+    try { var d = await post('/nicotine/undo'); if (d && typeof d.count === 'number') setCount(d.count); }
+    catch (e) {}
+  };
+})();
+</script>

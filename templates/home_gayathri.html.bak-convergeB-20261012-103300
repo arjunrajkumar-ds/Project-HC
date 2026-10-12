@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block title %}Today{% endblock %}
-{% block body_class %}{% if not current_profile or current_profile.id != 2 %}pandora{% endif %}{% endblock %}
+{% block body_class %}pandora{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -8,15 +8,6 @@
 .dash-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 4px; gap: 10px; }
 .dash-title  { font-family: var(--font-sans); font-size: 20px; font-weight: 500;
                letter-spacing: -0.01em; color: var(--text-strong); line-height: 1.2; margin-top: 2px; }
-.date-nav {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 24px; height: 24px; border-radius: var(--radius-sm);
-    border: 1px solid var(--border); background: transparent;
-    color: var(--dim); text-decoration: none; font-size: 16px; font-weight: 500;
-    vertical-align: middle; margin: 0 4px;
-    -webkit-tap-highlight-color: transparent;
-}
-.date-nav:active { border-color: var(--accent); color: var(--accent); }
 .dash-header-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; margin-top: 2px; }
 .btn-info {
     display: flex; align-items: center; justify-content: center;
@@ -24,13 +15,6 @@
     background: transparent; border: 1px solid var(--border);
     color: var(--dim); text-decoration: none;
     font-family: var(--font-mono); font-size: 12px; flex-shrink: 0;
-    -webkit-tap-highlight-color: transparent;
-}
-.mini-weight {
-    display: inline-flex; align-items: center; gap: 6px; height: 28px;
-    padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm);
-    background: transparent;
-    font-family: var(--font-mono); font-size: 11px; color: var(--dim);
     -webkit-tap-highlight-color: transparent;
 }
 /* dev-only quick user switch — sits inline after the name in the eyebrow */
@@ -44,6 +28,15 @@
     -webkit-tap-highlight-color: transparent;
 }
 .switch-user:active { border-color: var(--accent); color: var(--accent); }
+
+/* ── Mini weight pill (top-right) ────────────────────────────────── */
+.mini-weight {
+    display: inline-flex; align-items: center; gap: 6px; height: 28px;
+    padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: transparent;
+    font-family: var(--font-mono); font-size: 11px; color: var(--dim);
+    -webkit-tap-highlight-color: transparent;
+}
 .mw-icon { font-size: 12px; opacity: .8; }
 .mw-val  { font-size: 12px; font-weight: 600; color: var(--text-strong); cursor: pointer; }
 .mw-val-unit { font-size: 9px; letter-spacing: .04em; text-transform: uppercase; color: var(--dim); }
@@ -62,16 +55,34 @@
     font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; padding: 0 2px;
     -webkit-tap-highlight-color: transparent;
 }
-.section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.section-toggle {
-    background: transparent; border: 1px solid var(--border); border-radius: var(--radius-sm);
-    color: var(--dim); cursor: pointer;
-    font-family: var(--font-mono); font-size: 9px; letter-spacing: .06em;
-    text-transform: uppercase; padding: 3px 8px;
+
+/* ── Weekly stats ────────────────────────────────────────────────── */
+.stats-row { display: flex; gap: 10px; }
+.stat-card { flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 11px; }
+.stat-lbl { display: block; font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+.stat-lbl.wk { color: var(--accent); }
+.stat-lbl.food { color: var(--green); }
+.stat-val { display: block; font-family: var(--font-mono); font-size: 18px; font-weight: 600; color: var(--text-strong); margin-top: 2px; line-height: 1.1; }
+
+/* ── Tally dialog ─────────────────────────────────────────────────────── */
+.tally-dialog {
+    border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0;
+    background: var(--panel); color: var(--text-strong);
+    width: min(320px, 88vw);
+}
+.tally-dialog::backdrop { background: rgba(0,0,0,0.5); }
+.tally-dialog-body { padding: 20px 18px; display: flex; flex-direction: column; gap: 16px; }
+.tally-dialog-body p { margin: 0; font-family: var(--font-sans); font-size: 1rem; font-weight: 600; text-align: center; }
+.tally-dialog-actions { display: flex; gap: 10px; }
+.tally-dialog-actions button {
+    flex: 1; font-family: var(--font-sans); font-size: 0.85rem; font-weight: 600;
+    border-radius: var(--radius-sm); min-height: 42px; cursor: pointer;
     -webkit-tap-highlight-color: transparent;
 }
-.section-toggle.open { color: var(--accent); border-color: var(--accent); }
-
+.tally-btn-primary { background: var(--accent); border: none; color: var(--bg); }
+.tally-btn-primary:active { opacity: .85; }
+.tally-btn-secondary { background: none; border: 1px solid var(--border); color: var(--dim); }
+.tally-btn-secondary:active { opacity: .75; }
 
 /* ── Food logger (4-column grid) ─────────────────────────────────── */
 .fl-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
@@ -117,6 +128,7 @@
 }
 .fl-footer-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
 .fl-footer-value { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--text-strong); }
+.fl-col-footer { border-top-color: color-mix(in srgb, var(--meal-col) 25%, var(--border)); }
 .fl-add-btn {
     margin: 8px 10px 10px; padding: 6px 0;
     border: 1px dashed var(--border); border-radius: var(--radius-sm);
@@ -127,9 +139,10 @@
     -webkit-tap-highlight-color: transparent;
 }
 .fl-add-btn:hover { color: var(--meal-col); border-color: var(--meal-col); }
-.fl-col-footer { border-top-color: color-mix(in srgb, var(--meal-col) 25%, var(--border)); }
 .fl-empty { font-family: var(--font-mono); font-size: 11px; color: var(--dimmer); font-style: italic;
     text-align: center; padding: 20px 10px; flex: 1; display: flex; align-items: center; justify-content: center; }
+
+/* Quick-add inline input (shown per-column on click) */
 .fl-inline-add {
     display: none; flex-direction: column; gap: 6px; padding: 8px 10px;
     border-top: 1px solid var(--border);
@@ -142,7 +155,6 @@
     font-family: var(--font-sans); font-size: 12px; padding: 8px 10px;
 }
 .fl-name-input::placeholder { color: var(--dimmer); }
-.fl-name-input:focus { outline: none; border-color: var(--accent); }
 .fl-submit-btn {
     background: var(--accent); color: var(--bg); border: none; border-radius: var(--radius-sm);
     cursor: pointer; font-family: var(--font-sans); font-size: 12px; font-weight: 600;
@@ -158,6 +170,9 @@
 }
 .fl-recent-chip:active { color: var(--accent); border-color: var(--accent); }
 
+
+/* ── Bar-increment animation: a light overlay that grows from the old fill
+   to the new one, then fades, plus a floating "+N" badge over the row.   */
 .bar-grow-overlay {
     position: absolute; top: 0; left: 0; height: 100%;
     background: rgba(255,255,255,.3);
@@ -180,65 +195,10 @@
     100% { opacity: 0; transform: translateY(-18px) scale(.96); }
 }
 
-/* ── Define-food dialog — shown when a logged food has no macros yet ── */
-.define-dialog {
-    border: none; border-radius: var(--radius-md); padding: 0;
-    background: var(--panel); color: var(--text);
-    width: min(340px, 90vw);
-}
-.define-dialog::backdrop { background: var(--scrim); }
-.define-dialog-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
-.define-dialog-body > p { font-family: var(--font-sans); font-size: 0.92rem; font-weight: 600; line-height: 1.4; margin: 0; text-align: center; }
-.define-form-title { font-family: var(--font-sans); font-size: 0.9rem; font-weight: 700; margin: 0; text-align: center; }
+/* ── Define-food dialog form bits (dialog chrome shares .tally-dialog) ── */
+.define-form-title { font-size: 0.85rem !important; font-weight: 700 !important; }
 .define-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.define-dialog-actions { display: flex; gap: 10px; }
-.define-dialog-actions .btn { flex: 1; min-height: 42px; }
-.define-form-error { font-family: var(--font-mono); font-size: 10px; color: var(--red); display: none; }
-
-/* ── Food card (read-only inspection popup) — ported from /food ──────── */
-.food-card-dialog {
-    border: none; border-radius: var(--radius-md); padding: 0;
-    background: var(--panel); color: var(--text);
-    width: min(320px, 90vw);
-}
-.food-card-dialog::backdrop { background: var(--scrim); }
-.food-card-body { padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 14px; }
-.fc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.fc-name { font-family: var(--font-sans); font-size: 1.02rem; font-weight: 800; line-height: 1.25; margin: 0; color: var(--text-strong); }
-.fc-type {
-    flex-shrink: 0; font-size: 0.62rem; font-weight: 800; letter-spacing: .03em;
-    text-transform: uppercase; padding: 4px 9px; border-radius: 20px;
-    border: 1px solid; white-space: nowrap; margin-top: 2px;
-}
-.fc-serving {
-    font-family: var(--font-mono); font-size: 0.72rem; color: var(--dimmer);
-    text-transform: uppercase; letter-spacing: .05em; margin-top: -6px;
-}
-.fc-cal { display: flex; align-items: baseline; gap: 8px; justify-content: center; padding: 4px 0 2px; }
-.fc-cal .fc-cal-num { color: #3b82f6; line-height: .9; font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
-.fc-cal .fc-cal-unit { color: #3b82f6; opacity: .7; font-size: 0.9rem; font-weight: 700; }
-.fc-macros { display: flex; gap: 8px; }
-.fc-macro { flex: 1; background: var(--panel-soft); border-radius: var(--radius-sm); padding: 9px 6px; text-align: center; }
-.fc-macro .fc-mv { font-size: 1rem; font-weight: 800; font-family: var(--font-mono); }
-.fc-macro .fc-mk { font-size: 0.58rem; color: var(--dimmer); text-transform: uppercase; letter-spacing: .06em; margin-top: 2px; }
-.fc-macro.pro .fc-mv  { color: #22c55e; }
-.fc-macro.carb .fc-mv { color: #f59e0b; }
-.fc-macro.fat .fc-mv  { color: #a855f7; }
-.fc-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.fc-source {
-    font-size: 0.62rem; font-weight: 700; color: var(--dimmer); background: var(--panel-soft);
-    border: 1px solid var(--border); padding: 4px 9px; border-radius: 20px;
-}
-.fc-meal {
-    font-size: 0.6rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
-    border-radius: 20px; padding: 4px 9px;
-}
-.food-card-dialog[open] .food-card-body { animation: fc-rise .22s ease; }
-@keyframes fc-rise {
-    0%   { opacity: 0; transform: translateY(6px) scale(.98); }
-    100% { opacity: 1; transform: translateY(0) scale(1); }
-}
-.fl-entry-name { cursor: pointer; }
+.define-form-error { font-family: var(--font-mono); font-size: 10px; color: var(--red); display: none; margin-top: -4px; }
 .unit-toggle-row { display: flex; gap: 6px; }
 .unit-btn {
     flex: 1; background: var(--panel-soft); border: 1px solid var(--border);
@@ -251,107 +211,53 @@
 }
 .unit-btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 
-/* ── Panel base ──────────────────────────────────────────────────── */
-.panel {
-    background: var(--panel); border: 1px solid var(--border);
-    border-radius: var(--radius-md); padding: 14px;
-}
-
-
 /* ═══════════════════════════════════════════════════════════════════════
-   HOME REDESIGN — aesthetic overrides (wireframe 1a/1b language)
-   Restyles existing classes only; all JS-referenced ids/classes unchanged.
+   HOME REDESIGN — aesthetic overrides (shared with dashboard.html)
    ═══════════════════════════════════════════════════════════════════════ */
-
-/* ── Header ─────────────────────────────────────────────────────────── */
 .dash-header { align-items: center; margin-bottom: 6px; }
-.eyebrow {
-    font-family: var(--font-mono); font-size: 11px; font-weight: 600;
-    letter-spacing: .06em; text-transform: uppercase; color: var(--dim);
-}
-.dash-title {
-    font-family: var(--font-display); font-size: 30px; font-weight: 700;
-    letter-spacing: -0.02em; color: var(--text-strong); margin-top: 2px;
-}
-.date-nav {
-    width: 28px; height: 28px; border-radius: 999px;
-    border: 1px solid var(--border); background: var(--panel-alt);
-    color: var(--dim); box-shadow: var(--elev-1);
-}
-.date-nav:active { border-color: var(--accent); color: var(--accent); }
-.mini-weight {
-    height: 36px; padding: 0 12px; border-radius: 999px;
-    border: 1px solid var(--border); background: var(--panel-alt);
-    box-shadow: var(--elev-1); gap: 6px;
-}
+.eyebrow { font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+.dash-title { font-family: var(--font-display); font-size: 30px; font-weight: 700;
+    letter-spacing: -0.02em; color: var(--text-strong); margin-top: 2px; }
+.mini-weight { height: 36px; padding: 0 12px; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--panel-alt); box-shadow: var(--elev-1); gap: 6px; }
 .mw-icon.msym { font-size: 17px; color: var(--dim); }
 .mw-val { font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--text-strong); }
 .mw-val-unit { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--dim); }
-.btn-info {
-    width: 36px; height: 36px; border-radius: 999px;
-    border: 1px solid var(--border); background: var(--panel-alt);
-    box-shadow: var(--elev-1); color: var(--dim);
-}
+.btn-info { width: 36px; height: 36px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--panel-alt); box-shadow: var(--elev-1); color: var(--dim); }
 .btn-info .msym { font-size: 18px; }
 .switch-user { border-radius: 999px; }
-
-/* ── Section eyebrow labels ─────────────────────────────────────────── */
-.home-eyebrow {
-    font-family: var(--font-mono); font-size: 11px; font-weight: 600;
-    letter-spacing: .06em; text-transform: uppercase; color: var(--dim);
-    margin: 0 2px 10px;
-}
-
-/* ── Today's nutrition — meal cards ─────────────────────────────────── */
+.home-eyebrow { font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--dim); margin: 0 2px 10px; }
 .fl-grid { gap: 12px; }
-.fl-col {
-    border-radius: var(--radius-lg); box-shadow: var(--elev-1);
-    background: var(--panel-alt); overflow: hidden;
-}
+.fl-col { border-radius: var(--radius-lg); box-shadow: var(--elev-1); background: var(--panel-alt); overflow: hidden; }
 .fl-col-header { padding: 12px 14px 10px; }
 .fl-col-title { display: inline-flex; align-items: center; gap: 6px; }
-.fl-col-title::before {
-    content: ""; width: 9px; height: 9px; border-radius: 3px;
-    background: var(--meal-col); flex-shrink: 0;
-}
+.fl-col-title::before { content: ""; width: 9px; height: 9px; border-radius: 3px; background: var(--meal-col); flex-shrink: 0; }
 .fl-entry { padding: 7px 6px; border-radius: var(--radius-md); }
-.fl-entry-name { font-size: 12.5px; }
-.fl-add-btn {
-    border-radius: var(--radius-md); padding: 9px 0;
-    background: var(--panel-soft);
-}
-.fl-add-btn::before {
-    font-family: "Material Symbols Rounded"; content: "add";
-    font-size: 15px; vertical-align: middle; margin-right: 4px;
-}
+.fl-add-btn { border-radius: var(--radius-md); padding: 9px 0; background: var(--panel-soft); }
+.fl-add-btn::before { font-family: "Material Symbols Rounded"; content: "add"; font-size: 15px; vertical-align: middle; margin-right: 4px; }
 .fl-name-input, .fl-submit-btn { border-radius: var(--radius-md); }
 .fl-recent-chip { border-radius: 999px; }
-
-/* ── Dialogs → rounded cards ────────────────────────────────────────── */
-.define-dialog, .food-card-dialog {
-    border-radius: var(--radius-lg) !important;
-    box-shadow: var(--elev-3) !important;
-}
-
-/* ── Section rhythm ─────────────────────────────────────────────────── */
+.define-dialog, .food-card-dialog { border-radius: var(--radius-lg) !important; box-shadow: var(--elev-3) !important; }
 .section { margin-bottom: 16px; }
+/* Gayathri stat cards → elevation aesthetic */
+.stats-row { gap: 12px; }
+.stat-card { background: var(--panel-alt); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); box-shadow: var(--elev-1); }
+.stat-val { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.01em; }
 </style>
 {% endblock %}
 
 {% block content %}
 {% set _p = (today | fmt_date).lower().split() %}
+{% set _active_days = week_days | selectattr('active') | list | length %}
+
 <div class="dash-header">
     <div>
         <div class="eyebrow">{{ _p[0] }} · {{ _p[2] }} {{ _p[1] }}{% if current_profile %} · {{ current_profile.name | lower }}<a href="/profiles" class="switch-user" title="Switch user (dev)">switch</a>{% endif %}</div>
-        <div class="dash-title">
-            <a href="/?date={{ prev_date }}" class="date-nav" title="Previous day">‹</a>
-            {% if is_today %}
-                Today.
-            {% else %}
-                {{ today | fmt_date }}
-            {% endif %}
-            {% if next_date %}<a href="/?date={{ next_date }}" class="date-nav" title="Next day">›</a>{% endif %}
-        </div>
+        <div class="dash-title">Today.</div>
     </div>
     <div class="dash-header-right">
         <form method="POST" action="/body-weight" class="mini-weight" id="mini-weight">
@@ -371,27 +277,49 @@
     </div>
 </div>
 
-
 {# ── This week (shared partial) — directly under header ─────────────── #}
 {% include '_daily_rings.html' %}
 
 {# ── Macro bar · Viz 1 (shared partial) ────────────────────────────── #}
 {% include '_week_board.html' %}
 
-{# ── Today's nutrition (4-column grid) ────────────────────────────────── #}
+{# ── Food log · today ─────────────────────────────────────────────── #}
 <section class="section">
-    <p class="home-eyebrow">Today's food</p>
+    <p class="home-eyebrow">Food · today</p>
     <div id="fl-grid" class="fl-grid"></div>
 </section>
 
+{# ── Weekly stats ──────────────────────────────────────────────────── #}
+<section class="section">
+    <div class="stats-row">
+        <div class="stat-card">
+            <span class="stat-lbl wk">workouts</span>
+            <span class="stat-val">{{ _active_days }}</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-lbl food">kcal today</span>
+            <span class="stat-val">{{ '{:,}'.format(total_cal) }}</span>
+        </div>
+    </div>
+</section>
+
+{# ── Weekly food goals · quest-log panel (shared partial) ──────────── #}
+{% include '_goals_panel.html' %}
+
+{# ── Last session (shared multi-type partial) ──────────────────────── #}
+{% include '_last_session.html' %}
+
+{# ── Weight over time · Viz 2 (shared partial) ─────────────────────── #}
+{% include '_weight_chart.html' %}
+
 {# ── Define-food dialog — shown after logging a food with no macros yet ── #}
-<dialog id="define-food-dialog" class="define-dialog">
-  <div class="define-dialog-body">
+<dialog id="define-food-dialog" class="tally-dialog">
+  <div class="tally-dialog-body">
     <div id="define-confirm-view">
       <p id="define-confirm-msg"></p>
-      <div class="define-dialog-actions">
-        <button type="button" class="btn btn-secondary" onclick="flCloseDefineDialog()">Not now</button>
-        <button type="button" class="btn btn-primary" onclick="flShowDefineForm()">Define it</button>
+      <div class="tally-dialog-actions">
+        <button type="button" class="tally-btn-secondary" onclick="flCloseDefineDialog()">Not now</button>
+        <button type="button" class="tally-btn-primary" onclick="flShowDefineForm()">Define it</button>
       </div>
     </div>
     <div id="define-form-view" style="display:none">
@@ -419,142 +347,48 @@
         <button type="button" class="unit-btn" id="df-unit-unit" onclick="flSetDefineUnit('unit')">per unit</button>
       </div>
       <div class="define-form-error" id="define-form-error"></div>
-      <div class="define-dialog-actions">
-        <button type="button" class="btn btn-secondary" onclick="flCloseDefineDialog()">Cancel</button>
-        <button type="button" class="btn btn-primary" onclick="flSubmitDefineForm()">Save</button>
+      <div class="tally-dialog-actions">
+        <button type="button" class="tally-btn-secondary" onclick="flCloseDefineDialog()">Cancel</button>
+        <button type="button" class="tally-btn-primary" onclick="flSubmitDefineForm()">Save</button>
       </div>
     </div>
   </div>
 </dialog>
+{% endblock %}
 
-<dialog id="food-card-dialog" class="food-card-dialog">
-  <div class="food-card-body">
-    <div class="fc-head">
-      <p class="fc-name" id="fc-name"></p>
-      <span class="fc-type" id="fc-type" style="display:none"></span>
-    </div>
-    <div class="fc-serving" id="fc-serving"></div>
-    <div class="fc-cal">
-      <span class="fc-cal-num" id="fc-cal-num"></span><span class="fc-cal-unit">kcal</span>
-    </div>
-    <div class="fc-macros">
-      <div class="fc-macro pro"><div class="fc-mv" id="fc-pro"></div><div class="fc-mk">Protein</div></div>
-      <div class="fc-macro carb"><div class="fc-mv" id="fc-carb"></div><div class="fc-mk">Carbs</div></div>
-      <div class="fc-macro fat"><div class="fc-mv" id="fc-fat"></div><div class="fc-mk">Fat</div></div>
-    </div>
-    <div class="fc-foot">
-      <span class="fc-source" id="fc-source" style="display:none"></span>
-      <span class="fc-meal" id="fc-meal"></span>
-    </div>
-  </div>
-</dialog>
-
+{% block extra_js %}
 <script>
+// ── Food logger ──────────────────────────────────────────────────────────
 (function () {
-    var TODAY = {{ today | tojson }};
-    var FL_ENTRIES = {{ food_entries | tojson }};
-    var RECENT_FOODS = {{ recent_foods | tojson }};
-    var csrf = function() { return document.querySelector('meta[name="csrf-token"]')?.content || window._csrf || ''; };
-    var MEAL_ORDER  = ['breakfast', 'lunch', 'dinner', 'snack'];
-    var MEAL_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' };
+    const TODAY = {{ today | tojson }};
+    let FL_ENTRIES = {{ food_entries | tojson }};
+    const FL_GOALS = { calories: {{ goals.calories or 0 }}, protein_g: {{ goals.protein_g or 0 }} };
+    const csrf = () => document.querySelector('meta[name="csrf-token"]')?.content || window._csrf || '';
+    const RECENT_FOODS = {{ recent_foods | tojson }};
 
-    function flH(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    const MEAL_ORDER  = ['breakfast', 'lunch', 'dinner', 'snack'];
+    const MEAL_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' };
 
-    // ── Food card (read-only inspection popup) ──────────────────────────
-    var FC_MEAL_COLORS = { breakfast: '#3b82f6', lunch: '#f59e0b', dinner: '#1d4ed8', snack: '#94a3b8' };
-
-    // Fixed absolute calorie scale so a given kcal always looks identical: <=200 -> 1.6rem/400,
-    // >=800 -> 3.2rem/900, linear between, clamped both ends.
-    function fcCalScale(kcal) {
-        var t = Math.max(0, Math.min(1, (kcal - 200) / (800 - 200)));
-        return { size: 1.6 + t * (3.2 - 1.6), weight: Math.round(400 + t * (900 - 400)) };
-    }
-
-    function fcServingLabel(e) {
-        var unit = e.unit_type || 'g';
-        var mult = (e._multiplier != null) ? e._multiplier : 1;
-        var gramQty = e._gram_qty;
-        if (unit === 'unit') {
-            var n = (mult && mult > 0) ? mult : 1;
-            return n === 1 ? '1 unit' : (n % 1 ? n.toFixed(1) : n) + ' units';
-        }
-        if (gramQty != null) return Math.round(gramQty * (mult || 1)) + 'g';
-        if (e.std_serving_g != null && e.std_serving_g > 0) return Math.round(e.std_serving_g) + 'g';
-        return '100g';
-    }
-
-    window.openFoodCard = function (entryId) {
-        var e = FL_ENTRIES.find(function (x) { return x.id === entryId; });
-        if (!e) return;
-
-        document.getElementById('fc-name').textContent = e.name || '';
-
-        var typeEl = document.getElementById('fc-type');
-        if (e.type_name) {
-            typeEl.textContent = e.type_name;
-            typeEl.style.display = '';
-            typeEl.style.color = e.type_color || 'var(--dimmer)';
-            typeEl.style.borderColor = e.type_color || 'var(--border)';
-            typeEl.style.background = 'transparent';
-        } else { typeEl.style.display = 'none'; }
-
-        document.getElementById('fc-serving').textContent = fcServingLabel(e);
-
-        var kcal = Math.round(e.calories || 0);
-        var numEl = document.getElementById('fc-cal-num');
-        numEl.textContent = kcal;
-        var sc = fcCalScale(kcal);
-        numEl.style.fontSize = sc.size.toFixed(3) + 'rem';
-        numEl.style.fontWeight = sc.weight;
-
-        document.getElementById('fc-pro').textContent  = (e.protein_g || 0).toFixed(1) + 'g';
-        document.getElementById('fc-carb').textContent = (e.carbs_g  || 0).toFixed(1) + 'g';
-        document.getElementById('fc-fat').textContent  = (e.fat_g    || 0).toFixed(1) + 'g';
-
-        var srcEl = document.getElementById('fc-source');
-        if (e.source_type) {
-            var LABELS = { restaurant: 'Restaurant', brand: 'Brand', homemade: 'Homemade' };
-            var base = LABELS[e.source_type] || e.source_type;
-            srcEl.textContent = (e.source_type !== 'homemade' && e.source_name)
-                ? base + ' \u00b7 ' + e.source_name : base;
-            srcEl.style.display = '';
-        } else { srcEl.style.display = 'none'; }
-
-        var mt = e.meal_type || 'snack';
-        var mealEl = document.getElementById('fc-meal');
-        mealEl.textContent = MEAL_LABELS[mt] || mt;
-        var col = FC_MEAL_COLORS[mt] || FC_MEAL_COLORS.snack;
-        mealEl.style.color = col;
-        mealEl.style.background = 'color-mix(in srgb, ' + col + ' 15%, transparent)';
-
-        var dlg = document.getElementById('food-card-dialog');
-        if (dlg.open) dlg.close();
-        dlg.showModal();
-    };
-
-    (function () {
-        var dlg = document.getElementById('food-card-dialog');
-        if (dlg) dlg.addEventListener('click', function (ev) { if (ev.target === dlg) dlg.close(); });
-    })();
-
+    // ── Add entry (per-column) ───────────────────────────────────────────
     window.flAddEntry = async function (mealType) {
-        var input = document.getElementById('fl-input-' + mealType);
-        var errEl = document.getElementById('fl-error-' + mealType);
-        var name = (input ? input.value : '').trim();
+        const input = document.getElementById('fl-input-' + mealType);
+        const errEl = document.getElementById('fl-error-' + mealType);
+        const name = (input ? input.value : '').trim();
         if (!name) { if (errEl) { errEl.textContent = 'Enter a food name.'; errEl.style.display = ''; } return; }
         if (errEl) errEl.style.display = 'none';
         try {
-            var res = await fetch('/food/api/entry', {
+            const res = await fetch('/food/api/entry', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf() },
-                body: JSON.stringify({ date: TODAY, meal_type: mealType, name: name }),
+                body: JSON.stringify({ date: TODAY, meal_type: mealType, name }),
             });
             if (!res.ok) throw new Error('Server error');
-            var data = await res.json();
+            const data = await res.json();
             FL_ENTRIES.push(data.entry);
             if (input) input.value = '';
-            var isDefined = (data.entry.calories || 0) > 0;
+            const isDefined = (data.entry.calories || 0) > 0;
             flRender({ animateEntry: isDefined ? data.entry : null });
+            // Re-open the add panel for this meal after render
             setTimeout(function() { flToggleAdd(mealType); }, 0);
             if (!isDefined) flPromptDefine(data.entry);
         } catch (err) {
@@ -563,42 +397,48 @@
     };
 
     window.flSetName = function (name, mealType) {
-        var input = document.getElementById('fl-input-' + mealType);
+        const input = document.getElementById('fl-input-' + mealType);
         if (input) { input.value = name; input.focus(); }
     };
 
     window.flToggleAdd = function (mealType) {
-        var el = document.getElementById('fl-add-' + mealType);
+        const el = document.getElementById('fl-add-' + mealType);
         if (!el) return;
-        var isActive = el.classList.contains('active');
+        const isActive = el.classList.contains('active');
         document.querySelectorAll('.fl-inline-add').forEach(function(a) { a.classList.remove('active'); });
         if (!isActive) {
             el.classList.add('active');
-            var input = document.getElementById('fl-input-' + mealType);
+            const input = document.getElementById('fl-input-' + mealType);
             if (input) setTimeout(function() { input.focus(); }, 50);
         }
     };
 
+    // ── Render 4-column grid ─────────────────────────────────────────────
+    // `opts.animateEntry` is the entry (with its own calories/protein_g) that
+    // was just added or just had its macros defined — when set, the total
+    // cal/protein bars play a "grow" overlay + "+N" popup for its amount.
     function flRender(opts) {
         opts = opts || {};
-        var gridEl = document.getElementById('fl-grid');
-        var byMeal = {};
-        MEAL_ORDER.forEach(function(m) { byMeal[m] = []; });
-        FL_ENTRIES.forEach(function(e) {
-            var mt = e.meal_type || 'snack';
+        const gridEl = document.getElementById('fl-grid');
+        const byMeal = {};
+        MEAL_ORDER.forEach(m => { byMeal[m] = []; });
+        FL_ENTRIES.forEach(e => {
+            const mt = e.meal_type || 'snack';
             if (byMeal[mt]) byMeal[mt].push(e);
         });
-        var html = '';
+
+        let html = '';
         MEAL_ORDER.forEach(function (mt) {
-            var rows = byMeal[mt];
-            var mkcal = rows.reduce(function(s, e) { return s + (e.calories || 0); }, 0);
+            const rows = byMeal[mt];
+            const mkcal = rows.reduce((s, e) => s + (e.calories || 0), 0);
+
             html += '<div class="fl-col" data-meal="' + mt + '">';
             html += '<div class="fl-col-header"><span class="fl-col-title">' + MEAL_LABELS[mt] + '</span></div>';
             html += '<div class="fl-col-entries">';
             if (rows.length) {
                 rows.forEach(function (e) {
                     html += '<div class="fl-entry" data-id="' + e.id + '">'
-                        + '<span class="fl-entry-name" onclick="openFoodCard(' + e.id + ')">' + flH(e.name) + '</span>'
+                        + '<span class="fl-entry-name">' + flH(e.name) + '</span>'
                         + '<span class="fl-entry-kcal">' + Math.round(e.calories || 0) + '</span>'
                         + '<span class="fl-entry-pro">' + (e.protein_g || 0).toFixed(1) + 'g</span>'
                         + '<button type="button" class="fl-del-btn" onclick="flDelete(' + e.id + ')" aria-label="Delete">\u2715</button>'
@@ -608,8 +448,14 @@
                 html += '<div class="fl-empty">Nothing logged</div>';
             }
             html += '</div>';
-            html += '<div class="fl-col-footer"><span class="fl-footer-label">Total</span><span class="fl-footer-value">' + Math.round(mkcal) + ' kcal</span></div>';
+
+            html += '<div class="fl-col-footer">'
+                + '<span class="fl-footer-label">Total</span>'
+                + '<span class="fl-footer-value">' + Math.round(mkcal) + ' kcal</span>'
+                + '</div>';
+
             html += '<button type="button" class="fl-add-btn" onclick="flToggleAdd(\'' + mt + '\')">+ add</button>';
+
             html += '<div class="fl-inline-add" id="fl-add-' + mt + '">'
                 + '<div class="fl-input-row">'
                 + '<input type="text" id="fl-input-' + mt + '" class="fl-name-input" placeholder="e.g. 78g Chicken" autocomplete="off"'
@@ -625,15 +471,17 @@
             }
             html += '<div class="fl-error" id="fl-error-' + mt + '"></div>';
             html += '</div>';
+
             html += '</div>';
         });
+
         gridEl.innerHTML = html;
 
         // Cumulative calorie + protein bars
         var totalCal = FL_ENTRIES.reduce(function(s, e) { return s + (e.calories || 0); }, 0);
         var totalPro = FL_ENTRIES.reduce(function(s, e) { return s + (e.protein_g || 0); }, 0);
-        var goalCal = {{ food_goals.calories or 0 }};
-        var goalPro = {{ food_goals.protein_g or 0 }};
+        var goalCal = FL_GOALS.calories || 0;
+        var goalPro = FL_GOALS.protein_g || 0;
         var pct = goalCal > 0 ? Math.min(100, (totalCal / goalCal) * 100) : 0;
         var pctPro = goalPro > 0 ? Math.min(100, (totalPro / goalPro) * 100) : 0;
         var isOver = goalCal > 0 && totalCal > goalCal;
@@ -645,8 +493,8 @@
         }
 
         if (opts.animateEntry) {
-            var addedCal = opts.animateEntry.calories  || 0;
-            var addedPro = opts.animateEntry.protein_g || 0;
+            const addedCal = opts.animateEntry.calories  || 0;
+            const addedPro = opts.animateEntry.protein_g || 0;
             if (addedCal > 0) flShowBarPopup('mb-cal-readout', '+' + Math.round(addedCal));
             if (addedPro > 0) flShowBarPopup('mb-prot-readout', '+' + addedPro.toFixed(1) + 'g');
         }
@@ -656,9 +504,9 @@
     // then fade it out — layered on top of the (already-correct) fill bar so
     // the visible jump reads as a smooth slide instead of an instant snap.
     function flAnimateBarGrowth(trackId, oldPct, newPct) {
-        var track = document.getElementById(trackId);
+        const track = document.getElementById(trackId);
         if (!track) return;
-        var overlay = document.createElement('div');
+        const overlay = document.createElement('div');
         overlay.className = 'bar-grow-overlay';
         overlay.style.width = oldPct.toFixed(2) + '%';
         overlay.style.opacity = '1';
@@ -674,9 +522,9 @@
 
     // Floating "+N" badge over a total-bar head, matching the row's own animation.
     function flShowBarPopup(headId, text) {
-        var head = document.getElementById(headId);
+        const head = document.getElementById(headId);
         if (!head) return;
-        var badge = document.createElement('span');
+        const badge = document.createElement('span');
         badge.className = 'bar-popup';
         badge.textContent = text;
         head.appendChild(badge);
@@ -684,23 +532,23 @@
     }
 
     // ── "Define it now?" flow for foods logged with no macros ────────────
-    var GRAM_RE       = /^(\d+(?:\.\d+)?)\s*(g|ml|kg|lb|oz)\s+(.+)$/i;
-    var QTY_PREFIX_RE = /^(\d+(?:\.\d+)?)\s*x\s+(.+)$/i;
-    var QTY_SUFFIX_RE = /^(.+?)\s+x\s*(\d+(?:\.\d+)?)$/i;
+    const GRAM_RE       = /^(\d+(?:\.\d+)?)\s*(g|ml|kg|lb|oz)\s+(.+)$/i;
+    const QTY_PREFIX_RE = /^(\d+(?:\.\d+)?)\s*x\s+(.+)$/i;
+    const QTY_SUFFIX_RE = /^(.+?)\s+x\s*(\d+(?:\.\d+)?)$/i;
     function flBaseFoodName(raw) {
-        var s = (raw || '').trim(), m;
+        let s = (raw || '').trim(), m;
         if ((m = QTY_PREFIX_RE.exec(s)))      s = m[2].trim();
         else if ((m = QTY_SUFFIX_RE.exec(s))) s = m[1].trim();
-        var gm = GRAM_RE.exec(s);
+        const gm = GRAM_RE.exec(s);
         return gm ? gm[3].trim() : s;
     }
 
-    var defineCtx = null;
+    let defineCtx = null;
 
     function flPromptDefine(entry) {
         defineCtx = { baseName: flBaseFoodName(entry.name), entryId: entry.id, unitType: 'g' };
-        var dlg = document.getElementById('define-food-dialog');
-        var msg = document.getElementById('define-confirm-msg');
+        const dlg = document.getElementById('define-food-dialog');
+        const msg = document.getElementById('define-confirm-msg');
         if (!dlg || !msg) return;
         msg.textContent = '"' + defineCtx.baseName + '" isn’t in your food database yet. Define its macros now?';
         document.getElementById('define-confirm-view').style.display = '';
@@ -710,7 +558,7 @@
     }
 
     window.flCloseDefineDialog = function () {
-        var dlg = document.getElementById('define-food-dialog');
+        const dlg = document.getElementById('define-food-dialog');
         if (dlg && dlg.open) dlg.close();
         defineCtx = null;
     };
@@ -722,9 +570,9 @@
         document.getElementById('define-form-title').textContent = 'Define “' + defineCtx.baseName + '”';
         ['df-cal', 'df-pro', 'df-carb', 'df-fat'].forEach(function (id) { document.getElementById(id).value = ''; });
         window.flSetDefineUnit('g');
-        var errEl = document.getElementById('define-form-error');
+        const errEl = document.getElementById('define-form-error');
         if (errEl) errEl.style.display = 'none';
-        setTimeout(function () { var el = document.getElementById('df-cal'); if (el) el.focus(); }, 30);
+        setTimeout(function () { document.getElementById('df-cal')?.focus(); }, 30);
     };
 
     window.flSetDefineUnit = function (u) {
@@ -736,19 +584,19 @@
 
     window.flSubmitDefineForm = async function () {
         if (!defineCtx) return;
-        var errEl = document.getElementById('define-form-error');
-        var cal  = parseFloat(document.getElementById('df-cal').value)  || 0;
-        var pro  = parseFloat(document.getElementById('df-pro').value)  || 0;
-        var carb = parseFloat(document.getElementById('df-carb').value) || 0;
-        var fat  = parseFloat(document.getElementById('df-fat').value)  || 0;
+        const errEl = document.getElementById('define-form-error');
+        const cal  = parseFloat(document.getElementById('df-cal').value)  || 0;
+        const pro  = parseFloat(document.getElementById('df-pro').value)  || 0;
+        const carb = parseFloat(document.getElementById('df-carb').value) || 0;
+        const fat  = parseFloat(document.getElementById('df-fat').value)  || 0;
         if (cal <= 0 && pro <= 0) {
             if (errEl) { errEl.textContent = 'Enter at least calories or protein.'; errEl.style.display = ''; }
             return;
         }
         if (errEl) errEl.style.display = 'none';
-        var entryId = defineCtx.entryId;
+        const entryId = defineCtx.entryId;
         try {
-            var res = await fetch('/food/api/define', {
+            const res = await fetch('/food/api/define', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf() },
                 body: JSON.stringify({
@@ -758,11 +606,10 @@
                 }),
             });
             if (!res.ok) throw new Error('Server error');
-            var data = await res.json();
+            const data = await res.json();
             window.flCloseDefineDialog();
             if (data.entry) {
-                var idx = -1;
-                for (var i = 0; i < FL_ENTRIES.length; i++) { if (FL_ENTRIES[i].id === entryId) { idx = i; break; } }
+                const idx = FL_ENTRIES.findIndex(function (e) { return e.id === entryId; });
                 if (idx >= 0) {
                     FL_ENTRIES[idx] = Object.assign({}, FL_ENTRIES[idx], data.entry);
                     flRender({ animateEntry: (FL_ENTRIES[idx].calories || 0) > 0 ? FL_ENTRIES[idx] : null });
@@ -777,37 +624,37 @@
 
     window.flDelete = async function (id) {
         try {
-            var res = await fetch('/food/delete/' + id, {
+            const res = await fetch(`/food/delete/${id}`, {
                 method: 'POST',
                 headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': csrf() },
                 body: new URLSearchParams({ date: TODAY }),
             });
             if (!res.ok) throw new Error();
-            FL_ENTRIES = FL_ENTRIES.filter(function(e) { return e.id !== id; });
+            FL_ENTRIES = FL_ENTRIES.filter(e => e.id !== id);
             flRender();
         } catch (_) { location.reload(); }
     };
 
+    function flH(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
     flRender();
 })();
-</script>
 
-{# ── Last session (shared multi-type partial) ──────────────────────── #}
-{% include '_last_session.html' %}
-
-{# ── Weight over time · Viz 2 (shared partial) ─────────────────────── #}
-{% include '_weight_chart.html' %}
-
-<script>
+// mini-weight pill inline edit (mirrors Arjun's dashboard)
 function editWeight() {
-    document.getElementById('mw-val').style.display  = 'none';
-    document.getElementById('mw-unit').style.display = 'none';
+    const val = document.getElementById('mw-val');
+    const unit = document.getElementById('mw-unit');
     const inp = document.getElementById('mw-input');
     const save = document.getElementById('mw-save');
-    if (inp)  { inp.style.display = ''; inp.focus(); inp.select(); }
+    if (!inp) return;
+    if (val) val.style.display = 'none';
+    if (unit) unit.style.display = 'none';
+    inp.style.display = '';
     if (save) save.style.display = '';
+    inp.focus(); inp.select();
 }
 
 </script>
-
 {% endblock %}

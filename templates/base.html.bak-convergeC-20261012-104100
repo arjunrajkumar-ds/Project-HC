@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <title>{% block title %}Gym Tracker{% endblock %}</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <!-- Material Symbols (Rounded) — icon font for the redesigned UI -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,-25..0&display=swap">
+    <style>
+    /* ═══ TOKENS ════════════════════════════════════════════════════ */
+    :root {
+        --bg:           #F6F4EF;
+        --surface:      #FFFFFF;
+        --surface-2:    #F9F8F5;
+        --border:       #E8E5DF;
+        --text:         #18181B;
+        --muted:        #6B7280;
+        --dim:          #A09A90;
+        --accent:       #1B5E3B;
+        --accent-light: #D1FAE5;
+        --accent-text:  #065F46;
+
+        --push-bg: #FEE2E2; --push-fg: #991B1B;
+        --pull-bg: #EDE9FE; --pull-fg: #5B21B6;
+        --legs-bg: #D1FAE5; --legs-fg: #065F46;
+        --core-bg: #FEF3C7; --core-fg: #92400E;
+        --swim-bg: #CFFAFE; --swim-fg: #0E7490;
+        --pilates-bg: #FCE7F3; --pilates-fg: #BE185D;
+        --t1-bg:   #EDE9FE; --t1-fg:   #5B21B6;
+        --t2-bg:   #DBEAFE; --t2-fg:   #1D4ED8;
+        --t3-bg:   #D1FAE5; --t3-fg:   #065F46;
+
+        --nav-h: 58px;
+        --sab:   env(safe-area-inset-bottom, 0px);
+    }
+
+    /* ═══ RESET ═════════════════════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    /* Material Symbols icon helper */
+    .msym {
+        font-family: "Material Symbols Rounded";
+        font-weight: normal; font-style: normal; line-height: 1;
+        letter-spacing: normal; text-transform: none; white-space: nowrap;
+        word-wrap: normal; direction: ltr;
+        -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+        font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+        display: inline-block; vertical-align: middle; user-select: none;
+    }
+    .msym.fill { font-variation-settings: 'FILL' 1, 'wght' 600, 'GRAD' 0, 'opsz' 24; }
+
+    html { -webkit-text-size-adjust: 100%; }
+
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100dvh;
+        overflow-x: hidden;
+    }
+
+    /* ═══ LAYOUT ════════════════════════════════════════════════════ */
+    .page {
+        max-width: 1280px;
+        margin-inline: auto;
+        padding: 20px 24px calc(var(--nav-h) + var(--sab) + 24px);
+    }
+    @media (max-width: 720px) {
+        .page { padding-inline: 16px; }
+    }
+
+    /* ═══ TYPOGRAPHY ════════════════════════════════════════════════ */
+    h1 { font-size: 1.55rem; font-weight: 800; color: var(--text);
+         margin-bottom: 20px; line-height: 1.2; }
+    h2 { font-size: 1.05rem; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+
+    a { color: inherit; }
+
+    .section       { margin-bottom: 28px; }
+    .section-title {
+        font-size: 0.7rem; font-weight: 700; color: var(--dim);
+        text-transform: uppercase; letter-spacing: .08em;
+        margin-bottom: 10px;
+    }
+    .empty { color: var(--dim); font-size: 0.88rem; }
+    .empty a { color: var(--pull-fg); }
+
+    /* ═══ FORM ELEMENTS ═════════════════════════════════════════════ */
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+
+    label {
+        font-size: 0.78rem; font-weight: 600; color: var(--muted);
+        text-transform: uppercase; letter-spacing: .05em;
+    }
+
+    /* font-size: 16px is REQUIRED on all inputs — iOS Safari zooms in on
+       anything smaller, which breaks the one-handed gym-logging UX.      */
+    input[type="text"],
+    input[type="date"],
+    input[type="number"],
+    select,
+    textarea {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        color: var(--text);
+        font-family: inherit;
+        font-size: 16px;
+        padding: 13px 14px;
+        width: 100%;
+        min-height: 48px;
+        -webkit-appearance: none;
+        appearance: none;
+    }
+    input:focus, select:focus, textarea:focus {
+        outline: none;
+        border-color: var(--accent);
+    }
+    input::placeholder, textarea::placeholder { color: var(--dim); }
+
+    input[type="number"]                          { -moz-appearance: textfield; }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+    /* ═══ BUTTONS ═══════════════════════════════════════════════════ */
+    .btn {
+        border: none; border-radius: 10px; cursor: pointer;
+        font-family: inherit; font-size: 1rem; font-weight: 700;
+        min-height: 48px; padding: 12px 18px;
+        display: inline-flex; align-items: center; justify-content: center;
+        text-decoration: none; -webkit-tap-highlight-color: transparent;
+    }
+    .btn:active { opacity: .75; }
+    .btn-full   { width: 100%; }
+    .btn-primary   { background: var(--accent); color: #fff; }
+    .btn-secondary { background: #FFFFFF; color: var(--muted);
+                     border: 0.5px solid var(--border); }
+    .btn-danger    { background: #FEE2E2; color: #991B1B;
+                     border: 0.5px solid #FECACA; }
+    .btn-swim      { background: var(--swim-bg); color: var(--swim-fg);
+                     border: 0.5px solid #A5F3FC; }
+
+    /* ═══ BADGES ════════════════════════════════════════════════════ */
+    .type-badge {
+        display: inline-block;
+        font-size: 0.68rem; font-weight: 800;
+        text-transform: uppercase; letter-spacing: .06em;
+        padding: 3px 9px; border-radius: 5px; white-space: nowrap;
+    }
+    .type-badge.push { background: var(--push-bg); color: var(--push-fg); }
+    .type-badge.pull { background: var(--pull-bg); color: var(--pull-fg); }
+    .type-badge.legs { background: var(--legs-bg); color: var(--legs-fg); }
+    .type-badge.core { background: var(--core-bg); color: var(--core-fg); }
+    .type-badge.swim { background: var(--swim-bg); color: var(--swim-fg); }
+    .type-badge.pilates { background: var(--pilates-bg); color: var(--pilates-fg); }
+    .type-badge.gym  { background: #F3F4F6; color: #374151; }
+
+    .tier-badge {
+        display: inline-block;
+        font-size: 0.63rem; font-weight: 800;
+        text-transform: uppercase; letter-spacing: .06em;
+        padding: 2px 7px; border-radius: 4px; flex-shrink: 0;
+    }
+    .tier-badge.t1 { background: var(--t1-bg); color: var(--t1-fg); }
+    .tier-badge.t2 { background: var(--t2-bg); color: var(--t2-fg); }
+    .tier-badge.t3 { background: var(--t3-bg); color: var(--t3-fg); }
+
+    /* ═══ CARD ROW (shared list style) ══════════════════════════════ */
+    .card-row {
+        display: flex; align-items: center; gap: 10px;
+        background: #FFFFFF; border: 0.5px solid var(--border); border-radius: 12px;
+        padding: 13px 15px; text-decoration: none; color: inherit;
+    }
+    .card-row:active { opacity: .75; }
+    .chevron { color: var(--dim); font-size: 1.1rem; margin-left: auto; }
+
+    /* ═══ ERROR BANNER ══════════════════════════════════════════════ */
+    .error {
+        background: #FEE2E2; border: 1px solid #FECACA;
+        border-radius: 8px; color: #991B1B;
+        padding: 12px 14px; margin-bottom: 16px; font-size: 0.9rem;
+    }
+
+    /* ═══ BOTTOM NAV ════════════════════════════════════════════════ */
+    .bottom-nav {
+        position: fixed; bottom: 0; left: 0; right: 0;
+        height: calc(var(--nav-h) + var(--sab));
+        background: #FFFFFF; border-top: 0.5px solid #E8E5DF;
+        display: flex; justify-content: space-around; align-items: flex-start;
+        padding-top: 7px;
+        padding-bottom: var(--sab);
+        z-index: 200;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .nav-item {
+        display: flex; flex-direction: column; align-items: center; gap: 3px;
+        color: #C4BFB5; text-decoration: none;
+        padding: 5px 8px; border-radius: 8px;
+        min-width: 56px; min-height: 44px;
+    }
+    .nav-item.active { color: #1B5E3B; }
+    .nav-item:active { background: var(--surface-2); }
+    .nav-icon  { font-size: 1.2rem; line-height: 1.1; }
+    .nav-label {
+        font-size: 0.6rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: .04em;
+    }
+    button.nav-item { background: none; border: none; cursor: pointer; }
+
+    /* ═══ EXTRAS SHEET (kept for compatibility, hidden for Arjun) ═══ */
+    .extras-backdrop { display: none; }
+    .extras-sheet    { display: none; }
+
+    /* ═══ PROFILE BAR ══════════════════════════════════════════════════ */
+    .profile-bar {
+        display: flex; align-items: center; justify-content: flex-end;
+        gap: 10px; margin-bottom: 8px;
+    }
+    .profile-bar-name {
+        font-size: 0.7rem; font-weight: 700; color: var(--dim);
+        text-transform: uppercase; letter-spacing: .06em;
+    }
+    .profile-bar-switch {
+        font-size: 0.7rem; font-weight: 700; color: var(--accent);
+        text-decoration: none; padding: 3px 9px;
+        background: var(--surface); border-radius: 6px;
+        border: 1px solid var(--border);
+    }
+    </style>
+    <style>
+    /* ═══ PANDORA DARK THEME — scoped to redesigned screens (body.pandora) ═══
+       Applied only when a template opts in via the body_class block.
+       Remaps the existing light-theme token names to Pandora dark values so
+       the bulk of each screen re-skins automatically, and adds the new
+       Pandora tokens/utilities the redesigned components need.                */
+
+    @font-face { font-family:'Inter'; src:url("{{ url_for('static', filename='fonts/Inter-Regular.woff2') }}") format('woff2'); font-weight:400; font-display:swap; }
+    @font-face { font-family:'Inter'; src:url("{{ url_for('static', filename='fonts/Inter-Medium.woff2') }}") format('woff2'); font-weight:500; font-display:swap; }
+    @font-face { font-family:'Inter'; src:url("{{ url_for('static', filename='fonts/Inter-SemiBold.woff2') }}") format('woff2'); font-weight:600; font-display:swap; }
+    @font-face { font-family:'Inter'; src:url("{{ url_for('static', filename='fonts/Inter-Bold.woff2') }}") format('woff2'); font-weight:700; font-display:swap; }
+    @font-face { font-family:'JetBrains Mono'; src:url("{{ url_for('static', filename='fonts/JetBrainsMono-Regular.woff2') }}") format('woff2'); font-weight:400; font-display:swap; }
+    @font-face { font-family:'JetBrains Mono'; src:url("{{ url_for('static', filename='fonts/JetBrainsMono-Medium.woff2') }}") format('woff2'); font-weight:500; font-display:swap; }
+    @font-face { font-family:'JetBrains Mono'; src:url("{{ url_for('static', filename='fonts/JetBrainsMono-SemiBold.woff2') }}") format('woff2'); font-weight:600; font-display:swap; }
+
+    body.pandora {
+        /* ── remap existing token names → Pandora dark ── */
+        --bg:           #0a0b0d;
+        --surface:      #111316;
+        --surface-2:    #1a1d21;
+        --border:       #1f242b;
+        --text:         #d5dae0;
+        --muted:        #8b93a0;
+        --dim:          #6b7480;
+        --accent:       #d4a574;
+        --accent-light: rgba(212,165,116,0.14);
+        --accent-text:  #d4a574;
+
+        /* semantic badge pairs → dark soft-fill + bright ink */
+        --push-bg: rgba(201,112,100,.14); --push-fg: #c97064;
+        --pull-bg: rgba(168,135,184,.14); --pull-fg: #a887b8;
+        --legs-bg: rgba(127,176,105,.14); --legs-fg: #7fb069;
+        --core-bg: rgba(240,180,95,.14);  --core-fg: #f0b45f;
+        --swim-bg: rgba(107,147,184,.14); --swim-fg: #6b93b8;
+        --pilates-bg: rgba(168,135,184,.14); --pilates-fg: #a887b8;
+        --t1-bg: rgba(168,135,184,.14); --t1-fg: #a887b8;
+        --t2-bg: rgba(107,147,184,.14); --t2-fg: #6b93b8;
+        --t3-bg: rgba(127,176,105,.14); --t3-fg: #7fb069;
+
+        /* ── new Pandora tokens ── */
+        --panel:        #111316;
+        --panel-alt:    #16191d;
+        --panel-soft:   #1a1d21;
+        --border-bright:#2a313a;
+        --text-strong:  #edf0f3;
+        --dimmer:       #3f4651;
+        --accent-dim:   #8a6d4f;
+        --accent-soft:  rgba(212,165,116,0.12);
+        --green: #7fb069; --red: #c97064; --blue: #6b93b8;
+        --purple: #a887b8; --waiting: #f0b45f;
+        --scrim: rgba(0,0,0,0.62);
+
+        --font-sans: "Inter", -apple-system, system-ui, "Segoe UI", sans-serif;
+        --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+        --radius-sm: 4px; --radius-md: 6px; --radius-pill: 12px;
+        /* ── redesign aesthetic layer (home refactor) ── */
+        --radius-lg: 14px;
+        --font-display: "Inter", -apple-system, system-ui, "Segoe UI", sans-serif;
+        --elev-1: 0 1px 2px rgba(0,0,0,.28);
+        --elev-2: 0 2px 6px rgba(0,0,0,.34);
+        --elev-3: 0 8px 24px rgba(0,0,0,.42);
+
+        --nav-h: 60px;
+
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+    }
+
+    /* profile name is shown in each screen's header eyebrow → hide the bar */
+    body.pandora .profile-bar { display: none; }
+
+    body.pandora .page { padding: 18px 16px calc(var(--nav-h) + var(--sab) + 24px); }
+    body.pandora .section { margin-bottom: 14px; }
+
+    /* headings → Inter 500, sentence case, tight tracking */
+    body.pandora h1 { font-weight: 500; letter-spacing: -0.02em; color: var(--text-strong); }
+    body.pandora h2 { font-weight: 500; color: var(--text-strong); }
+
+    /* section titles & eyebrows → the signature mono label */
+    body.pandora .section-title,
+    body.pandora .eyebrow {
+        font-family: var(--font-mono); font-weight: 400; font-size: 10px;
+        line-height: 1.2; letter-spacing: 0.14em; text-transform: uppercase;
+        color: var(--dim); margin-bottom: 8px;
+    }
+    body.pandora .mono { font-family: var(--font-mono); }
+    body.pandora .text-strong { color: var(--text-strong); }
+
+    /* form controls → dark */
+    body.pandora input[type="text"], body.pandora input[type="date"],
+    body.pandora input[type="number"], body.pandora select, body.pandora textarea {
+        background: var(--panel-soft); border: 1px solid var(--border);
+        color: var(--text); border-radius: var(--radius-sm);
+    }
+    body.pandora input:focus, body.pandora select:focus, body.pandora textarea:focus {
+        border-color: var(--accent);
+    }
+    body.pandora input::placeholder, body.pandora textarea::placeholder { color: var(--dimmer); }
+
+    /* buttons */
+    body.pandora .btn { border-radius: var(--radius-sm); font-weight: 600; }
+    body.pandora .btn-primary   { background: var(--accent); color: var(--bg); }
+    body.pandora .btn-secondary { background: var(--panel-soft); color: var(--text); border: 1px solid var(--border); }
+
+    /* badges → mono, precise radius */
+    body.pandora .type-badge, body.pandora .tier-badge {
+        font-family: var(--font-mono); font-weight: 600; border-radius: var(--radius-sm);
+    }
+
+    /* ── bottom nav: dark, flat, active = accent + weight (no pill) ── */
+    body.pandora .bottom-nav {
+        background: var(--panel); border-top: 1px solid var(--border);
+        align-items: center; padding-top: 0;
+    }
+    body.pandora .nav-item { color: var(--dim); }
+    body.pandora .nav-item.active { color: var(--accent); }
+    body.pandora .nav-item:active { background: transparent; }
+    body.pandora .nav-icon { font-size: 15px; }
+    body.pandora .nav-label {
+        font-family: var(--font-mono); font-size: 9px; font-weight: 400; letter-spacing: 0.06em;
+    }
+    body.pandora .nav-item.active .nav-label { font-weight: 700; }
+
+    /* darken any bottom-sheet scrim the screens define */
+    body.pandora .adj-backdrop { background: var(--scrim); }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+    <div class="page">
+        {% if current_profile %}
+        <div class="profile-bar">
+            <span class="profile-bar-name">{{ current_profile.name }}</span>
+            <a href="/profiles" class="profile-bar-switch">switch</a>
+        </div>
+        {% endif %}
+        {% block content %}{% endblock %}
+    </div>
+
+    {% if current_profile %}
+    {% if current_profile.id in (2, 3) %}
+    {# ── Gayathri / Raj: 4-tab nav ─────────────────────────────────── #}
+    <nav class="bottom-nav">
+        <a href="/" class="nav-item {% if request.path == '/' %}active{% endif %}">
+            <span class="nav-icon">⌂</span>
+            <span class="nav-label">Today</span>
+        </a>
+        <a href="/workout/log/new" class="nav-item {% if request.path.startswith('/workout/log') %}active{% endif %}">
+            <span class="nav-icon">◉</span>
+            <span class="nav-label">Train</span>
+        </a>
+        <a href="/food" class="nav-item {% if request.path.startswith('/food') %}active{% endif %}">
+            <span class="nav-icon">◈</span>
+            <span class="nav-label">Food</span>
+        </a>
+        <a href="/sessions" class="nav-item {% if request.path.startswith('/sessions') or (request.path.startswith('/session/') and not request.path.startswith('/session/new')) %}active{% endif %}">
+            <span class="nav-icon">▤</span>
+            <span class="nav-label">History</span>
+        </a>
+    </nav>
+    {% else %}
+    {# ── Arjun: 4-tab nav ────────────────────────────────────────── #}
+    <nav class="bottom-nav">
+        <a href="/" class="nav-item {% if request.path == '/' %}active{% endif %}">
+            <span class="nav-icon">⌂</span>
+            <span class="nav-label">Today</span>
+        </a>
+        <a href="/train" class="nav-item {% if request.path == '/train' or request.path == '/exercise-db' or request.path.startswith('/sessions') or request.path.startswith('/swim') or request.path.startswith('/pilates') %}active{% endif %}">
+            <span class="nav-icon">◉</span>
+            <span class="nav-label">Train</span>
+        </a>
+        <a href="/food" class="nav-item {% if request.path.startswith('/food') %}active{% endif %}">
+            <span class="nav-icon">◈</span>
+            <span class="nav-label">Food</span>
+        </a>
+        <a href="/analytics" class="nav-item {% if request.path.startswith('/analytics') or request.path.startswith('/progression') %}active{% endif %}">
+            <span class="nav-icon">▲</span>
+            <span class="nav-label">Stats</span>
+        </a>
+    </nav>
+    {% endif %}
+    {% endif %}
+
+    {% block extra_js %}{% endblock %}
+    <script>
+    // CSRF helpers — inject token into all forms and expose for fetch calls
+    (function() {
+        const tok = document.querySelector('meta[name="csrf-token"]')?.content || '';
+        window._csrf = tok;
+        document.addEventListener('submit', function(e) {
+            const form = e.target;
+            if (form.method && form.method.toLowerCase() === 'post' && !form.querySelector('[name="_csrf"]')) {
+                const inp = document.createElement('input');
+                inp.type = 'hidden'; inp.name = '_csrf'; inp.value = tok;
+                form.appendChild(inp);
+            }
+        }, true);
+    })();
+
+    function toggleExtras() {
+        const sheet    = document.getElementById('extras-sheet');
+        const backdrop = document.getElementById('extras-backdrop');
+        const open     = sheet.classList.contains('open');
+        sheet.classList.toggle('open', !open);
+        backdrop.classList.toggle('open', !open);
+    }
+    function closeExtras() {
+        document.getElementById('extras-sheet').classList.remove('open');
+        document.getElementById('extras-backdrop').classList.remove('open');
+    }
+    </script>
+</body>
+</html>

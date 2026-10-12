@@ -24,7 +24,39 @@ from datetime import datetime
 
 # tracker.db lives at the repo root (one level above this package). Resolve
 # relative to the package dir so it works regardless of the launch CWD.
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'tracker.db')
+# GYMTRACKER_DB overrides the path (used by the test-suite so tests never touch
+# the live database). Falls back to the repo-root tracker.db.
+DB_PATH = os.environ.get('GYMTRACKER_DB') or os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'tracker.db')
+
+# ── Training-day boundary ────────────────────────────────────────────────────
+# SQLite's CURRENT_TIMESTAMP is UTC, so every recorded_at / performed_at is a
+# UTC wall-clock string. Comparing DATE(recorded_at) against
+# DATE('now','localtime') therefore mixes two calendars: in UTC+10 a set logged
+# at 07:30 local is stored as the PREVIOUS UTC day, so "today" misses it. That
+# silently broke morning sessions (no rehydrate, a fresh session row per set,
+# undo/tally no-ops).
+#
+# A training day is the local calendar day shifted back by ROLLOVER_HOUR, so a
+# 1 AM finish still belongs to the day the workout started on — the boundary
+# apply_session_rollover() was already trying to express.
+#
+# Legacy rows imported by import_history.py store a bare 'YYYY-MM-DD' with no
+# time. SQLite reads those as midnight UTC, so applying 'localtime' to them
+# would shift them a day; they are already local dates, so pass them through.
+
+ROLLOVER_HOUR = 4  # sessions from a prior day are stamped after ~4:00 AM local
+
+
+def _training_day(col):
+    """SQL expression: the training day a stored timestamp column belongs to."""
+    return ("CASE WHEN length({c}) <= 10 THEN DATE({c}) "
+            "ELSE DATE({c}, 'localtime', '-{h} hours') END").format(
+                c=col, h=ROLLOVER_HOUR)
+
+
+# The training day we are in right now.
+TODAY_SQL = "DATE('now', 'localtime', '-{h} hours')".format(h=ROLLOVER_HOUR)
 
 # Allowed tracking_type values. weight_reps = load×reps×sets, reps = bodyweight
 # reps, time = timed hold/duration per set, weight_time = load held for a
@@ -464,28 +496,39 @@ def get_gym_history(exercise_id, limit=10):
 
 
 def get_today_tally(exercise_id):
-    """Sets/reps already logged today for one exercise (local-time date)."""
+    """Sets/reps already logged today for one exercise (current training day)."""
     conn = _gym_db()
     row = conn.execute(
         "SELECT COUNT(*) AS sets, COALESCE(SUM(reps), 0) AS reps "
         "FROM gym_progression "
-        "WHERE exercise_id = ? AND DATE(recorded_at) = DATE('now', 'localtime')",
+        "WHERE exercise_id = ? AND {day} = {today}".format(
+            day=_training_day('recorded_at'), today=TODAY_SQL),
         (exercise_id,)
     ).fetchone()
     conn.close()
     return {'sets': row['sets'], 'reps': row['reps']}
 
 
-def undo_last_today(exercise_id):
-    """Delete the most recently logged set for this exercise, if it was
-    logged today. Used to walk back an accidental one-touch tap. Returns
-    True if a row was deleted."""
+def undo_last_today(exercise_id, session_id=None):
+    """Delete the most recently logged set for this exercise within the current
+    training day. Used to walk back an accidental tap. Returns True if a row
+    was deleted.
+
+    When session_id is given the undo is scoped to that session, so undo can
+    never reach back into an earlier session that happens to share the day.
+    """
     conn = _gym_db()
+    params = [exercise_id]
+    scope = ""
+    if session_id is not None:
+        scope = "AND session_id = ? "
+        params.append(session_id)
     row = conn.execute(
         "SELECT id FROM gym_progression "
-        "WHERE exercise_id = ? AND DATE(recorded_at) = DATE('now', 'localtime') "
-        "ORDER BY id DESC LIMIT 1",
-        (exercise_id,)
+        "WHERE exercise_id = ? {scope}AND {day} = {today} "
+        "ORDER BY id DESC LIMIT 1".format(
+            scope=scope, day=_training_day('recorded_at'), today=TODAY_SQL),
+        params
     ).fetchone()
     if not row:
         conn.close()
@@ -516,8 +559,9 @@ def get_or_create_today_gym_session():
     conn = _gym_db()
     row = conn.execute(
         "SELECT id FROM gym_sessions "
-        "WHERE finished = 0 AND DATE(performed_at) = DATE('now', 'localtime') "
-        "ORDER BY id DESC LIMIT 1"
+        "WHERE finished = 0 AND {day} = {today} "
+        "ORDER BY id DESC LIMIT 1".format(
+            day=_training_day('performed_at'), today=TODAY_SQL)
     ).fetchone()
     if row:
         session_id = row['id']
@@ -702,9 +746,6 @@ def get_gym_muscle_engagement():
 # muscle_groups of the exercises logged against it — there is no stored
 # "muscle of the day". These helpers supply pre-fill, rehydrate and roll-over.
 
-ROLLOVER_HOUR = 4  # sessions from a prior day are stamped after ~4:00 AM local
-
-
 def get_exercise_prefill(exercise_id):
     """Pre-fill source for opening an exercise in the live view.
 
@@ -769,13 +810,17 @@ def apply_session_rollover():
     if not row:
         conn.close()
         return None
+    # The ROLLOVER_HOUR shift is baked into the training-day expression, so a
+    # session started yesterday evening is still "today" until 4 AM — no
+    # separate hour guard needed (the old one also compared a UTC date against
+    # a local one, which closed sessions that had only just been opened).
     guard = conn.execute(
-        "SELECT DATE(?) < DATE('now','localtime') AS is_prior, "
-        "CAST(strftime('%H', 'now','localtime') AS INTEGER) >= ? AS past_hour",
-        (row['performed_at'], ROLLOVER_HOUR)
+        "SELECT {day} < {today} AS is_prior".format(
+            day=_training_day('?'), today=TODAY_SQL),
+        (row['performed_at'],) * _training_day('?').count('?')
     ).fetchone()
     stamped = None
-    if guard['is_prior'] and guard['past_hour']:
+    if guard['is_prior']:
         conn.execute(
             "UPDATE gym_sessions SET finished = 1, ended_at = CURRENT_TIMESTAMP "
             "WHERE id = ?",
@@ -824,8 +869,9 @@ def get_live_session_state():
     conn = _gym_db()
     srow = conn.execute(
         "SELECT id FROM gym_sessions "
-        "WHERE DATE(performed_at) = DATE('now','localtime') "
-        "ORDER BY id DESC LIMIT 1"
+        "WHERE {day} = {today} "
+        "ORDER BY finished ASC, id DESC LIMIT 1".format(
+            day=_training_day('performed_at'), today=TODAY_SQL)
     ).fetchone()
     if not srow:
         conn.close()

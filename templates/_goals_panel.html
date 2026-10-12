@@ -1,0 +1,285 @@
+{# ──────────────────────────────────────────────────────────────────────────
+   Weekly Food Goals — shared quest-log panel
+   Rendered identically for every profile via the unified home.html shell.
+   Expects two context vars from the home route:
+     • weekly_goals : list of {id, food_name, goal_type, target, progress, complete}
+     • goal_foods   : list of {name, name_key, unit_type, goal_type}
+   All CRUD is inline via /goals/* endpoints (CSRF header + profile-scoped).
+   Styling uses body.pandora tokens only — no hardcoded colours.
+   ────────────────────────────────────────────────────────────────────────── #}
+<style>
+.qg-panel {
+    background: var(--panel-soft); border: 1px solid var(--border);
+    border-radius: var(--radius-lg, 14px); padding: 14px 15px 13px;
+    box-shadow: var(--elev-1);
+}
+.qg-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.qg-title {
+    font-family: var(--font-mono); font-size: 11px; font-weight: 600;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--accent);
+    display: inline-flex; align-items: center; gap: 7px;
+}
+.qg-title::before {
+    font-family: "Material Symbols Rounded"; content: "flag"; font-size: 15px;
+    color: var(--accent); opacity: .9;
+}
+.qg-add-toggle {
+    background: transparent; border: 1px solid var(--border); border-radius: var(--radius-sm, 4px);
+    color: var(--dim); cursor: pointer; font-family: var(--font-mono); font-size: 10px;
+    letter-spacing: .06em; text-transform: uppercase; padding: 4px 9px;
+    -webkit-tap-highlight-color: transparent; transition: color .12s, border-color .12s;
+}
+.qg-add-toggle:hover, .qg-add-toggle.open { color: var(--accent); border-color: var(--accent); }
+
+/* ── Active quest rows ── */
+.qg-list { display: flex; flex-direction: column; gap: 2px; }
+.qg-item {
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 8px 4px; border-radius: var(--radius-md, 6px);
+}
+.qg-item:hover { background: var(--panel-alt); }
+.qg-item:hover .qg-del { opacity: 1; }
+.qg-marker {
+    flex-shrink: 0; width: 15px; text-align: center;
+    font-family: "Material Symbols Rounded"; font-size: 15px; line-height: 1.3;
+    color: var(--accent); opacity: 0;
+}
+.qg-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.qg-name {
+    font-family: var(--font-sans); font-size: 13.5px; font-weight: 600;
+    color: var(--text-strong); line-height: 1.25;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.qg-sub {
+    font-family: var(--font-mono); font-size: 11px; color: var(--dim); letter-spacing: .02em;
+}
+.qg-edit-target {
+    width: 56px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-sm, 4px); color: var(--text);
+    font-family: var(--font-mono); font-size: 12px; padding: 4px 6px; text-align: right;
+}
+.qg-del {
+    flex-shrink: 0; background: none; border: none; color: var(--dimmer); cursor: pointer;
+    font-size: 13px; line-height: 1; padding: 2px 5px; border-radius: var(--radius-sm, 4px);
+    opacity: 0; transition: opacity .12s, color .12s; -webkit-tap-highlight-color: transparent;
+    align-self: center;
+}
+.qg-del:hover { color: var(--red); }
+
+/* ── Completed divider + past objectives ── */
+.qg-divider {
+    display: flex; align-items: center; gap: 8px; margin: 12px 2px 8px;
+}
+.qg-divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.qg-divider-label {
+    font-family: var(--font-mono); font-size: 9.5px; font-weight: 400;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--dimmer);
+}
+.qg-item.done .qg-name { color: var(--dim); font-weight: 500; }
+.qg-item.done .qg-marker { opacity: 1; }
+.qg-item.done:hover { background: transparent; }
+
+/* ── Empty state ── */
+.qg-empty {
+    font-family: var(--font-mono); font-size: 11px; color: var(--dimmer);
+    font-style: italic; text-align: center; padding: 14px 8px 10px;
+}
+
+/* ── Inline add row ── */
+.qg-add {
+    display: none; flex-direction: column; gap: 8px;
+    margin-top: 10px; padding-top: 11px; border-top: 1px solid var(--border);
+}
+.qg-add.active { display: flex; }
+.qg-add-row { display: flex; gap: 7px; }
+.qg-food-select {
+    flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-sm, 4px); color: var(--text);
+    font-family: var(--font-sans); font-size: 13px; padding: 8px 9px;
+}
+.qg-target-input {
+    width: 72px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-sm, 4px); color: var(--text);
+    font-family: var(--font-mono); font-size: 13px; padding: 8px 9px; text-align: right;
+}
+.qg-mode {
+    display: inline-flex; align-items: center; padding: 0 10px;
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em;
+    color: var(--dim); background: var(--panel-alt);
+    border: 1px solid var(--border); border-radius: var(--radius-sm, 4px);
+    white-space: nowrap; min-width: 60px; justify-content: center;
+}
+.qg-add-actions { display: flex; gap: 7px; }
+.qg-save {
+    flex: 1; background: var(--accent); color: var(--bg); border: none;
+    border-radius: var(--radius-sm, 4px); cursor: pointer;
+    font-family: var(--font-sans); font-size: 12.5px; font-weight: 600; padding: 9px 0;
+    -webkit-tap-highlight-color: transparent;
+}
+.qg-save:active { opacity: .85; }
+.qg-cancel {
+    background: var(--panel); color: var(--dim); border: 1px solid var(--border);
+    border-radius: var(--radius-sm, 4px); cursor: pointer;
+    font-family: var(--font-sans); font-size: 12.5px; font-weight: 600; padding: 9px 14px;
+    -webkit-tap-highlight-color: transparent;
+}
+.qg-err {
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--red);
+    display: none; padding: 0 2px;
+}
+.qg-err.show { display: block; }
+</style>
+
+<section class="section">
+  <div class="qg-panel" id="qg-panel">
+    <div class="qg-head">
+      <span class="qg-title">Weekly Goals</span>
+      <button type="button" class="qg-add-toggle" id="qg-add-toggle" onclick="qgToggleAdd()">+ add</button>
+    </div>
+
+    <div id="qg-active" class="qg-list"></div>
+    <div id="qg-completed-wrap" style="display:none">
+      <div class="qg-divider"><span class="qg-divider-label">Completed</span></div>
+      <div id="qg-completed" class="qg-list"></div>
+    </div>
+    <div id="qg-empty" class="qg-empty" style="display:none">No weekly goals yet — add one.</div>
+
+    <div class="qg-add" id="qg-add">
+      <div class="qg-add-row">
+        <select class="qg-food-select" id="qg-food" onchange="qgSyncMode()">
+          <option value="" disabled selected>Pick a food…</option>
+          {% for f in goal_foods %}
+          <option value="{{ f.name }}" data-mode="{{ f.goal_type }}">{{ f.name }}</option>
+          {% endfor %}
+        </select>
+        <input type="number" class="qg-target-input" id="qg-target" placeholder="12" min="0.1" step="any" inputmode="decimal"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();qgSave();}">
+        <span class="qg-mode" id="qg-mode">—</span>
+      </div>
+      <div class="qg-err" id="qg-err"></div>
+      <div class="qg-add-actions">
+        <button type="button" class="qg-save" onclick="qgSave()">Add goal</button>
+        <button type="button" class="qg-cancel" onclick="qgToggleAdd(false)">Cancel</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  var GOALS = {{ weekly_goals | tojson }};
+
+  function csrf() {
+    var m = document.querySelector('meta[name="csrf-token"]');
+    return m ? m.getAttribute('content') : '';
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+    });
+  }
+  function fmtNum(n) {
+    n = Number(n) || 0;
+    return Number.isInteger(n) ? String(n) : n.toFixed(n * 10 % 10 === 0 ? 1 : 2).replace(/\.?0+$/, '');
+  }
+  function subLabel(g) {
+    if (g.goal_type === 'gram') return fmtNum(g.progress) + ' / ' + fmtNum(g.target) + ' g';
+    return fmtNum(g.progress) + ' / ' + fmtNum(g.target);
+  }
+
+  function render() {
+    var active = GOALS.filter(function (g) { return !g.complete; });
+    var done   = GOALS.filter(function (g) { return g.complete; });
+    var aEl = document.getElementById('qg-active');
+    var cEl = document.getElementById('qg-completed');
+    var cWrap = document.getElementById('qg-completed-wrap');
+    var emptyEl = document.getElementById('qg-empty');
+
+    aEl.innerHTML = active.map(function (g) {
+      return '<div class="qg-item" data-id="' + g.id + '">'
+        + '<span class="qg-marker"></span>'
+        + '<span class="qg-body">'
+        +   '<span class="qg-name">' + esc(g.food_name) + '</span>'
+        +   '<span class="qg-sub">' + subLabel(g) + '</span>'
+        + '</span>'
+        + '<button type="button" class="qg-del" title="Remove" onclick="qgDelete(' + g.id + ')">✕</button>'
+        + '</div>';
+    }).join('');
+
+    if (done.length) {
+      cWrap.style.display = '';
+      cEl.innerHTML = done.map(function (g) {
+        return '<div class="qg-item done" data-id="' + g.id + '">'
+          + '<span class="qg-marker">check</span>'
+          + '<span class="qg-body"><span class="qg-name">' + esc(g.food_name) + '</span></span>'
+          + '<button type="button" class="qg-del" title="Remove" onclick="qgDelete(' + g.id + ')">✕</button>'
+          + '</div>';
+      }).join('');
+    } else {
+      cWrap.style.display = 'none';
+      cEl.innerHTML = '';
+    }
+    emptyEl.style.display = GOALS.length ? 'none' : '';
+  }
+
+  window.qgToggleAdd = function (force) {
+    var box = document.getElementById('qg-add');
+    var btn = document.getElementById('qg-add-toggle');
+    var show = (typeof force === 'boolean') ? force : !box.classList.contains('active');
+    box.classList.toggle('active', show);
+    btn.classList.toggle('open', show);
+    if (show) { setTimeout(function () { document.getElementById('qg-food').focus(); }, 30); }
+    else { qgClearErr(); }
+  };
+
+  window.qgSyncMode = function () {
+    var sel = document.getElementById('qg-food');
+    var opt = sel.options[sel.selectedIndex];
+    var mode = opt ? opt.getAttribute('data-mode') : null;
+    document.getElementById('qg-mode').textContent = mode === 'unit' ? '× units' : (mode === 'gram' ? 'grams' : '—');
+  };
+
+  function qgClearErr() { var e = document.getElementById('qg-err'); e.textContent=''; e.classList.remove('show'); }
+  function qgShowErr(msg) { var e = document.getElementById('qg-err'); e.textContent = msg; e.classList.add('show'); }
+
+  window.qgSave = async function () {
+    qgClearErr();
+    var food = document.getElementById('qg-food').value;
+    var target = document.getElementById('qg-target').value;
+    if (!food) { qgShowErr('Pick a food first.'); return; }
+    if (!target || Number(target) <= 0) { qgShowErr('Enter a target greater than zero.'); return; }
+    try {
+      var res = await fetch('/goals/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf() },
+        body: JSON.stringify({ food_name: food, target: target }),
+      });
+      var data = await res.json().catch(function () { return {}; });
+      if (!res.ok) { qgShowErr(data.error || 'Could not add goal.'); return; }
+      GOALS.push(data.goal.goal_type
+        ? { id: data.goal.id, food_name: data.goal.food_name, goal_type: data.goal.goal_type,
+            target: data.goal.target, progress: 0, complete: false }
+        : data.goal);
+      document.getElementById('qg-food').selectedIndex = 0;
+      document.getElementById('qg-target').value = '';
+      qgSyncMode();
+      qgToggleAdd(false);
+      render();
+    } catch (e) { qgShowErr('Network error — try again.'); }
+  };
+
+  window.qgDelete = async function (id) {
+    try {
+      var res = await fetch('/goals/' + id + '/delete', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': csrf() },
+      });
+      if (!res.ok) throw new Error();
+      GOALS = GOALS.filter(function (g) { return g.id !== id; });
+      render();
+    } catch (e) { location.reload(); }
+  };
+
+  render();
+})();
+</script>

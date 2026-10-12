@@ -1,0 +1,21 @@
+{# ──────────────────────────────────────────────────────────────────────────
+   Ladder engine · home slot
+   Rendered into home.html via {% include current_engine.home_partial %} when the
+   active profile's workout_engine == 'ladder'. Holds ONLY the ladder-specific
+   home content; all shared panels live in home.html.
+   Context supplied by build_ladder_home_context(): _active_days, total_cal.
+   ────────────────────────────────────────────────────────────────────────── #}
+
+{# ── Weekly stats ──────────────────────────────────────────────────────── #}
+<section class="section">
+    <div class="stats-row">
+        <div class="stat-card">
+            <span class="stat-lbl wk">workouts</span>
+            <span class="stat-val">{{ _active_days }}</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-lbl food">kcal today</span>
+            <span class="stat-val">{{ '{:,}'.format(total_cal) }}</span>
+        </div>
+    </div>
+</section>

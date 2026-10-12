@@ -564,6 +564,42 @@ def init_db():
     conn.execute("INSERT OR IGNORE INTO profiles (id, name) VALUES (2, 'Gayathri')")
     conn.execute("INSERT OR IGNORE INTO profiles (id, name) VALUES (3, 'Raj')")
 
+    # ── Profile convergence: workout-engine identity + capability flags ──
+    _prof_cols = {r[1] for r in conn.execute('PRAGMA table_info(profiles)')}
+    if 'workout_engine' not in _prof_cols:
+        conn.execute("ALTER TABLE profiles ADD COLUMN workout_engine TEXT NOT NULL DEFAULT 'scheme'")
+        conn.execute("UPDATE profiles SET workout_engine = 'ladder' WHERE id IN (2, 3)")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS profile_capabilities (
+            profile_id     INTEGER NOT NULL,
+            capability_key TEXT    NOT NULL,
+            granted_at     TEXT,
+            PRIMARY KEY (profile_id, capability_key)
+        )
+    """)
+
+    # Private per-profile nicotine-pouch daily tally (capability-gated panel —
+    # Profile Convergence §9). One integer count per (date, profile); mirrors the
+    # body_weight per-date-per-profile shape and the exercise_tally upsert idiom.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS nicotine_log (
+            date       TEXT    NOT NULL,
+            profile_id INTEGER NOT NULL,
+            count      INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT,
+            PRIMARY KEY (date, profile_id)
+        )
+    """)
+    # Grant the nicotine_counter capability to profile 1 only (idempotent seed).
+    from datetime import datetime as _dt_nic
+    conn.execute(
+        """INSERT INTO profile_capabilities (profile_id, capability_key, granted_at)
+           VALUES (1, 'nicotine_counter', ?)
+           ON CONFLICT(profile_id, capability_key) DO NOTHING""",
+        (_dt_nic.utcnow().isoformat() + 'Z',)
+    )
+
     # Profile-scoped exercise-bank configuration. Canonical exercise identity
     # remains in exercises; per-scope overrides and enable/disable live here.
     conn.execute("""
@@ -699,6 +735,20 @@ def init_db():
     """)
 
     conn.execute("""
+        CREATE TABLE IF NOT EXISTS food_goals (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile_id  INTEGER NOT NULL DEFAULT 1,
+            food_name   TEXT    NOT NULL,
+            name_key    TEXT    NOT NULL,
+            goal_type   TEXT    NOT NULL,
+            target      REAL    NOT NULL,
+            sort_order  INTEGER NOT NULL DEFAULT 0,
+            created_at  TEXT    NOT NULL,
+            UNIQUE(profile_id, name_key)
+        )
+    """)
+
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS containers (
             id       INTEGER PRIMARY KEY AUTOINCREMENT,
             name     TEXT NOT NULL UNIQUE,
@@ -756,6 +806,7 @@ def init_db():
             (_food_key(_fi['name']), _fi['id'])
         )
     conn.execute('CREATE INDEX IF NOT EXISTS idx_food_items_name_key ON food_items(name_key)')
+    conn.execute('CREATE INDEX IF NOT EXISTS idx_food_goals_lookup ON food_goals(profile_id, name_key)')
 
     # Migrate macro_goals: drop CHECK(id=1) constraint so multiple profiles can have goals.
     # Old schema uses column 'id'; new schema uses 'profile_id'.
@@ -2735,6 +2786,170 @@ def get_session_detail_with_progression(session_id):
     return dict(session), [grouped[eid] for eid in order], duration_min
 
 
+# ── Profile engine + capabilities ──
+# Engine identity and capability flags are read from the profiles row / the
+# profile_capabilities table — never from a hardcoded profile-id check.
+
+VALID_WORKOUT_ENGINES = ('scheme', 'ladder')
+
+
+def get_workout_engine(profile_id):
+    """Return the profile's workout engine key ('scheme' | 'ladder')."""
+    conn = get_db()
+    row = conn.execute('SELECT workout_engine FROM profiles WHERE id = ?', (profile_id,)).fetchone()
+    conn.close()
+    if not row or not row['workout_engine']:
+        return 'scheme'
+    eng = row['workout_engine']
+    return eng if eng in VALID_WORKOUT_ENGINES else 'scheme'
+
+
+def set_workout_engine(profile_id, engine_key):
+    """Set a profile's workout engine. Raises ValueError on an unknown engine key."""
+    if engine_key not in VALID_WORKOUT_ENGINES:
+        raise ValueError('invalid_engine')
+    conn = get_db()
+    conn.execute('UPDATE profiles SET workout_engine = ? WHERE id = ?', (engine_key, profile_id))
+    conn.commit()
+    conn.close()
+
+
+def get_profile_capabilities(profile_id):
+    """Return the set of capability keys granted to a profile (may be empty)."""
+    conn = get_db()
+    rows = conn.execute(
+        'SELECT capability_key FROM profile_capabilities WHERE profile_id = ?',
+        (profile_id,)
+    ).fetchall()
+    conn.close()
+    return {r['capability_key'] for r in rows}
+
+
+def has_capability(profile_id, capability_key):
+    """True iff the profile has been granted capability_key."""
+    conn = get_db()
+    row = conn.execute(
+        'SELECT 1 FROM profile_capabilities WHERE profile_id = ? AND capability_key = ?',
+        (profile_id, capability_key)
+    ).fetchone()
+    conn.close()
+    return bool(row)
+
+
+def grant_capability(profile_id, capability_key):
+    """Grant a capability to a profile (idempotent)."""
+    from datetime import datetime as _dt
+    conn = get_db()
+    conn.execute(
+        """INSERT INTO profile_capabilities (profile_id, capability_key, granted_at)
+           VALUES (?, ?, ?)
+           ON CONFLICT(profile_id, capability_key) DO NOTHING""",
+        (profile_id, capability_key, _dt.utcnow().isoformat() + 'Z')
+    )
+    conn.commit()
+    conn.close()
+
+
+def revoke_capability(profile_id, capability_key):
+    """Remove a capability from a profile (idempotent)."""
+    conn = get_db()
+    conn.execute(
+        'DELETE FROM profile_capabilities WHERE profile_id = ? AND capability_key = ?',
+        (profile_id, capability_key)
+    )
+    conn.commit()
+    conn.close()
+
+
+# ── Nicotine-pouch counter (private, capability-gated panel — §9) ──────────────
+# Pure daily tally: one integer count per (date, profile_id). Increment/undo via an
+# upsert (undo floors at 0). PRIVACY: these are the ONLY functions that read/write
+# nicotine_log — no shared/aggregate query touches it, so the data stays panel-private.
+
+def _nicotine_today_iso():
+    from datetime import date as _d
+    return _d.today().isoformat()
+
+
+def nicotine_bump(profile_id, date_iso=None, delta=1):
+    """Increment today's (or a given date's) nicotine count for a profile. Upsert
+    idiom mirrors bump_exercise_tally. Returns the new count."""
+    from datetime import datetime as _dt
+    date_iso = date_iso or _nicotine_today_iso()
+    conn = get_db()
+    conn.execute(
+        """INSERT INTO nicotine_log (date, profile_id, count, updated_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(date, profile_id) DO UPDATE SET
+               count = count + excluded.count,
+               updated_at = excluded.updated_at""",
+        (date_iso, profile_id, int(delta), _dt.utcnow().isoformat() + 'Z')
+    )
+    conn.commit()
+    row = conn.execute(
+        'SELECT count FROM nicotine_log WHERE date = ? AND profile_id = ?',
+        (date_iso, profile_id)
+    ).fetchone()
+    conn.close()
+    return int(row['count']) if row else 0
+
+
+def nicotine_undo(profile_id, date_iso=None):
+    """Decrement today's count by 1, flooring at 0. Returns the new count."""
+    from datetime import datetime as _dt
+    date_iso = date_iso or _nicotine_today_iso()
+    conn = get_db()
+    row = conn.execute(
+        'SELECT count FROM nicotine_log WHERE date = ? AND profile_id = ?',
+        (date_iso, profile_id)
+    ).fetchone()
+    current = int(row['count']) if row else 0
+    new_count = max(0, current - 1)
+    conn.execute(
+        """INSERT INTO nicotine_log (date, profile_id, count, updated_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(date, profile_id) DO UPDATE SET
+               count = excluded.count, updated_at = excluded.updated_at""",
+        (date_iso, profile_id, new_count, _dt.utcnow().isoformat() + 'Z')
+    )
+    conn.commit()
+    conn.close()
+    return new_count
+
+
+def get_nicotine_today(profile_id, date_iso=None):
+    """Today's (or given date's) nicotine count for a profile (0 if none)."""
+    date_iso = date_iso or _nicotine_today_iso()
+    conn = get_db()
+    row = conn.execute(
+        'SELECT count FROM nicotine_log WHERE date = ? AND profile_id = ?',
+        (date_iso, profile_id)
+    ).fetchone()
+    conn.close()
+    return int(row['count']) if row else 0
+
+
+def get_nicotine_week(profile_id, monday_iso, sunday_iso):
+    """Return a 7-element list of {date, count} for the Mon–Sun window (inclusive),
+    zero-filled for days with no log row. Ordered Monday→Sunday."""
+    from datetime import date as _d, timedelta as _td
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT date, count FROM nicotine_log
+           WHERE profile_id = ? AND date >= ? AND date <= ?""",
+        (profile_id, monday_iso, sunday_iso)
+    ).fetchall()
+    conn.close()
+    by_date = {r['date']: int(r['count']) for r in rows}
+    monday = _d.fromisoformat(monday_iso)
+    out = []
+    for i in range(7):
+        day = (monday + _td(days=i)).isoformat()
+        out.append({'date': day, 'count': by_date.get(day, 0)})
+    return out
+
+
+
 # ── Food tracking ──────────────────────────────────────────────────────
 
 def get_macro_goals(profile_id=1):
@@ -2771,6 +2986,204 @@ def set_macro_goals(calories, protein_g, carbs_g, fat_g, profile_id=1, workout_t
     """, (profile_id, calories, protein_g, carbs_g, fat_g, workout_target))
     conn.commit()
     conn.close()
+
+
+# ── Weekly food goals ──────────────────────────────────────────────
+# Per-food weekly targets (e.g. 12 eggs/week, 150g whey/week). Progress is computed
+# live over the current Mon–Sun window from food_log rows whose parsed canonical key
+# matches the goal's name_key — never stored per-week. Quantity is derived ONLY through
+# the shared _parse_entry_name()/_resolve_food() helpers (never a second parser).
+
+
+def get_goal_foods():
+    """Foods eligible for a weekly goal: every defined library food (calories > 0) with a
+    recognised unit_type. Returns [{name, name_key, unit_type, goal_type}] sorted by name.
+    goal_type mirrors how the food is counted: 'unit' foods → 'unit', weight foods → 'gram'."""
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT name, name_key, unit_type FROM food_items
+           WHERE calories > 0 AND unit_type IS NOT NULL AND TRIM(unit_type) != ''
+           ORDER BY name COLLATE NOCASE"""
+    ).fetchall()
+    conn.close()
+    out = []
+    for r in rows:
+        out.append({
+            'name': r['name'],
+            'name_key': r['name_key'] or _food_key(r['name']),
+            'unit_type': r['unit_type'],
+            'goal_type': 'unit' if r['unit_type'] == 'unit' else 'gram',
+        })
+    return out
+
+
+def add_food_goal(food_name, target, profile_id=1):
+    """Create a weekly goal for the given library food, scoped to profile_id.
+
+    Resolves name_key + goal_type from the food's library definition (unit_type).
+    Raises ValueError('unknown_food') if the food isn't a defined library item, and
+    ValueError('duplicate') if a goal for this food already exists for the profile.
+    Returns the created goal row as a dict.
+    """
+    try:
+        target = float(target)
+    except (TypeError, ValueError):
+        raise ValueError('invalid_target')
+    if target <= 0:
+        raise ValueError('invalid_target')
+
+    key = _food_key(food_name)
+    conn = get_db()
+    item = _lookup_food_item(conn, key)
+    if not item or not (item['calories'] > 0):
+        conn.close()
+        raise ValueError('unknown_food')
+
+    goal_type = 'unit' if item['unit_type'] == 'unit' else 'gram'
+    display = item['name']  # canonical library display name
+    from datetime import datetime as _dt
+    created_at = _dt.utcnow().isoformat() + 'Z'
+
+    # Append to the bottom of the list by default.
+    row = conn.execute(
+        'SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM food_goals WHERE profile_id = ?',
+        (profile_id,)
+    ).fetchone()
+    sort_order = row['n'] if row else 0
+
+    try:
+        goal_id = conn.execute(
+            """INSERT INTO food_goals (profile_id, food_name, name_key, goal_type, target, sort_order, created_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (profile_id, display, item['name_key'] or key, goal_type, target, sort_order, created_at)
+        ).lastrowid
+    except sqlite3.IntegrityError:
+        conn.close()
+        raise ValueError('duplicate')
+    conn.commit()
+    created = conn.execute('SELECT * FROM food_goals WHERE id = ?', (goal_id,)).fetchone()
+    conn.close()
+    return dict(created)
+
+
+def update_food_goal(goal_id, profile_id, target=None, sort_order=None):
+    """Update a goal's target and/or sort_order, but only if it belongs to profile_id.
+    Returns the updated row as a dict, or None if not found / not owned."""
+    conn = get_db()
+    row = conn.execute('SELECT * FROM food_goals WHERE id = ?', (goal_id,)).fetchone()
+    if not row or row['profile_id'] != profile_id:
+        conn.close()
+        return None
+    new_target = row['target']
+    if target is not None:
+        try:
+            new_target = float(target)
+        except (TypeError, ValueError):
+            conn.close()
+            raise ValueError('invalid_target')
+        if new_target <= 0:
+            conn.close()
+            raise ValueError('invalid_target')
+    new_sort = row['sort_order'] if sort_order is None else int(sort_order)
+    conn.execute(
+        'UPDATE food_goals SET target = ?, sort_order = ? WHERE id = ? AND profile_id = ?',
+        (new_target, new_sort, goal_id, profile_id)
+    )
+    conn.commit()
+    updated = conn.execute('SELECT * FROM food_goals WHERE id = ?', (goal_id,)).fetchone()
+    conn.close()
+    return dict(updated)
+
+
+def delete_food_goal(goal_id, profile_id):
+    """Delete a goal iff it belongs to profile_id. Returns True if a row was removed."""
+    conn = get_db()
+    row = conn.execute('SELECT profile_id FROM food_goals WHERE id = ?', (goal_id,)).fetchone()
+    if not row or row['profile_id'] != profile_id:
+        conn.close()
+        return False
+    conn.execute('DELETE FROM food_goals WHERE id = ? AND profile_id = ?', (goal_id, profile_id))
+    conn.commit()
+    conn.close()
+    return True
+
+
+def get_weekly_goal_progress(profile_id, monday_iso, sunday_iso):
+    """Compute live progress for every weekly goal of a profile over an inclusive
+    Mon–Sun date window.
+
+    For each goal, sum the matching food_log rows (same profile, parsed key == goal
+    name_key, date within window):
+      • unit goals  → progress = Σ multiplier   (bare 'Eggs' = 1, '2x Eggs' = 2)
+      • gram goals  → progress = Σ grams, where grams = parsed gram_qty when present,
+                       else the food's std_serving_g when set, else the row is SKIPPED
+                       (never assume 100g toward a goal).
+    Display progress is capped at target on completion. Returns a list of
+    {id, food_name, goal_type, target, progress, complete} ordered by sort_order, id.
+    """
+    conn = get_db()
+    goals = conn.execute(
+        """SELECT * FROM food_goals WHERE profile_id = ?
+           ORDER BY sort_order, id""",
+        (profile_id,)
+    ).fetchall()
+    if not goals:
+        conn.close()
+        return []
+
+    # Pull this week's log rows once, parse each, and bucket by canonical key.
+    log_rows = conn.execute(
+        """SELECT name FROM food_log
+           WHERE profile_id = ? AND date >= ? AND date <= ?""",
+        (profile_id, monday_iso, sunday_iso)
+    ).fetchall()
+
+    # std_serving_g lookup per key (nullable; only used for the gram fallback).
+    serving_by_key = {}
+    for r in conn.execute('SELECT name_key, std_serving_g FROM food_items').fetchall():
+        if r['name_key'] is not None:
+            serving_by_key[r['name_key']] = r['std_serving_g']
+    conn.close()
+
+    unit_prog = {}
+    gram_prog = {}
+    for lr in log_rows:
+        parsed = _parse_entry_name(lr['name'])
+        key = parsed['key']
+        # unit tally: multiplier (count defaults to 1 for a bare unit food)
+        unit_prog[key] = unit_prog.get(key, 0.0) + (parsed['multiplier'] or 1.0)
+        # gram tally: explicit grams, else std_serving_g, else skip
+        grams = parsed['gram_qty']
+        if grams is None:
+            ssg = serving_by_key.get(key)
+            if ssg is None:
+                continue  # unprefixed gram log with no std serving → excluded from tally
+            grams = (parsed['multiplier'] or 1.0) * ssg
+        gram_prog[key] = gram_prog.get(key, 0.0) + grams
+
+    result = []
+    for g in goals:
+        if g['goal_type'] == 'unit':
+            raw = unit_prog.get(g['name_key'], 0.0)
+        else:
+            raw = gram_prog.get(g['name_key'], 0.0)
+        target = g['target']
+        complete = raw >= target
+        shown = min(raw, target) if complete else raw
+        if g['goal_type'] == 'unit':
+            # units: whole-ish numbers — drop trailing .0 for display cleanliness
+            progress = round(shown, 2)
+        else:
+            progress = int(round(shown))  # grams displayed as integer per spec
+        result.append({
+            'id': g['id'],
+            'food_name': g['food_name'],
+            'goal_type': g['goal_type'],
+            'target': (int(target) if g['goal_type'] == 'unit' and float(target).is_integer() else target),
+            'progress': progress,
+            'complete': bool(complete),
+        })
+    return result
 
 
 def sync_food_log_from_library(date_str, profile_id=1):

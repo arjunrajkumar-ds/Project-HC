@@ -1,0 +1,12 @@
+{# ──────────────────────────────────────────────────────────────────────────
+   Scheme engine · home slot
+   Rendered into home.html via {% include current_engine.home_partial %} when the
+   active profile's workout_engine == 'scheme'. Holds ONLY the scheme-specific
+   home content; all shared panels live in home.html.
+   Context supplied by build_scheme_home_context(): scheme_viz.
+   ────────────────────────────────────────────────────────────────────────── #}
+
+{# ── Scheme accumulation · read-only viz panel (matrix / bars / rings) ── #}
+{% if scheme_viz and scheme_viz.exercises %}
+{% include '_scheme_accumulation.html' %}
+{% endif %}

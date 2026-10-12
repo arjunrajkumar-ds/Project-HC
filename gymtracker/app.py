@@ -7,7 +7,7 @@ from urllib.parse import quote as _urlquote
 from datetime import date as date_type, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, abort
 from datetime import datetime as _datetime
-from .database import init_db, get_db, get_session_cardio, get_cardio_choices, log_cardio_session, get_muscle_group_activity, bank_scope_for_profile, get_fatigue_state, get_sessions_with_headlines, get_session_detail_with_progression, get_macro_goals, set_macro_goals, sync_food_log_from_library, get_food_log, add_food_entry, log_food_entry, delete_food_entry, get_pending_foods, define_food_item, delete_food_item, get_food_history, get_recent_foods, get_food_library, get_food_components, get_food_component_mode, save_food_components, save_food_components_pct, get_profiles, _parse_qty_name, _parse_gram_prefix, _food_key, log_food_reconciliation, get_food_reconciliations, log_body_weight, get_body_weight, get_body_weight_history, get_pilates_session, get_mission_progress, clear_mission_stage, get_exercise_tallies, bump_exercise_tally, ack_exercise_tally, get_crew_status, get_food_types, create_food_type, update_food_type, delete_food_type, count_foods_with_type, get_distinct_source_names, enrich_log_entries
+from .database import init_db, get_db, get_session_cardio, get_cardio_choices, log_cardio_session, get_muscle_group_activity, bank_scope_for_profile, get_fatigue_state, get_sessions_with_headlines, get_session_detail_with_progression, get_macro_goals, set_macro_goals, sync_food_log_from_library, get_food_log, add_food_entry, log_food_entry, delete_food_entry, get_pending_foods, define_food_item, delete_food_item, get_food_history, get_recent_foods, get_food_library, get_food_components, get_food_component_mode, save_food_components, save_food_components_pct, get_profiles, _parse_qty_name, _parse_gram_prefix, _food_key, log_food_reconciliation, get_food_reconciliations, log_body_weight, get_body_weight, get_body_weight_history, get_pilates_session, get_mission_progress, clear_mission_stage, get_exercise_tallies, bump_exercise_tally, ack_exercise_tally, get_crew_status, get_food_types, create_food_type, update_food_type, delete_food_type, count_foods_with_type, get_distinct_source_names, enrich_log_entries, get_goal_foods, add_food_goal, update_food_goal, delete_food_goal, get_weekly_goal_progress, get_workout_engine, set_workout_engine, get_profile_capabilities, has_capability, grant_capability, revoke_capability, nicotine_bump, nicotine_undo, get_nicotine_today, get_nicotine_week
 from .swim_routes import bp as swim_bp
 from .pilates_routes import bp as pilates_bp
 from .gym_bank import get_gym_bank, get_gym_bank_grouped, get_gym_exercise, gym_add_exercise, gym_update_exercise, gym_set_enabled, gym_archive_exercise, gym_unarchive_exercise, gym_delete_exercise, gym_reorder_function, get_gym_functions, gym_add_function, log_gym_set, get_today_tally, undo_last_today, get_or_create_today_gym_session, get_exercise_prefill, get_live_session_state, apply_session_rollover, TRACKING_TYPES, TRACKING_FIELDS, PROGRESSION_FIELD_LABELS, TIER_LABELS
@@ -110,15 +110,180 @@ def inject_profile():
         db.close()
         return {'current_profile': dict(profile) if profile else None}
     return {'current_profile': None}
-_GAYATHRI_BLOCKED = {
-    'analytics',
-    'exercises',
-    'train',
-    'progression',
-    'session_new',
-    'exercise_delete',
-    'progression_advance',
-    'progression_set_weight'}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# WORKOUT-ENGINE REGISTRY  (Profile Convergence — Stage A)
+# ───────────────────────────────────────────────────────────────────────────
+# Each profile maps to exactly one workout engine via profiles.workout_engine
+# (read with get_workout_engine()); engine identity NEVER comes from a profile-id
+# literal. Each engine declares a capability descriptor: the home-slot partial it
+# contributes, its bottom-nav tab-set, and the allow-list of workout/engine route
+# endpoint names it exposes. Shared endpoints (food, weight, goals, home,
+# profiles, info) are allowed for every engine and are listed in SHARED_ENDPOINTS.
+#
+# Stage A introduces the registry and routes *reads* (nav + guard) through it in
+# later stages; the home-slot partials are wired when the unified shell lands
+# (Stage B) and the nav/guard switch to the registry in Stage C.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Endpoints every profile may reach regardless of engine (shared shell + food +
+# weight + goals + profile switching + static/info). Never gated by engine.
+SHARED_ENDPOINTS = {
+    # Home shell + profile switching + static/info
+    'dashboard', 'profiles', 'profiles_select', 'info', 'static',
+    # Food (all shared)
+    'food', 'food_shared', 'food_log_add', 'food_log_delete', 'food_api_entry',
+    'food_api_entry_meal', 'food_api_entry_update', 'food_api_define',
+    'food_goals_set', 'food_meal_log', 'food_components_save', 'food_database',
+    'food_edit', 'food_edit_new', 'food_define_redirect', 'food_delete',
+    'food_types', 'food_types_create', 'food_types_edit', 'food_types_delete',
+    # Weekly goals
+    'goals_add', 'goals_update', 'goals_delete',
+    # Nicotine counter (capability-gated inside each route)
+    'nicotine_bump_route', 'nicotine_undo_route', 'nicotine_week',
+    # Body weight + shared history/session views + weight API
+    'body_weight_log', 'api_weight_history',
+    'sessions', 'session_detail', 'session_log', 'session_finish',
+    'session_delete', 'add_set', 'lift_edit',
+}
+
+# Routes CURRENTLY blocked for the ladder engine (profiles 2/3) today — via inline
+# (2,3)/!=1 guards or the legacy _GAYATHRI_BLOCKED deny-list. These become the
+# scheme engine's exclusive routes. (Only names that are real endpoints are kept;
+# the legacy deny-list also contained stale names — progression*/exercise_delete —
+# that are no longer routes, so they are intentionally dropped.)
+_SCHEME_ROUTES = {
+    'train', 'analytics', 'exercises', 'session_new',
+    'exercise_db', 'command_centre',
+}
+
+# Routes CURRENTLY exclusive to the ladder engine (inline `not in (2,3)` guard).
+_LADDER_ROUTES = {
+    'missions', 'missions_clear',
+    'workout_quick_set', 'workout_quick_set_delete', 'workout_log_new',
+    'workout_ladder_advance', 'workout_tally_ack', 'workout_log',
+    'workout_custom_log', 'workout_session_start', 'workout_session',
+}
+
+# Bottom-nav tab-sets — encoded verbatim from the pre-convergence base.html so the
+# rendered nav is byte-for-byte identical. `active` is a Jinja expression string
+# evaluated in base.html against `request`.
+_SCHEME_NAV = [
+    {'href': '/',          'icon': '⌂', 'label': 'Today',
+     'active': "request.path == '/'"},
+    {'href': '/train',     'icon': '◉', 'label': 'Train',
+     'active': "request.path == '/train' or request.path == '/exercise-db' or request.path.startswith('/sessions') or request.path.startswith('/swim') or request.path.startswith('/pilates')"},
+    {'href': '/food',      'icon': '◈', 'label': 'Food',
+     'active': "request.path.startswith('/food')"},
+    {'href': '/analytics', 'icon': '▲', 'label': 'Stats',
+     'active': "request.path.startswith('/analytics') or request.path.startswith('/progression')"},
+]
+_LADDER_NAV = [
+    {'href': '/',                'icon': '⌂', 'label': 'Today',
+     'active': "request.path == '/'"},
+    {'href': '/workout/log/new', 'icon': '◉', 'label': 'Train',
+     'active': "request.path.startswith('/workout/log')"},
+    {'href': '/food',            'icon': '◈', 'label': 'Food',
+     'active': "request.path.startswith('/food')"},
+    {'href': '/sessions',        'icon': '▤', 'label': 'History',
+     'active': "request.path.startswith('/sessions') or (request.path.startswith('/session/') and not request.path.startswith('/session/new'))"},
+]
+
+ENGINES = {
+    'scheme': {
+        'key': 'scheme',
+        'label': 'Scheme / progression',
+        'home_partial': 'engines/_scheme_home.html',  # wired in Stage B
+        'nav_items': _SCHEME_NAV,
+        'routes': _SCHEME_ROUTES,
+        # scheme also owns the swim/pilates blueprints
+        'blueprint_prefixes': ('swim.', 'pilates.'),
+    },
+    'ladder': {
+        'key': 'ladder',
+        'label': 'Bodyweight ladder',
+        'home_partial': 'engines/_ladder_home.html',  # wired in Stage B
+        'nav_items': _LADDER_NAV,
+        'routes': _LADDER_ROUTES,
+        'blueprint_prefixes': (),
+    },
+}
+
+
+def get_engine_descriptor(engine_key):
+    """Return the capability descriptor for an engine key, falling back to scheme."""
+    return ENGINES.get(engine_key, ENGINES['scheme'])
+
+
+def _active_engine_key():
+    """Engine key for the active profile (session), via the DB column — no id literal."""
+    return get_workout_engine(_profile_id())
+
+
+def endpoint_allowed_for_engine(endpoint, engine_key):
+    """Stage C guard helper. True iff `endpoint` is reachable for `engine_key`.
+
+    Shared endpoints are always allowed. An engine's own routes are allowed. A
+    route that belongs to a DIFFERENT engine (or a blueprint owned by another
+    engine) is denied. Endpoints unknown to every engine's route-set are treated
+    as shared/non-workout and allowed (they carry their own guards if needed).
+    """
+    if not endpoint:
+        return True
+    if endpoint in SHARED_ENDPOINTS:
+        return True
+    desc = get_engine_descriptor(engine_key)
+    # Blueprint endpoints (e.g. 'swim.index') — allow only if this engine owns the prefix.
+    for other_key, other in ENGINES.items():
+        for pfx in other.get('blueprint_prefixes', ()):
+            if endpoint.startswith(pfx):
+                return pfx in desc.get('blueprint_prefixes', ())
+    if endpoint in desc['routes']:
+        return True
+    # If some OTHER engine claims this endpoint, deny; otherwise it's not an
+    # engine-specific route at all → allow (shared/global).
+    for other_key, other in ENGINES.items():
+        if other_key != engine_key and endpoint in other['routes']:
+            return False
+    return True
+
+
+def _nav_items_with_active(descriptor):
+    """Return the engine's nav_items with a server-computed boolean `active`,
+    evaluated from each item's `active` expression against the current request.path.
+    Evaluating here (not in-template) keeps base.html a simple loop and avoids
+    executing expression strings in Jinja."""
+    try:
+        path = request.path
+    except Exception:
+        path = '/'
+    items = []
+    for it in descriptor['nav_items']:
+        expr = it.get('active', 'False')
+        try:
+            is_active = bool(eval(expr, {'__builtins__': {}}, {'request': request}))
+        except Exception:
+            is_active = False
+        items.append({'href': it['href'], 'icon': it['icon'],
+                      'label': it['label'], 'active': is_active})
+    return items
+
+
+@app.context_processor
+def inject_engine():
+    """Expose the active engine descriptor (+ nav with computed active state) and the
+    profile capability set to every template. Drives the capability-based bottom-nav
+    and per-profile panels. Safe no-op when no profile is selected."""
+    pid = session.get('profile_id')
+    if not pid:
+        return {'current_engine': None, 'current_nav': [], 'profile_caps': set()}
+    desc = get_engine_descriptor(get_workout_engine(pid))
+    return {
+        'current_engine': desc,
+        'current_nav': _nav_items_with_active(desc),
+        'profile_caps': get_profile_capabilities(pid),
+    }
 # Gayathri trains at home with no equipment. Every exercise is bodyweight and
 # chosen for a 60-year-old building foundational strength. Routines are retired
 # in favour of the all-day tap-to-log flow, so _GAYATHRI_ROUTINES is empty (kept
@@ -227,16 +392,12 @@ def _gayathri_missions_with_progress(profile_id):
 
 @app.route('/missions')
 def missions():
-    if _profile_id() not in (2, 3):
-        return redirect(url_for('dashboard'))
     return render_template('missions.html',
                            missions=_gayathri_missions_with_progress(_profile_id()))
 
 
 @app.route('/missions/clear', methods=['POST'])
 def missions_clear():
-    if _profile_id() not in (2, 3):
-        return {'error': 'not_allowed'}, 403
     data = request.get_json(silent=True) or {}
     key = str(data.get('key', '')).strip()
     stage = _safe_int(data.get('stage'), -1)
@@ -255,7 +416,7 @@ _CSRF_EXEMPT = {
 def require_profile():
     if request.endpoint in _CSRF_EXEMPT:
         return None
-    if request.method == 'POST':
+    if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
         token = session.get('csrf_token')
         if token:
             submitted = request.headers.get('X-CSRF-Token') or request.form.get('_csrf')
@@ -263,10 +424,15 @@ def require_profile():
                 abort(403)
     if 'profile_id' not in session:
         return redirect(url_for('profiles'))
+    # Capability-driven access: consult the active engine's route allow-list instead
+    # of a hardcoded profile-id deny-list. Engine identity comes from the DB column.
     ep = request.endpoint or ''
-    if session['profile_id'] in (2, 3):
-        if ep in _GAYATHRI_BLOCKED or ep.startswith('swim.') or ep.startswith('pilates.'):
-            return redirect(url_for('food'))
+    engine_key = get_workout_engine(session['profile_id'])
+    if not endpoint_allowed_for_engine(ep, engine_key):
+        # API/mutating routes expect a JSON 403; page GETs get a friendly redirect.
+        if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+            return ({'error': 'not_allowed'}, 403)
+        return redirect(url_for('food'))
     return None
 
 app.before_request(require_profile)
@@ -370,112 +536,290 @@ def _home_week_metrics(profile_id, today, monday, goals, week_days):
     return workouts, adherence, streak
 
 
-@app.route('/')
-def dashboard():
-    if _profile_id() in (2, 3):
-        today = date_type.today()
-        today_iso = today.isoformat()
-        monday = (today - timedelta(days=today.weekday())).isoformat()
-        db = get_db()
-        food_row = db.execute('SELECT COALESCE(SUM(calories),0) AS cal, COALESCE(SUM(protein_g),0) AS prot FROM food_log WHERE date=? AND profile_id=?', (today_iso, _profile_id())).fetchone()
-        total_cal = round(food_row['cal'])
-        total_prot = round(food_row['prot'])
-        goals = get_macro_goals(_profile_id())
-        today_weight = get_body_weight(today_iso, _profile_id())
-        weight_history = get_body_weight_history(_profile_id(), days=30)
-        week_rows = db.execute("SELECT DISTINCT date FROM sessions WHERE date BETWEEN ? AND ? AND profile_id=? AND type='gym'", (monday, today_iso, _profile_id())).fetchall()
-        week_active = {r['date'] for r in week_rows}
-        monday_date = today - timedelta(days=today.weekday())
-        week_days = []
-        for i in range(7):
-            day = monday_date + timedelta(days=i)
-            week_days.append({
-                'iso': day.isoformat(),
-                'day_short': day.strftime('%a'),
-                'day_num': day.day,
-                'is_today': day == today,
-                'is_past': day < today,
-                'active': day.isoformat() in week_active })
-        last_sess = db.execute("\n            SELECT s.id, s.date, s.notes, s.type,\n                   GROUP_CONCAT(DISTINCT e.name) AS exercise_names,\n                   COUNT(DISTINCT sl.id) AS total_sets,\n                   COALESCE(SUM(sl.reps * sl.weight_kg), 0.0) AS total_volume\n            FROM sessions s\n            LEFT JOIN session_lifts sl ON sl.session_id = s.id\n            LEFT JOIN exercises e ON e.id = sl.exercise_id\n            WHERE s.profile_id = ? AND s.type = 'gym'\n            GROUP BY s.id ORDER BY s.date DESC, s.id DESC LIMIT 1\n        ", (_profile_id(),)).fetchone()
-        food_entries = [dict(r) for r in get_food_log(today_iso, _profile_id())]
-        recent_foods = get_recent_foods(_profile_id(), limit=8)
-        food_library = [dict(r) for r in get_food_library() if r['calories'] > 0]
-        macro = {'cal': total_cal, 'cal_goal': (goals.get('calories') or 0),
-                 'prot': total_prot, 'prot_goal': (goals.get('protein_g') or 0)}
-        db.close()
-        _workouts, _adherence, _streak = _home_week_metrics(_profile_id(), today, monday_date, goals, week_days)
-        return render_template('home_gayathri.html', today=today_iso, macro=macro, total_cal=total_cal, total_prot=total_prot, goals=goals, today_weight=today_weight, weight_history=[dict(r) for r in (weight_history or [])], week_days=week_days, last_session=dict(last_sess) if last_sess else None,
-                               workouts=_workouts, adherence=_adherence, streak=_streak,
-                               food_entries=food_entries, recent_foods=recent_foods, food_library=food_library)
+# ── Scheme accumulation visualisation ────────────────────────────────────
+# Read-only panel on the home screen: how many times each (scheme, weight)
+# pair has been PASSED for an exercise. Three client-side views (matrix / bars
+# / rings) share one server-seeded blob. "Pass" == exercise_attempts.result
+# 'completed'. Threshold T (mastery) has no DB column yet, so it defaults here
+# via a single constant — override per-exercise/scheme later without touching
+# the views. Clamp to >= 1.
+SCHEME_VIZ_THRESHOLD = 10
 
-    # Support date navigation via ?date= param
-    actual_today = date_type.today()
-    date_param = request.args.get('date', '')
+
+def _build_scheme_viz(threshold=SCHEME_VIZ_THRESHOLD):
+    """Build the seed for every exercise that has at least one weighted pass.
+
+    Columns = the exercise's tier ladder (global schemes, exercise_id IS NULL)
+    UNION any per-exercise custom schemes that have passes, deduped by
+    (sets, reps) and ordered by progression_order. Passes collapse onto the
+    canonical (sets, reps) column so global + custom schemes merge. Returns
+    {'exercises': [id...], 'data': {id: {...}}} ordered by pass count desc.
+    """
+    T = max(1, int(threshold or 1))
+    db = get_db()
     try:
-        today = date_type.fromisoformat(date_param) if date_param else actual_today
-    except (ValueError, TypeError):
-        today = actual_today
-    today = min(today, actual_today)  # Can't go into the future
+        ex_rows = db.execute(
+            """SELECT ea.exercise_id AS id, COUNT(*) AS passes
+               FROM exercise_attempts ea
+               WHERE ea.result = 'completed' AND ea.weight_kg IS NOT NULL
+               GROUP BY ea.exercise_id
+               ORDER BY passes DESC, ea.exercise_id""").fetchall()
+        order = [r['id'] for r in ex_rows]
+        data = {}
+        for exid in order:
+            ex = db.execute("SELECT id, name, tier FROM exercises WHERE id = ?", (exid,)).fetchone()
+            if not ex:
+                continue
+            tier = ex['tier']
+            ladder = db.execute(
+                """SELECT id, sets, reps, progression_order FROM schemes
+                   WHERE exercise_id IS NULL AND tier = ? ORDER BY progression_order""",
+                (tier,)).fetchall()
+            used = db.execute(
+                """SELECT DISTINCT s.id, s.sets, s.reps, s.progression_order
+                   FROM exercise_attempts ea JOIN schemes s ON s.id = ea.scheme_id
+                   WHERE ea.exercise_id = ? AND ea.result = 'completed'
+                     AND ea.weight_kg IS NOT NULL AND s.exercise_id = ?""",
+                (exid, exid)).fetchall()
+            seen = set()
+            cols = []
+            for r in ladder:
+                key = (r['sets'], r['reps'])
+                seen.add(key)
+                cols.append({'sets': r['sets'], 'reps': r['reps'],
+                             'order': r['progression_order'],
+                             'label': '%d\u00d7%d' % (r['sets'], r['reps'])})
+            for r in used:
+                key = (r['sets'], r['reps'])
+                if key not in seen:
+                    seen.add(key)
+                    cols.append({'sets': r['sets'], 'reps': r['reps'],
+                                 'order': r['progression_order'],
+                                 'label': '%d\u00d7%d' % (r['sets'], r['reps'])})
+            cols.sort(key=lambda c: (c['order'], c['sets'], c['reps']))
+            colidx = {(c['sets'], c['reps']): i for i, c in enumerate(cols)}
+
+            raw = db.execute(
+                """SELECT s.sets, s.reps, ea.weight_kg AS w, COUNT(*) AS n
+                   FROM exercise_attempts ea JOIN schemes s ON s.id = ea.scheme_id
+                   WHERE ea.exercise_id = ? AND ea.result = 'completed'
+                     AND ea.weight_kg IS NOT NULL
+                   GROUP BY s.sets, s.reps, ea.weight_kg""",
+                (exid,)).fetchall()
+            weights = sorted({r['w'] for r in raw})
+            widx = {w: i for i, w in enumerate(weights)}
+            pmap = {}
+            for r in raw:
+                ci = colidx.get((r['sets'], r['reps']))
+                if ci is None:
+                    continue
+                k = '%d,%d' % (ci, widx[r['w']])
+                pmap[k] = pmap.get(k, 0) + r['n']
+
+            prog = db.execute(
+                "SELECT weight_kg, scheme_id FROM progression WHERE exercise_id = ?",
+                (exid,)).fetchone()
+            cur_w = None
+            cur_col = None
+            if prog:
+                cur_w = prog['weight_kg']
+                ps = db.execute("SELECT sets, reps FROM schemes WHERE id = ?",
+                                (prog['scheme_id'],)).fetchone()
+                if ps is not None:
+                    cur_col = colidx.get((ps['sets'], ps['reps']))
+
+            data[str(exid)] = {
+                'exercise_id': exid, 'name': ex['name'], 'tier': tier,
+                'cols': [{'label': c['label']} for c in cols],
+                'weights': [{'kg': w, 'label': '%.1f kg' % w} for w in weights],
+                'passes': pmap,
+                'current': {'weight_kg': cur_w, 'col': cur_col},
+                'T': T,
+            }
+        return {'exercises': [str(e) for e in order], 'data': data}
+    finally:
+        db.close()
+
+
+def _shared_home_context(pid, today, actual_today):
+    """Build the context EVERY engine's home needs (the shared contract).
+
+    Shapes are a superset so both the scheme and ladder home slots + all shared
+    panels render from one contract (see Profile Convergence §4). week_days carries
+    every key the week partials read (date, iso, day_short, day_num, is_today,
+    is_past, active, activities); last_session uses the richer multi-type query for
+    all engines.
+    """
+    today_iso = today.isoformat()
     is_today = (today == actual_today)
     prev_date = (today - timedelta(days=1)).isoformat()
     next_date = (today + timedelta(days=1)).isoformat() if today < actual_today else None
-    week_start = (today - timedelta(days=today.weekday())).isoformat()
+    monday = today - timedelta(days=today.weekday())
+    sunday = monday + timedelta(days=6)
+
     db = get_db()
-    last_session = db.execute('\n        SELECT s.*,\n               COALESCE(sw_agg.distance_m, 0) AS distance_m,\n               COALESCE(agg.total_sets,   0)   AS total_sets,\n               COALESCE(agg.total_volume, 0.0) AS total_volume,\n               COALESCE(cd.cardio_dist, 0)     AS cardio_dist,\n               COALESCE(cd.cardio_dur,  0)     AS cardio_dur,\n               (SELECT e.name FROM session_cardio sc JOIN exercises e ON e.id = sc.exercise_id\n                WHERE sc.session_id = s.id ORDER BY sc.id LIMIT 1) AS cardio_name\n        FROM sessions s\n        LEFT JOIN (\n            SELECT session_id, SUM(distance_m) AS distance_m\n            FROM swim_logs GROUP BY session_id\n        ) sw_agg ON sw_agg.session_id = s.id\n        LEFT JOIN (\n            SELECT session_id,\n                   COUNT(*)              AS total_sets,\n                   SUM(reps * weight_kg) AS total_volume\n            FROM session_lifts\n            GROUP BY session_id\n        ) agg ON agg.session_id = s.id\n        LEFT JOIN (\n            SELECT session_id, SUM(distance_m) AS cardio_dist, SUM(duration_s) AS cardio_dur\n            FROM session_cardio GROUP BY session_id\n        ) cd ON cd.session_id = s.id\n        WHERE s.profile_id = ?\n        ORDER BY s.date DESC, s.id DESC\n        LIMIT 1\n    ', (_profile_id(),)).fetchone()
-    today_weight = get_body_weight(today.isoformat(), _profile_id())
-    weight_history = get_body_weight_history(_profile_id(), days=30)
-    food_goals = get_macro_goals(_profile_id())
-    # Date being viewed on the "cumulative calories" chart — independent of `today`,
-    # which stays anchored to the real date for the weekly stats above.
-    food_date = _validate_date(request.args.get('date', ''))
+    # Richer multi-type last-session (swim/cardio/volume) — shared for all engines.
+    last_session = db.execute('''
+        SELECT s.*,
+               COALESCE(sw_agg.distance_m, 0) AS distance_m,
+               COALESCE(agg.total_sets,   0)   AS total_sets,
+               COALESCE(agg.total_volume, 0.0) AS total_volume,
+               COALESCE(cd.cardio_dist, 0)     AS cardio_dist,
+               COALESCE(cd.cardio_dur,  0)     AS cardio_dur,
+               (SELECT e.name FROM session_cardio sc JOIN exercises e ON e.id = sc.exercise_id
+                WHERE sc.session_id = s.id ORDER BY sc.id LIMIT 1) AS cardio_name
+        FROM sessions s
+        LEFT JOIN (
+            SELECT session_id, SUM(distance_m) AS distance_m
+            FROM swim_logs GROUP BY session_id
+        ) sw_agg ON sw_agg.session_id = s.id
+        LEFT JOIN (
+            SELECT session_id, COUNT(*) AS total_sets, SUM(reps * weight_kg) AS total_volume
+            FROM session_lifts GROUP BY session_id
+        ) agg ON agg.session_id = s.id
+        LEFT JOIN (
+            SELECT session_id, SUM(distance_m) AS cardio_dist, SUM(duration_s) AS cardio_dur
+            FROM session_cardio GROUP BY session_id
+        ) cd ON cd.session_id = s.id
+        WHERE s.profile_id = ?
+        ORDER BY s.date DESC, s.id DESC LIMIT 1
+    ''', (pid,)).fetchone()
+
+    today_weight = get_body_weight(today_iso, pid)
+    weight_history = get_body_weight_history(pid, days=30)
+    macro_goals = get_macro_goals(pid)
+
+    # Food (viewed date == today for the home logger).
+    food_rows = get_food_log(today_iso, pid)
+    food_totals = {
+        'calories': round(sum((r['calories'] or 0) for r in food_rows), 1),
+        'protein_g': round(sum((r['protein_g'] or 0) for r in food_rows), 1),
+        'carbs_g': round(sum((r['carbs_g'] or 0) for r in food_rows), 1),
+        'fat_g': round(sum((r['fat_g'] or 0) for r in food_rows), 1)}
+    food_entries = [dict(r) for r in food_rows]
+    enrich_log_entries(food_entries)
+    recent_foods = get_recent_foods(pid, limit=8)
+
+    # Superset week_days: multi-type activities (scheme) + gym `active` flag (ladder).
+    week_session_rows = db.execute(
+        'SELECT date, type FROM sessions WHERE date BETWEEN ? AND ? AND profile_id = ?',
+        (monday.isoformat(), sunday.isoformat(), pid)
+    ).fetchall()
+    db.close()
+    week_activity = {}
+    for r in week_session_rows:
+        week_activity.setdefault(r['date'], [])
+        if r['type'] not in week_activity[r['date']]:
+            week_activity[r['date']].append(r['type'])
+    week_days = []
+    for i in range(7):
+        day = monday + timedelta(days=i)
+        day_iso = day.isoformat()
+        acts = week_activity.get(day_iso, [])
+        week_days.append({
+            'date': day_iso, 'iso': day_iso,
+            'day_short': day.strftime('%a'), 'day_num': day.day,
+            'is_today': day == today, 'is_past': day < today,
+            'activities': acts, 'active': 'gym' in acts})
+
+    macro = {'cal': (food_totals.get('calories') or 0), 'cal_goal': ((macro_goals or {}).get('calories') or 0),
+             'prot': (food_totals.get('protein_g') or 0), 'prot_goal': ((macro_goals or {}).get('protein_g') or 0)}
+    workouts, adherence, streak = _home_week_metrics(pid, today, monday, macro_goals, week_days)
+    weekly_goals = get_weekly_goal_progress(pid, monday.isoformat(), sunday.isoformat())
+    goal_foods = get_goal_foods()
+
+    # Capability set + (privately) nicotine data, read only when the capability is held.
+    caps = get_profile_capabilities(pid)
+    nic_today = get_nicotine_today(pid) if 'nicotine_counter' in caps else 0
+    nic_week = get_nicotine_week(pid, monday.isoformat(), sunday.isoformat()) if 'nicotine_counter' in caps else []
+
+    return {
+        'today': today_iso, 'is_today': is_today, 'prev_date': prev_date, 'next_date': next_date,
+        'week_days': week_days, 'last_session': last_session,
+        'today_weight': today_weight,
+        'weight_history': [dict(r) for r in (weight_history or [])],
+        'macro': macro, 'macro_goals': macro_goals, 'food_goals': macro_goals,
+        'workouts': workouts, 'adherence': adherence, 'streak': streak,
+        'food_entries': food_entries, 'recent_foods': recent_foods,
+        'food_totals': food_totals,
+        'weekly_goals': weekly_goals, 'goal_foods': goal_foods,
+        # capability set drives per-profile shared panels (e.g. nicotine counter)
+        'profile_caps': caps,
+        # Private nicotine counter data — ONLY populated when the profile holds the
+        # capability (otherwise the panel isn't rendered and no data is read).
+        'nicotine_today': nic_today,
+        'nicotine_week': nic_week,
+    }
+
+
+def build_scheme_home_context(pid, today, actual_today, shared):
+    """Scheme engine extras: the accumulation viz + food-date navigation labels."""
+    food_date = shared['today']
     food_d = date_type.fromisoformat(food_date)
-    food_prev_date = (food_d - timedelta(days=1)).isoformat()
-    food_next_date = (food_d + timedelta(days=1)).isoformat()
-    food_is_today = food_d == today
+    food_is_today = (food_d == today)
     if food_is_today:
         food_date_label = 'Today'
     elif food_d == today - timedelta(days=1):
         food_date_label = 'Yesterday'
     else:
         food_date_label = food_d.strftime('%a, %b %-d')
-    food_rows = get_food_log(food_date, _profile_id())
-    food_totals = {
-        'calories': round(sum((r['calories'] or 0) for r in food_rows), 1),
-        'protein_g': round(sum((r['protein_g'] or 0) for r in food_rows), 1),
-        'carbs_g': round(sum((r['carbs_g'] or 0) for r in food_rows), 1),
-        'fat_g': round(sum((r['fat_g'] or 0) for r in food_rows), 1) }
-    food_entries = [dict(r) for r in food_rows]
-    enrich_log_entries(food_entries)   # attach source/type/std-serving for the food card
-    recent_foods = get_recent_foods(_profile_id(), limit=8)
-    monday = today - timedelta(days=today.weekday())
-    week_session_rows = db.execute('SELECT date, type FROM sessions WHERE date BETWEEN ? AND ? AND profile_id = ?', (monday.isoformat(), (monday + timedelta(days=6)).isoformat(), _profile_id())).fetchall()
-    db.close()
-    week_activity = { }
-    for r in week_session_rows:
-        d = r['date']
-        if d not in week_activity:
-            week_activity[d] = []
-        if r['type'] not in week_activity[d]:
-            week_activity[d].append(r['type'])
-    week_days = []
-    for i in range(7):
-        day = monday + timedelta(days=i)
-        day_iso = day.isoformat()
-        week_days.append({
-            'date': day_iso,
-            'day_short': day.strftime('%a'),
-            'day_num': day.day,
-            'is_today': day == today,
-            'is_past': day < today,
-            'activities': week_activity.get(day_iso, []),
-            'active': 'gym' in week_activity.get(day_iso, []) })
+    return {
+        'scheme_viz': _build_scheme_viz(),
+        'food_date': food_date,
+        'food_prev_date': (food_d - timedelta(days=1)).isoformat(),
+        'food_next_date': (food_d + timedelta(days=1)).isoformat(),
+        'food_date_label': food_date_label,
+        'food_is_today': food_is_today,
+    }
 
-    macro = {'cal': (food_totals.get('calories') or 0), 'cal_goal': ((food_goals or {}).get('calories') or 0),
-             'prot': (food_totals.get('protein_g') or 0), 'prot_goal': ((food_goals or {}).get('protein_g') or 0)}
 
-    _workouts, _adherence, _streak = _home_week_metrics(_profile_id(), today, monday, food_goals, week_days)
+def build_ladder_home_context(pid, today, actual_today, shared):
+    """Ladder engine extras: weekly-stats cards (active workout days + kcal today)."""
+    active_days = len([d for d in shared['week_days'] if d.get('active')])
+    total_cal = round((shared.get('food_totals') or {}).get('calories') or 0)
+    total_prot = round((shared.get('food_totals') or {}).get('protein_g') or 0)
+    return {
+        '_active_days': active_days,
+        'total_cal': total_cal,
+        'total_prot': total_prot,
+    }
 
-    return render_template('dashboard.html', last_session=last_session, today=today.isoformat(), is_today=is_today, prev_date=prev_date, next_date=next_date, week_days=week_days, today_weight=today_weight, weight_history=[dict(r) for r in (weight_history or [])], food_goals=food_goals, macro=macro, workouts=_workouts, adherence=_adherence, streak=_streak, food_date=food_date, food_prev_date=food_prev_date, food_next_date=food_next_date, food_date_label=food_date_label, food_is_today=food_is_today, food_entries=food_entries, recent_foods=recent_foods)
+
+# Map each engine to its home-context builder (merged on top of the shared context).
+_ENGINE_HOME_CONTEXT_BUILDERS = {
+    'scheme': build_scheme_home_context,
+    'ladder': build_ladder_home_context,
+}
+
+# Attach each builder onto its engine descriptor so the registry is the single
+# source of truth: ENGINES[key]['build_home_context'](pid, today, actual_today, shared).
+for _ek, _fn in _ENGINE_HOME_CONTEXT_BUILDERS.items():
+    ENGINES[_ek]['build_home_context'] = _fn
+
+
+@app.route('/')
+def dashboard():
+    """Unified home for every profile. Builds the shared context, merges the active
+    engine's extras, and renders the single home.html shell with the engine's slot.
+    No profile-id fork — engine identity comes from profiles.workout_engine."""
+    pid = _profile_id()
+    actual_today = date_type.today()
+    date_param = request.args.get('date', '')
+    try:
+        today = date_type.fromisoformat(date_param) if date_param else actual_today
+    except (ValueError, TypeError):
+        today = actual_today
+    today = min(today, actual_today)  # never navigate into the future
+
+    ctx = _shared_home_context(pid, today, actual_today)
+
+    engine_key = get_workout_engine(pid)
+    descriptor = get_engine_descriptor(engine_key)
+    builder = descriptor.get('build_home_context') or build_scheme_home_context
+    ctx.update(builder(pid, today, actual_today, ctx))
+    ctx['current_engine'] = descriptor
+
+    return render_template('home.html', **ctx)
 
 
 @app.route('/session/new')
@@ -691,8 +1035,6 @@ def _gayathri_ensure_exercise(db, name):
 
 @app.route('/workout/quick-set', methods=['POST'])
 def workout_quick_set():
-    if _profile_id() not in (2, 3):
-        return {'error': 'not_allowed'}, 403
     data = request.get_json(silent=True) or {}
     name = str(data.get('exercise', '')).strip()
     amount = _safe_int(data.get('amount'), 0)
@@ -737,8 +1079,6 @@ def workout_quick_set():
 
 @app.route('/workout/quick-set/<int:lift_id>', methods=['DELETE'])
 def workout_quick_set_delete(lift_id):
-    if _profile_id() not in (2, 3):
-        return {'error': 'not_allowed'}, 403
     date_iso = date_type.today().isoformat()
     db = get_db()
     row = db.execute("""
@@ -763,8 +1103,6 @@ def workout_quick_set_delete(lift_id):
 
 @app.route('/workout/log/new')
 def workout_log_new():
-    if _profile_id() not in (2, 3):
-        return redirect(url_for('dashboard'))
     today_iso = date_type.today().isoformat()
     return render_template('workout_log_new.html', today=today_iso,
                            groups=_GAYATHRI_GROUPS, group_labels=_GAYATHRI_GROUP_LABELS,
@@ -774,8 +1112,6 @@ def workout_log_new():
 
 @app.route('/workout/ladder/advance', methods=['POST'])
 def workout_ladder_advance():
-    if _profile_id() not in (2, 3):
-        return {'error': 'not_allowed'}, 403
     data = request.get_json(silent=True) or {}
     ladder_key = str(data.get('ladder_key', '')).strip()
     stage_index = _safe_int(data.get('stage_index'), -1)
@@ -796,8 +1132,6 @@ def workout_ladder_advance():
 
 @app.route('/workout/tally/ack', methods=['POST'])
 def workout_tally_ack():
-    if _profile_id() not in (2, 3):
-        return {'error': 'not_allowed'}, 403
     data = request.get_json(silent=True) or {}
     name = str(data.get('exercise_name', '')).strip()
     if not name:
@@ -814,8 +1148,6 @@ def workout_tally_ack():
 
 @app.route('/workout/log', methods=[ 'POST'])
 def workout_log():
-    if _profile_id() not in (2, 3):
-        return redirect(url_for('dashboard'))
     routine_key = request.form.get('routine', '').strip()
     date_val = request.form.get('date', date_type.today().isoformat()).strip()
     routine = _GAYATHRI_ROUTINES.get(routine_key)
@@ -855,8 +1187,6 @@ def workout_log():
 
 @app.route('/workout/custom/log', methods=[ 'POST'])
 def workout_custom_log():
-    if _profile_id() not in (2, 3):
-        return redirect(url_for('dashboard'))
     date_val = _validate_date(request.form.get('date', ''))
     ex_names = request.form.getlist('ex_name')
     ex_reps = request.form.getlist('ex_reps')
@@ -914,8 +1244,6 @@ def workout_custom_log():
 
 @app.route('/workout/session/start', methods=[ 'POST'])
 def workout_session_start():
-    if _profile_id() not in (2, 3):
-        return redirect(url_for('dashboard'))
     routine_key = request.form.get('routine', '').strip()
     date_val = _validate_date(request.form.get('date', ''))
     if routine_key not in _GAYATHRI_ROUTINES and routine_key != 'custom':
@@ -929,8 +1257,6 @@ def workout_session_start():
 
 @app.route('/workout/session/<int:session_id>')
 def workout_session(session_id):
-    if _profile_id() not in (2, 3):
-        return redirect(url_for('dashboard'))
     db = get_db()
     sess = db.execute('SELECT * FROM sessions WHERE id=?', (session_id,)).fetchone()
     if not sess or sess['type'] != 'gym' or sess['profile_id'] != _profile_id():
@@ -1168,18 +1494,28 @@ _GYM_GROUP_LABELS = {
     'legs': 'Legs', 'core': 'Core', 'arms': 'Arms', 'stability': 'Stability',
     'muay_thai': 'Muay Thai', 'cardio': 'Cardio',
 }
-# Muay Thai exercises are one-touch loggable straight from the Train page —
-# no separate "start a workout session" step. See api_gym_quick_log below.
-_GYM_ONE_TOUCH_GROUPS = {'muay_thai'}
+# 'muay_thai' and 'stability' are kept in the order/label maps above so any
+# historical row still resolves to a proper label, but no exercise lives in
+# either group now: the Muay Thai drills were re-homed under cardio (function
+# 'muay_thai') by migrations/migrate_muay_thai_under_cardio.py, and the two
+# stability exercises are archived.
+#
+# There WAS a _GYM_ONE_TOUCH_GROUPS = {'muay_thai'} here, for a tap-to-log row
+# the pre-rewrite Train page had. That flow went with the rewrite and nothing
+# referenced the constant, which is how the drills ended up unreachable.
+# /api/gym/quick-log survives it — see the note on that route.
 
 # ── Muscle taxonomy (static, code-only — NO schema change) ───────────────────
 # Three classes govern how a muscle behaves on the live Train page:
 #   PRIMARY  — selectable as the day's muscle (pick -> function checklist).
 #   CONSTANT — never selectable; always rendered as standing checklist strips
 #              on every session (arms/core/shoulders), full function breakdown.
-#   loggable-only — everything else (stability, muay_thai): not selectable, no
-#              strip, still loggable from the databank. Muay Thai keeps its
-#              existing one-touch flow (_GYM_ONE_TOUCH_GROUPS) untouched.
+#   loggable-only — any group in neither list. It gets no picker tile and no
+#              strip, so it is reachable ONLY from the databank. Note that
+#              syncActiveMuscles() in train.html filters out CONSTANT muscles
+#              but not these, so a set logged against one from elsewhere still
+#              renders a full day-driver section. Nothing is in this class
+#              today; adding a group here means accepting that.
 _GYM_PRIMARY_MUSCLES = ['chest', 'back', 'legs', 'cardio']
 _GYM_CONSTANT_MUSCLES = ['arms', 'core', 'shoulders']
 
@@ -1374,9 +1710,26 @@ def api_gym_history(exercise_id):
 
 
 def _tracking_type_for(exercise_id):
-    """Fetch an exercise's tracking_type (defaults to weight_reps)."""
+    """Fetch an exercise's tracking_type, or None if the exercise is unknown.
+
+    Returning a default for a missing exercise used to let a bad id through to
+    an INSERT that then tripped the foreign key and surfaced as an opaque 500,
+    which the client read as a transient failure and retried forever.
+    """
     ex = get_gym_exercise(exercise_id)
-    return (ex or {}).get('tracking_type', 'weight_reps')
+    if not ex:
+        return None
+    return ex.get('tracking_type') or 'weight_reps'
+
+
+# Sanity ceilings. These are not a training opinion — they exist so a fat-finger
+# or a rogue client can't write a number that then wrecks every chart and PR
+# readout downstream.
+_MAX_WEIGHT_KG = 1000
+_MAX_REPS = 1000
+_MAX_DURATION_S = 24 * 60 * 60
+_MAX_DISTANCE_M = 1000 * 1000
+_MAX_SETTING_LEN = 60
 
 
 def _cardio_spec(engagement):
@@ -1416,28 +1769,45 @@ def api_gym_log_set():
         return {'ok': False, 'error': 'Missing exercise_id'}, 400
 
     tt = _tracking_type_for(exercise_id)
+    if tt is None:
+        # 404, not 500: a stale tab pointing at a deleted exercise should tell
+        # the user so, not sit in the client's retry loop.
+        return {'ok': False, 'error': 'Exercise not found'}, 404
+
     weight_kg = _safe_float(data.get('weight_kg'), 0.0)
     reps = _safe_int(data.get('reps'), 0)
     duration_s = _safe_int(data.get('duration_s'), 0) or None
     distance_m = _safe_int(data.get('distance_m'), 0) or None
-    setting = (data.get('setting') or '').strip() or None
+    setting = (data.get('setting') or '').strip()[:_MAX_SETTING_LEN] or None
     successful = bool(data.get('successful', True))
+
+    # Reject nonsense outright rather than storing it. Negatives are always a
+    # client bug; the ceilings catch a mistyped extra digit.
+    if not (0 <= weight_kg <= _MAX_WEIGHT_KG):
+        return {'ok': False, 'error': 'weight out of range'}, 400
+    if not (0 <= reps <= _MAX_REPS):
+        return {'ok': False, 'error': 'reps out of range'}, 400
+    if duration_s is not None and not (0 < duration_s <= _MAX_DURATION_S):
+        return {'ok': False, 'error': 'duration out of range'}, 400
+    if distance_m is not None and not (0 < distance_m <= _MAX_DISTANCE_M):
+        return {'ok': False, 'error': 'distance out of range'}, 400
 
     # Per-tracking-type minimum validity so we never persist an empty set.
     if tt in ('weight_reps', 'reps') and reps <= 0:
         return {'ok': False, 'error': 'reps required'}, 400
-    if tt in ('time', 'weight_time') and not duration_s:
-        return {'ok': False, 'error': 'duration required'}, 400
-    if tt == 'cardio' and not duration_s:
+    if tt in ('time', 'weight_time', 'cardio') and not duration_s:
         return {'ok': False, 'error': 'duration required'}, 400
 
-    session_id = get_or_create_today_gym_session()
-    log_id = log_gym_set(
-        exercise_id, weight_kg, reps, sets=1, successful=successful,
-        session_id=session_id, duration_s=duration_s,
-        distance_m=distance_m, setting=setting,
-    )
-    live = get_live_session_state()
+    try:
+        session_id = get_or_create_today_gym_session()
+        log_id = log_gym_set(
+            exercise_id, weight_kg, reps, sets=1, successful=successful,
+            session_id=session_id, duration_s=duration_s,
+            distance_m=distance_m, setting=setting,
+        )
+        live = get_live_session_state()
+    except Exception as e:
+        return {'ok': False, 'error': f'Could not save the set: {e}'}, 500
     return {'ok': True, 'id': log_id,
             'workout_so_far': live, 'checklist': live['muscles']}
 
@@ -1450,8 +1820,12 @@ def api_gym_log_set_undo():
     exercise_id = _safe_int(data.get('exercise_id'), 0)
     if not exercise_id:
         return {'ok': False, 'error': 'Missing exercise_id'}, 400
-    removed = undo_last_today(exercise_id)
+    # Scope the undo to today's live session so it can never reach back into an
+    # earlier session that happens to fall on the same day.
     live = get_live_session_state()
+    removed = undo_last_today(exercise_id, session_id=live.get('session_id'))
+    if removed:
+        live = get_live_session_state()
     return {'ok': True, 'removed': removed,
             'workout_so_far': live, 'checklist': live['muscles']}
 
@@ -1481,11 +1855,17 @@ def api_gym_exercise_prefill(exercise_id):
 
 @app.route('/api/gym/quick-log', methods=['POST'])
 def api_gym_quick_log():
-    """One-touch set logging for Train page exercises (currently Muay Thai).
-    Unlike /api/gym/log-set, this doesn't require an already-started session
-    — it transparently drops into (or starts) today's open gym session, so a
-    single tap is enough. Unweighted drills log reps=1 per tap; the weighted
-    quick-entry form on the Train page passes its own weight_kg/reps."""
+    """One-touch set logging: one tap = one set, no session start step.
+
+    NOTE: nothing in the app calls this any more. It served the pre-rewrite
+    Train page's tap-to-log row for Muay Thai; those drills now log through the
+    normal exercise sheet under Cardio. It is kept deliberately — it is exactly
+    the shape an iOS Shortcut or a home-screen tap-to-log would want, and it is
+    the one endpoint that needs no CSRF-bearing page load. Delete it if that
+    never materialises.
+
+    Unlike /api/gym/log-set it transparently drops into (or starts) today's open
+    gym session, so a single tap is enough."""
     data = request.get_json(silent=True) or {}
     exercise_id = _safe_int(data.get('exercise_id'), 0)
     reps = _safe_int(data.get('reps'), 1)
@@ -1493,6 +1873,10 @@ def api_gym_quick_log():
 
     if not exercise_id or reps <= 0:
         return {'ok': False, 'error': 'Invalid data'}, 400
+    if not (0 < reps <= _MAX_REPS) or not (0 <= weight_kg <= _MAX_WEIGHT_KG):
+        return {'ok': False, 'error': 'Value out of range'}, 400
+    if _tracking_type_for(exercise_id) is None:
+        return {'ok': False, 'error': 'Exercise not found'}, 404
 
     session_id = get_or_create_today_gym_session()
     log_id = log_gym_set(exercise_id, weight_kg, reps, sets=1, successful=True, session_id=session_id)
@@ -1534,18 +1918,23 @@ def api_gym_log_cardio():
         if row:
             exercise_id = row['id']
         else:
-            # Create the exercise in the exercises table as tier 4 cardio
+            # Create the exercise in the exercises table as tier 4 cardio.
+            # This MUST be committed before log_cardio_session runs: that
+            # helper opens its own connection, so without the commit the new
+            # row is invisible to it (and is rolled back by db.close()), and
+            # the open write transaction here would block its commit.
             exercise_id = db.execute(
                 "INSERT INTO exercises (name, tier, muscle_group, day_type, cardio_metrics) "
                 "VALUES (?, 4, 'Cardio', 'any', ?)",
                 (exercise_name, '{"time":true,"distance":"m"}')
             ).lastrowid
+            db.commit()
+    db.close()
 
     duration_s = duration_min * 60 if duration_min else None
     log_cardio_session(pid, date_type.today().isoformat(), exercise_id,
                        distance_m=distance_m if distance_m else None,
                        duration_s=duration_s)
-    db.close()
     return {'ok': True}
 
 
@@ -1634,8 +2023,6 @@ def exercise_bank():
 def exercise_db():
     """Databank management page — browse, add, edit, reorder, archive, delete.
     Arjun-only (profile 1); Gayathri/Raj are redirected to dashboard."""
-    if _profile_id() in (2, 3):
-        return redirect(url_for('dashboard'))
     tree = get_gym_bank_grouped(include_archived=True)
     # Split active vs archived for the two-section layout. A group's functions
     # keep only active exercises; archived ones are collected into a flat list.
@@ -1932,6 +2319,113 @@ def food_goals_set():
     return redirect(url_for('food'))
 
 
+# ── Weekly food goals (quest log) ───────────────────────────────────────
+# Inline CRUD on the home panel. All endpoints are profile-scoped and mirror the
+# ownership + CSRF conventions used by the /food/api/entry/* family. The home route
+# supplies live progress via get_weekly_goal_progress(), so these endpoints only
+# mutate; they return JSON for the panel's inline fetch flow.
+
+def _goals_json(payload, status=200):
+    return (_json.dumps(payload), status, {'Content-Type': 'application/json'})
+
+
+@app.route('/goals/add', methods=['POST'])
+def goals_add():
+    """Create a weekly goal for the active profile from a picked library food + target.
+    Accepts JSON or form. goal_type + name_key are derived server-side from the food."""
+    data = request.get_json(silent=True) or request.form
+    food_name = (data.get('food_name') or '').strip()
+    target = data.get('target')
+    if not food_name:
+        return _goals_json({'error': 'food required'}, 400)
+    try:
+        goal = add_food_goal(food_name, target, _profile_id())
+    except ValueError as e:
+        code = str(e)
+        msg = {
+            'duplicate':      'You already have a goal for that food.',
+            'unknown_food':   'Pick a food from your library first.',
+            'invalid_target': 'Enter a target greater than zero.',
+        }.get(code, 'Could not add goal.')
+        return _goals_json({'error': msg, 'code': code}, 409 if code == 'duplicate' else 400)
+    return _goals_json({'ok': True, 'goal': goal}, 201)
+
+
+@app.route('/goals/<int:goal_id>/update', methods=['POST'])
+def goals_update(goal_id):
+    """Update a goal's target and/or sort_order, iff owned by the active profile."""
+    data = request.get_json(silent=True) or request.form
+    target = data.get('target')
+    sort_order = data.get('sort_order')
+    if target is None and sort_order is None:
+        return _goals_json({'error': 'nothing to update'}, 400)
+    try:
+        goal = update_food_goal(goal_id, _profile_id(),
+                                target=target if target is not None else None,
+                                sort_order=sort_order if sort_order is not None else None)
+    except ValueError:
+        return _goals_json({'error': 'Enter a target greater than zero.', 'code': 'invalid_target'}, 400)
+    if goal is None:
+        return _goals_json({'error': 'forbidden'}, 403)
+    return _goals_json({'ok': True, 'goal': goal})
+
+
+@app.route('/goals/<int:goal_id>/delete', methods=['POST'])
+def goals_delete(goal_id):
+    """Delete a goal iff owned by the active profile."""
+    ok = delete_food_goal(goal_id, _profile_id())
+    if not ok:
+        return _goals_json({'error': 'forbidden'}, 403)
+    return _goals_json({'ok': True})
+
+
+# ── Nicotine-pouch counter (private, capability-gated — §9) ──────────────
+# All three endpoints require the active profile to hold the 'nicotine_counter'
+# capability; without it they 403. These + the panel are the ONLY readers of
+# nicotine_log, keeping the data panel-private (no shared/aggregate query touches it).
+
+def _require_nicotine_cap():
+    """Return the active profile id if it holds nicotine_counter, else None."""
+    pid = _profile_id()
+    return pid if has_capability(pid, 'nicotine_counter') else None
+
+
+def _nic_json(payload, status=200):
+    return (_json.dumps(payload), status, {'Content-Type': 'application/json'})
+
+
+@app.route('/nicotine/bump', methods=['POST'])
+def nicotine_bump_route():
+    pid = _require_nicotine_cap()
+    if pid is None:
+        return _nic_json({'error': 'forbidden'}, 403)
+    count = nicotine_bump(pid)
+    return _nic_json({'ok': True, 'count': count})
+
+
+@app.route('/nicotine/undo', methods=['POST'])
+def nicotine_undo_route():
+    pid = _require_nicotine_cap()
+    if pid is None:
+        return _nic_json({'error': 'forbidden'}, 403)
+    count = nicotine_undo(pid)
+    return _nic_json({'ok': True, 'count': count})
+
+
+@app.route('/nicotine/week')
+def nicotine_week():
+    pid = _require_nicotine_cap()
+    if pid is None:
+        return _nic_json({'error': 'forbidden'}, 403)
+    today = date_type.today()
+    monday = today - timedelta(days=today.weekday())
+    sunday = monday + timedelta(days=6)
+    week = get_nicotine_week(pid, monday.isoformat(), sunday.isoformat())
+    return _nic_json({'ok': True, 'week': week,
+                      'today_count': get_nicotine_today(pid)})
+
+
+
 @app.route('/food/meal', methods=[ 'POST'])
 def food_meal_log():
     '''Create/refresh a reusable recipe (whole-recipe compound food) from its
@@ -2147,8 +2641,6 @@ def food_types_delete(type_id):
 
 @app.route('/command-centre')
 def command_centre():
-    if _profile_id() != 1:
-        return redirect(url_for('food'))
     return render_template('command_centre.html', reconciliations=get_food_reconciliations())
 
 

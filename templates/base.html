@@ -373,45 +373,15 @@
     </div>
 
     {% if current_profile %}
-    {% if current_profile.id in (2, 3) %}
-    {# ── Gayathri / Raj: 4-tab nav ─────────────────────────────────── #}
+    {# ── Capability-driven bottom-nav: tabs come from the active engine ─ #}
+    {% if current_nav %}
     <nav class="bottom-nav">
-        <a href="/" class="nav-item {% if request.path == '/' %}active{% endif %}">
-            <span class="nav-icon">⌂</span>
-            <span class="nav-label">Today</span>
+        {% for item in current_nav %}
+        <a href="{{ item.href }}" class="nav-item {% if item.active %}active{% endif %}">
+            <span class="nav-icon">{{ item.icon }}</span>
+            <span class="nav-label">{{ item.label }}</span>
         </a>
-        <a href="/workout/log/new" class="nav-item {% if request.path.startswith('/workout/log') %}active{% endif %}">
-            <span class="nav-icon">◉</span>
-            <span class="nav-label">Train</span>
-        </a>
-        <a href="/food" class="nav-item {% if request.path.startswith('/food') %}active{% endif %}">
-            <span class="nav-icon">◈</span>
-            <span class="nav-label">Food</span>
-        </a>
-        <a href="/sessions" class="nav-item {% if request.path.startswith('/sessions') or (request.path.startswith('/session/') and not request.path.startswith('/session/new')) %}active{% endif %}">
-            <span class="nav-icon">▤</span>
-            <span class="nav-label">History</span>
-        </a>
-    </nav>
-    {% else %}
-    {# ── Arjun: 4-tab nav ────────────────────────────────────────── #}
-    <nav class="bottom-nav">
-        <a href="/" class="nav-item {% if request.path == '/' %}active{% endif %}">
-            <span class="nav-icon">⌂</span>
-            <span class="nav-label">Today</span>
-        </a>
-        <a href="/train" class="nav-item {% if request.path == '/train' or request.path == '/exercise-db' or request.path.startswith('/sessions') or request.path.startswith('/swim') or request.path.startswith('/pilates') %}active{% endif %}">
-            <span class="nav-icon">◉</span>
-            <span class="nav-label">Train</span>
-        </a>
-        <a href="/food" class="nav-item {% if request.path.startswith('/food') %}active{% endif %}">
-            <span class="nav-icon">◈</span>
-            <span class="nav-label">Food</span>
-        </a>
-        <a href="/analytics" class="nav-item {% if request.path.startswith('/analytics') or request.path.startswith('/progression') %}active{% endif %}">
-            <span class="nav-icon">▲</span>
-            <span class="nav-label">Stats</span>
-        </a>
+        {% endfor %}
     </nav>
     {% endif %}
     {% endif %}
