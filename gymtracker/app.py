@@ -10,7 +10,8 @@ from datetime import datetime as _datetime
 from .database import init_db, get_db, get_session_cardio, get_cardio_choices, log_cardio_session, get_muscle_group_activity, bank_scope_for_profile, get_fatigue_state, get_sessions_with_headlines, get_session_detail_with_progression, get_macro_goals, set_macro_goals, sync_food_log_from_library, get_food_log, add_food_entry, log_food_entry, delete_food_entry, get_pending_foods, define_food_item, delete_food_item, get_food_history, get_recent_foods, get_food_library, get_food_components, get_food_component_mode, save_food_components, save_food_components_pct, get_profiles, _parse_qty_name, _parse_gram_prefix, _food_key, log_food_reconciliation, get_food_reconciliations, log_body_weight, get_body_weight, get_body_weight_history, get_pilates_session, get_mission_progress, clear_mission_stage, get_exercise_tallies, bump_exercise_tally, ack_exercise_tally, get_crew_status, get_food_types, create_food_type, update_food_type, delete_food_type, count_foods_with_type, get_distinct_source_names, enrich_log_entries, get_goal_foods, add_food_goal, update_food_goal, delete_food_goal, get_weekly_goal_progress, get_workout_engine, set_workout_engine, get_profile_capabilities, has_capability, grant_capability, revoke_capability, nicotine_bump, nicotine_undo, get_nicotine_today, get_nicotine_week
 from .swim_routes import bp as swim_bp
 from .pilates_routes import bp as pilates_bp
-from .gym_bank import get_gym_bank, get_gym_bank_grouped, get_gym_exercise, gym_add_exercise, gym_update_exercise, gym_set_enabled, gym_archive_exercise, gym_unarchive_exercise, gym_delete_exercise, gym_reorder_function, get_gym_functions, gym_add_function, log_gym_set, get_today_tally, undo_last_today, get_or_create_today_gym_session, get_exercise_prefill, get_live_session_state, apply_session_rollover, TRACKING_TYPES, TRACKING_FIELDS, PROGRESSION_FIELD_LABELS, TIER_LABELS
+from .database import TIER_BOUNDS
+from .gym_bank import get_weight_rep_day_groups, get_gym_bank, get_gym_bank_grouped, get_gym_exercise, gym_add_exercise, gym_update_exercise, gym_set_enabled, gym_archive_exercise, gym_unarchive_exercise, gym_delete_exercise, gym_reorder_function, get_gym_functions, gym_add_function, log_gym_set, get_today_tally, undo_last_today, get_or_create_today_gym_session, get_exercise_prefill, get_live_session_state, apply_session_rollover, get_exercise_recency, get_e1rm_bests, get_previous_session_sets, delete_gym_set, end_gym_session, TRACKING_TYPES, TRACKING_FIELDS, PROGRESSION_FIELD_LABELS, TIER_LABELS
 app = Flask(__name__,
             template_folder=_os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'templates'),
             static_folder=_os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'static'))
@@ -537,108 +538,111 @@ def _home_week_metrics(profile_id, today, monday, goals, week_days):
 
 
 # ── Scheme accumulation visualisation ────────────────────────────────────
-# Read-only panel on the home screen: how many times each (scheme, weight)
-# pair has been PASSED for an exercise. Three client-side views (matrix / bars
-# / rings) share one server-seeded blob. "Pass" == exercise_attempts.result
-# 'completed'. Threshold T (mastery) has no DB column yet, so it defaults here
-# via a single constant — override per-exercise/scheme later without touching
-# the views. Clamp to >= 1.
-SCHEME_VIZ_THRESHOLD = 10
+# Read-only panel on the home screen: how many times each (scheme rung, weight)
+# pair has been PASSED for an exercise, in three client-side views sharing one
+# server-seeded blob (templates/_scheme_accumulation.html).
+#
+# REWIRED to the GYM schema. It used to read exercise_attempts / exercises /
+# schemes / progression — the legacy tables — whose newest row is 2026-07-12,
+# and nothing has written to them since the Train rewrite. Every set logged on
+# /train goes to gym_progression, so the panel was showing a frozen snapshot of
+# pre-July training.
+#
+# The gym schema has no `result` column and no scheme ladder, so both are
+# derived:
+#   * A PASS is the full prescription on one training day: at least S sets of
+#     at least R reps at weight W is one pass of rung SxR at W. A day of
+#     5, 5, 4 does NOT pass 3x5 — that distinction is the whole point of a
+#     double-progression ladder.
+#   * The ladder is database.TIER_BOUNDS, sets as the outer loop and reps as
+#     the inner, matching _generate_schemes()'s enumeration so a rung means the
+#     same thing as in the legacy ladder. Only tiers 1-3 qualify: tier 4 is Fa
+#     Jin (explosive, not laddered) and tier 5 is cardio (no weight axis).
+#
+# The current training day is excluded (get_weight_rep_day_groups' before_today),
+# so the panel never shifts under you mid-session and counts only days that are
+# actually finished.
+SCHEME_VIZ_THRESHOLD = 5
 
 
-def _build_scheme_viz(threshold=SCHEME_VIZ_THRESHOLD):
-    """Build the seed for every exercise that has at least one weighted pass.
+def _gym_tier_ladder(tier):
+    """The ordered rungs of a gym tier as (sets, reps), sets the outer loop."""
+    bounds = TIER_BOUNDS.get(tier)
+    if not bounds:
+        return []
+    smin, smax = bounds['sets']
+    rmin, rmax = bounds['reps']
+    return [(sets_, reps_)
+            for sets_ in range(smin, smax + 1)
+            for reps_ in range(rmin, rmax + 1)]
 
-    Columns = the exercise's tier ladder (global schemes, exercise_id IS NULL)
-    UNION any per-exercise custom schemes that have passes, deduped by
-    (sets, reps) and ordered by progression_order. Passes collapse onto the
-    canonical (sets, reps) column so global + custom schemes merge. Returns
-    {'exercises': [id...], 'data': {id: {...}}} ordered by pass count desc.
+
+def _build_scheme_viz(threshold=None):
+    """Build the accumulation seed from gym_progression.
+
+    Returns {'exercises': [id-as-str...], 'data': {id: {...}}} in the shape
+    templates/_scheme_accumulation.html expects, ordered by total passes desc.
+    An exercise with no passes is omitted so the panel stays quiet rather than
+    rendering a wall of empty grids.
     """
-    T = max(1, int(threshold or 1))
-    db = get_db()
-    try:
-        ex_rows = db.execute(
-            """SELECT ea.exercise_id AS id, COUNT(*) AS passes
-               FROM exercise_attempts ea
-               WHERE ea.result = 'completed' AND ea.weight_kg IS NOT NULL
-               GROUP BY ea.exercise_id
-               ORDER BY passes DESC, ea.exercise_id""").fetchall()
-        order = [r['id'] for r in ex_rows]
-        data = {}
-        for exid in order:
-            ex = db.execute("SELECT id, name, tier FROM exercises WHERE id = ?", (exid,)).fetchone()
-            if not ex:
-                continue
-            tier = ex['tier']
-            ladder = db.execute(
-                """SELECT id, sets, reps, progression_order FROM schemes
-                   WHERE exercise_id IS NULL AND tier = ? ORDER BY progression_order""",
-                (tier,)).fetchall()
-            used = db.execute(
-                """SELECT DISTINCT s.id, s.sets, s.reps, s.progression_order
-                   FROM exercise_attempts ea JOIN schemes s ON s.id = ea.scheme_id
-                   WHERE ea.exercise_id = ? AND ea.result = 'completed'
-                     AND ea.weight_kg IS NOT NULL AND s.exercise_id = ?""",
-                (exid, exid)).fetchall()
-            seen = set()
-            cols = []
-            for r in ladder:
-                key = (r['sets'], r['reps'])
-                seen.add(key)
-                cols.append({'sets': r['sets'], 'reps': r['reps'],
-                             'order': r['progression_order'],
-                             'label': '%d\u00d7%d' % (r['sets'], r['reps'])})
-            for r in used:
-                key = (r['sets'], r['reps'])
-                if key not in seen:
-                    seen.add(key)
-                    cols.append({'sets': r['sets'], 'reps': r['reps'],
-                                 'order': r['progression_order'],
-                                 'label': '%d\u00d7%d' % (r['sets'], r['reps'])})
-            cols.sort(key=lambda c: (c['order'], c['sets'], c['reps']))
-            colidx = {(c['sets'], c['reps']): i for i, c in enumerate(cols)}
+    T = max(1, int(threshold if threshold is not None else SCHEME_VIZ_THRESHOLD))
+    rows = get_weight_rep_day_groups(max_tier=3, before_today=True)
 
-            raw = db.execute(
-                """SELECT s.sets, s.reps, ea.weight_kg AS w, COUNT(*) AS n
-                   FROM exercise_attempts ea JOIN schemes s ON s.id = ea.scheme_id
-                   WHERE ea.exercise_id = ? AND ea.result = 'completed'
-                     AND ea.weight_kg IS NOT NULL
-                   GROUP BY s.sets, s.reps, ea.weight_kg""",
-                (exid,)).fetchall()
-            weights = sorted({r['w'] for r in raw})
-            widx = {w: i for i, w in enumerate(weights)}
-            pmap = {}
-            for r in raw:
-                ci = colidx.get((r['sets'], r['reps']))
-                if ci is None:
-                    continue
-                k = '%d,%d' % (ci, widx[r['w']])
-                pmap[k] = pmap.get(k, 0) + r['n']
+    per_ex = {}
+    for r in rows:
+        ex = per_ex.setdefault(r['exercise_id'], {
+            'name': r['name'], 'tier': r['tier'], 'days': {}, 'last_day': None})
+        bucket = ex['days'].setdefault((r['day'], r['weight_kg']), {})
+        bucket[r['reps']] = bucket.get(r['reps'], 0) + int(r['n_sets'] or 0)
+        if ex['last_day'] is None or r['day'] > ex['last_day']:
+            ex['last_day'] = r['day']
 
-            prog = db.execute(
-                "SELECT weight_kg, scheme_id FROM progression WHERE exercise_id = ?",
-                (exid,)).fetchone()
-            cur_w = None
-            cur_col = None
-            if prog:
-                cur_w = prog['weight_kg']
-                ps = db.execute("SELECT sets, reps FROM schemes WHERE id = ?",
-                                (prog['scheme_id'],)).fetchone()
-                if ps is not None:
-                    cur_col = colidx.get((ps['sets'], ps['reps']))
+    data, totals = {}, {}
+    for exid, ex in per_ex.items():
+        ladder = _gym_tier_ladder(ex['tier'])
+        if not ladder:
+            continue
 
-            data[str(exid)] = {
-                'exercise_id': exid, 'name': ex['name'], 'tier': tier,
-                'cols': [{'label': c['label']} for c in cols],
-                'weights': [{'kg': w, 'label': '%.1f kg' % w} for w in weights],
-                'passes': pmap,
-                'current': {'weight_kg': cur_w, 'col': cur_col},
-                'T': T,
-            }
-        return {'exercises': [str(e) for e in order], 'data': data}
-    finally:
-        db.close()
+        pass_counts = {}          # (col_index, weight) -> passes
+        for (day, weight), rep_counts in ex['days'].items():
+            for ci, (need_sets, need_reps) in enumerate(ladder):
+                cleared = sum(n for reps_, n in rep_counts.items() if reps_ >= need_reps)
+                if cleared >= need_sets:
+                    key = (ci, weight)
+                    pass_counts[key] = pass_counts.get(key, 0) + 1
+        if not pass_counts:
+            continue
+
+        # "You are here": the heaviest weight of the most recent finished day,
+        # and the highest rung passed at it. There is no gym equivalent of the
+        # legacy `progression` table, so position is derived, not stored.
+        cur_w, cur_col = None, None
+        if ex['last_day']:
+            at_last = [w for (d, w) in ex['days'] if d == ex['last_day']]
+            if at_last:
+                cur_w = max(at_last)
+                cols_at = [ci for (ci, w) in pass_counts if w == cur_w]
+                cur_col = max(cols_at) if cols_at else None
+
+        extra = {cur_w} if cur_w is not None else set()
+        weights = sorted({w for (_ci, w) in pass_counts} | extra)
+        widx = {w: i for i, w in enumerate(weights)}
+        passes = {'%d,%d' % (ci, widx[w]): n for (ci, w), n in pass_counts.items()}
+
+        totals[exid] = sum(pass_counts.values())
+        data[str(exid)] = {
+            'exercise_id': exid,
+            'name': ex['name'],
+            'tier': ex['tier'],
+            'cols': [{'label': '%d\u00d7%d' % (sets_, reps_)} for sets_, reps_ in ladder],
+            'weights': [{'kg': w, 'label': '%.1f kg' % w} for w in weights],
+            'passes': passes,
+            'current': {'weight_kg': cur_w, 'col': cur_col},
+            'T': T,
+        }
+
+    order = sorted(totals, key=lambda e: (-totals[e], data[str(e)]['name']))
+    return {'exercises': [str(e) for e in order], 'data': data}
 
 
 def _shared_home_context(pid, today, actual_today):
@@ -1519,6 +1523,49 @@ _GYM_GROUP_LABELS = {
 _GYM_PRIMARY_MUSCLES = ['chest', 'back', 'legs', 'cardio']
 _GYM_CONSTANT_MUSCLES = ['arms', 'core', 'shoulders']
 
+# ── Coverage strip (Train page) ─────────────────────────────────────────────
+# The single ordered list of lifting groups the coverage strip renders, every-
+# session groups first. Cardio is deliberately absent: it is a separate
+# activity reached by its own button, never a row in a lifting instrument.
+#
+# This is a third list alongside _GYM_PRIMARY_MUSCLES / _GYM_CONSTANT_MUSCLES
+# rather than a reconciliation of them (REVIEW §2.10) — collapsing all three,
+# plus gym_bank's mirrored _muscle_order()/_muscle_labels(), is its own
+# change-set and would drag the databank page in with it.
+_GYM_COVERAGE_ORDER = ['shoulders', 'arms', 'core', 'chest', 'back', 'legs']
+
+# Default rest target per tier, in seconds. Heavier work earns longer: a T1
+# main lift needs three minutes, an accessory ninety seconds. Overridable per
+# exercise via engagement.rest_s.
+_GYM_REST_BY_TIER = {1: 180, 2: 120, 3: 90, 4: 90, 5: 60}
+
+
+def _train_bank_entry(e, fn, recency, bests):
+    """One exercise as the Train page needs it.
+
+    Widened from the original projection to carry what the redesigned page
+    reads on every render, so the coverage strip and the exercise card need no
+    extra round-trip: days_since (staleness readout), best_e1rm (the PR badge)
+    and rest_s (the countdown target). days_since and best_e1rm are one GROUP
+    BY each, computed once per page load; rest_s and bar_kg ride the existing
+    engagement blob — the same place target_s already lives — so neither needs
+    a schema change.
+    """
+    eng = _cardio_spec(e.get('engagement'))
+    rec = recency.get(e['id']) or {}
+    return {
+        'id': e['id'], 'name': e['name'], 'tier': e['tier'],
+        'tracking_type': e.get('tracking_type', 'weight_reps'),
+        'function': fn['key'], 'function_label': fn['label'],
+        'engagement': eng,
+        'notes': e.get('notes'),
+        'days_since': rec.get('days_since'),
+        'last_day': rec.get('last_day'),
+        'best_e1rm': bests.get(e['id']),
+        'rest_s': _safe_int(eng.get('rest_s'), 0) or _GYM_REST_BY_TIER.get(e['tier'], 90),
+        'bar_kg': _safe_float(eng.get('bar_kg'), 0.0) or None,
+    }
+
 
 @app.route('/train')
 def train():
@@ -1539,18 +1586,15 @@ def train():
 
     # Flatten bank into a JSON-friendly shape for the live picker. Only enabled,
     # non-archived, non-Fa-Jin (tier != 4) exercises are loggable in the engine.
+    recency = get_exercise_recency()
+    bests = get_e1rm_bests()
+
     bank = []
     for group in tree:
         functions = []
         for fn in group['functions']:
             exs = [
-                {
-                    'id': e['id'], 'name': e['name'], 'tier': e['tier'],
-                    'tracking_type': e.get('tracking_type', 'weight_reps'),
-                    'function': fn['key'], 'function_label': fn['label'],
-                    'engagement': _cardio_spec(e.get('engagement')),
-                    'notes': e.get('notes'),
-                }
+                _train_bank_entry(e, fn, recency, bests)
                 for e in fn['exercises']
                 if e.get('is_enabled') and not e.get('archived_at') and e['tier'] != 4
             ]
@@ -1563,24 +1607,62 @@ def train():
     # picker above. They surface only as a contextual recommendation popup:
     # when a T1-T3 exercise is selected, the frontend offers the Fa Jin that
     # pairs with that muscle+function. Hand the frontend a flat lookup here.
+    # Run Fa Jin through the same projection as everything else. Since the
+    # rewrite a Fa Jin is a first-class current exercise logged through the
+    # normal path, so without this its card reads "LAST NEVER" however recently
+    # it was done, and a timed one falls back to a generic 60s target instead of
+    # its own engagement.target_s.
     fajin = []
     for group in tree:
         for fn in group['functions']:
             for e in fn['exercises']:
                 if e['tier'] == 4 and e.get('is_enabled') and not e.get('archived_at'):
-                    fajin.append({
-                        'id': e['id'], 'name': e['name'],
-                        'muscle_group': group['key'], 'muscle_label': group['label'],
-                        'function': fn['key'], 'function_label': fn['label'],
-                        'tracking_type': e.get('tracking_type', 'weight_reps'),
-                    })
+                    entry = _train_bank_entry(e, fn, recency, bests)
+                    entry['muscle_group'] = group['key']
+                    entry['muscle_label'] = group['label']
+                    fajin.append(entry)
+
+    # Coverage strip: one row per lifting group, standing goals first, each
+    # carrying its functions and how stale each one is. Folded here from the
+    # per-exercise recency map rather than queried again — a function is as
+    # fresh as its freshest exercise, a group as fresh as its freshest function.
+    by_key = {g['key']: g for g in bank}
+    coverage = []
+    for mkey in _GYM_COVERAGE_ORDER:
+        grp = by_key.get(mkey)
+        if not grp:
+            # Still render the row. A group whose exercises are all Fa Jin,
+            # disabled or archived produces no `bank` entry, and skipping it
+            # here silently dropped it from the one instrument whose whole job
+            # is "what have I not hit" — REVIEW §1.5 in reduced form.
+            coverage.append({
+                'key': mkey, 'label': _GYM_GROUP_LABELS.get(mkey, mkey.title()),
+                'every_session': mkey in _GYM_CONSTANT_MUSCLES,
+                'days_since': None, 'functions': [],
+            })
+            continue
+        fns = []
+        for fn in grp['functions']:
+            ds = [x['days_since'] for x in fn['exercises'] if x['days_since'] is not None]
+            fns.append({'key': fn['key'], 'label': fn['label'],
+                        'days_since': min(ds) if ds else None,
+                        'n_exercises': len(fn['exercises'])})
+        gds = [f['days_since'] for f in fns if f['days_since'] is not None]
+        coverage.append({
+            'key': grp['key'], 'label': grp['label'],
+            'every_session': mkey in _GYM_CONSTANT_MUSCLES,
+            'days_since': min(gds) if gds else None,
+            'functions': fns,
+        })
 
     live = get_live_session_state()
     total_enabled = sum(g['active_count'] for g in tree)
     taxonomy = {'primary': _GYM_PRIMARY_MUSCLES,
-                'constant': _GYM_CONSTANT_MUSCLES}
+                'constant': _GYM_CONSTANT_MUSCLES,
+                'coverage': _GYM_COVERAGE_ORDER}
     return render_template('train.html', bank=bank, live=live, fajin=fajin,
-                           taxonomy=taxonomy, total_enabled=total_enabled)
+                           taxonomy=taxonomy, coverage=coverage,
+                           total_enabled=total_enabled)
 
 
 @app.route('/api/gym/exercise/<int:exercise_id>', methods=['POST'])
@@ -1845,12 +1927,73 @@ def api_gym_exercise_prefill(exercise_id):
     if not ex:
         return {'ok': False, 'error': 'Exercise not found'}, 404
     pf = get_exercise_prefill(exercise_id)
+    # The PREV column of the set table. Fetched per exercise on open rather
+    # than for all ~50 up front, so page load is unchanged.
+    prev = get_previous_session_sets(exercise_id)
     return {'ok': True,
             'tracking_type': ex.get('tracking_type', 'weight_reps'),
             'name': ex.get('name'),
             'engagement': _cardio_spec(ex.get('engagement')),
             'most_recent': pf['most_recent'],
-            'best_recent': pf['best_recent']}
+            'best_recent': pf['best_recent'],
+            'previous_session': prev}
+
+
+@app.route('/api/gym/set/delete', methods=['POST'])
+def api_gym_set_delete():
+    """Remove one specific set from today's live session.
+
+    The redesigned Train page deletes by set id rather than by recency: its set
+    table shows every set of the current exercise, and the one you want gone is
+    usually not the newest by the time you notice it. Membership of today's
+    live session is re-checked here, so the endpoint cannot be used to prune
+    arbitrary history.
+
+    Response mirrors /api/gym/log-set: {ok, removed, workout_so_far, checklist}
+    so the client re-renders from server state rather than guessing.
+    """
+    data = request.get_json(silent=True) or {}
+    set_id = _safe_int(data.get('set_id'), 0)
+    if not set_id:
+        return {'ok': False, 'error': 'Missing set_id'}, 400
+
+    live = get_live_session_state()
+    if not live.get('session_id'):
+        return {'ok': False, 'error': 'No live session today'}, 404
+    # 404, not 403: a stale tab pointing at an already-removed set should be
+    # told so rather than left retrying.
+    if not any(s['id'] == set_id for s in (live.get('sets') or [])):
+        return {'ok': False, 'error': 'That set is not in today\'s session'}, 404
+
+    try:
+        removed = delete_gym_set(set_id, session_id=live['session_id'])
+    except Exception as e:
+        return {'ok': False, 'error': f'Could not remove the set: {e}'}, 500
+
+    fresh = get_live_session_state()
+    return {'ok': True, 'removed': removed,
+            'workout_so_far': fresh, 'checklist': fresh['muscles']}
+
+
+@app.route('/api/gym/session/finish', methods=['POST'])
+def api_gym_session_finish():
+    """Close today's live session.
+
+    end_gym_session() has existed since the gym session tables were added, but
+    nothing ever called it — ended_at was only ever stamped days late by the
+    lazy roll-over, which is why it has been meaningless (REVIEW §2.3).
+    Finishing is cosmetic (every set is already persisted); what it buys is
+    making "I am done" an explicit act instead of something inferred at 4 AM.
+    """
+    live = get_live_session_state()
+    sid = live.get('session_id')
+    if not sid:
+        return {'ok': False, 'error': 'No live session today'}, 404
+    try:
+        end_gym_session(sid)
+    except Exception as e:
+        return {'ok': False, 'error': f'Could not finish the session: {e}'}, 500
+    return {'ok': True, 'workout_so_far': get_live_session_state()}
 
 
 @app.route('/api/gym/quick-log', methods=['POST'])

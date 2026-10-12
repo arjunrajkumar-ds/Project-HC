@@ -20,7 +20,7 @@ Schema note (see docs/EXERCISE-DB.md):
 import sqlite3
 import json
 import os
-from datetime import datetime
+from datetime import datetime, date
 
 # tracker.db lives at the repo root (one level above this package). Resolve
 # relative to the package dir so it works regardless of the launch CWD.
@@ -539,6 +539,77 @@ def undo_last_today(exercise_id, session_id=None):
     return True
 
 
+def get_weight_rep_day_groups(max_tier=3, before_today=True):
+    """Raw material for the scheme-accumulation grid.
+
+    Returns [{exercise_id, name, tier, day, weight_kg, reps, n_sets}] — one row
+    per (exercise, training day, weight, reps), with n_sets counting how many
+    sets landed there. Only loaded rep work qualifies: the grid's axes are
+    weight and sets x reps, which mean nothing for a plank or a row machine
+    session, and tier 4 (Fa Jin) is explosive work that is not laddered.
+
+    before_today excludes the current training day, so the panel is stable
+    mid-session and only ever reflects days that are actually finished. That
+    is the same `{day} < {today}` idiom get_previous_session_sets() uses, and
+    for the same reason it must go through _training_day() / TODAY_SQL rather
+    than a raw DATE().
+
+    COALESCE(sets, 1) folds in the legacy import_history rows, which collapse
+    several identical sets into one row with sets > 1.
+    """
+    day_expr = _training_day('p.recorded_at')
+    where = [
+        "e.tracking_type = 'weight_reps'",
+        "e.tier BETWEEN 1 AND ?",
+        "e.is_enabled = 1",
+        "e.archived_at IS NULL",
+        "p.weight_kg > 0",
+        "p.reps > 0",
+    ]
+    if before_today:
+        where.append("{day} < {today}".format(day=day_expr, today=TODAY_SQL))
+
+    conn = _gym_db()
+    rows = conn.execute(
+        "SELECT p.exercise_id AS exercise_id, e.name AS name, e.tier AS tier, "
+        "{day} AS day, p.weight_kg AS weight_kg, p.reps AS reps, "
+        "SUM(COALESCE(p.sets, 1)) AS n_sets "
+        "FROM gym_progression p JOIN gym_exercises e ON e.id = p.exercise_id "
+        "WHERE {where} "
+        "GROUP BY p.exercise_id, day, p.weight_kg, p.reps "
+        "ORDER BY p.exercise_id, day, p.weight_kg, p.reps".format(
+            day=day_expr, where=" AND ".join(where)),
+        (int(max_tier),)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def delete_gym_set(set_id, session_id=None):
+    """Delete one specific logged set by id.
+
+    undo_last_today() removes the NEWEST set for an exercise, which is the
+    right shape for walking back an accidental tap. The Train page's set table
+    needs the other shape: a mistyped set is rarely still the most recent one
+    by the time it is noticed.
+
+    Scoped to a session when given, so a stale tab can never reach back into an
+    earlier day's history — the same guard, and for the same reason, as
+    undo_last_today(). Returns True when a row was removed.
+    """
+    conn = _gym_db()
+    params = [set_id]
+    scope = ""
+    if session_id is not None:
+        scope = " AND session_id = ?"
+        params.append(session_id)
+    cur = conn.execute("DELETE FROM gym_progression WHERE id = ?" + scope, params)
+    conn.commit()
+    removed = cur.rowcount > 0
+    conn.close()
+    return removed
+
+
 # ── Sessions ─────────────────────────────────────────────────────────────────
 
 def start_gym_session():
@@ -563,6 +634,22 @@ def get_or_create_today_gym_session():
         "ORDER BY id DESC LIMIT 1".format(
             day=_training_day('performed_at'), today=TODAY_SQL)
     ).fetchone()
+    if not row:
+        # Already finished today, then logged again: re-open that session rather
+        # than starting a second one. get_live_session_state() orders by
+        # `finished ASC`, so a new row would become "the" live session and every
+        # set logged before Finish would vanish from the Train page — nothing
+        # lost in the database, but on a phone mid-gym it reads as the app
+        # eating the workout. One training day is one session.
+        row = conn.execute(
+            "SELECT id FROM gym_sessions WHERE {day} = {today} "
+            "ORDER BY id DESC LIMIT 1".format(
+                day=_training_day('performed_at'), today=TODAY_SQL)
+        ).fetchone()
+        if row:
+            conn.execute("UPDATE gym_sessions SET finished = 0, ended_at = NULL WHERE id = ?",
+                         (row['id'],))
+            conn.commit()
     if row:
         session_id = row['id']
     else:
@@ -779,6 +866,132 @@ def get_exercise_prefill(exercise_id):
     return {'most_recent': most_recent, 'best_recent': dict(best)}
 
 
+# ── Recency, estimated 1RM and previous-session history ──────────────────────
+# These three power the Train page's coverage strip and its exercise card.
+# All are pure reads over gym_progression — none of them needs a schema change.
+#
+# Every "which day is this" comparison goes through _training_day() / TODAY_SQL.
+# A raw DATE(recorded_at) here would reintroduce the exact two-calendar bug
+# that §1.1 of docs/REVIEW-train-hardening.md was written about: in UTC+11 a
+# morning set is stored under the previous UTC day, so "days since" would read
+# one day stale for every session logged before ~10 AM.
+
+def get_exercise_recency():
+    """{exercise_id: {'last_day': 'YYYY-MM-DD'|None, 'days_since': int|None}}.
+
+    Drives the staleness readouts on the coverage strip ("8d", "21d"). One
+    GROUP BY over the whole table — the day delta is done in Python because
+    julianday() over the shifted CASE expression is far harder to read than it
+    is worth. Exercises that have never been logged are simply absent from the
+    map; callers treat a missing key as "never".
+    """
+    conn = _gym_db()
+    rows = conn.execute(
+        "SELECT exercise_id, MAX({day}) AS last_day "
+        "FROM gym_progression GROUP BY exercise_id".format(
+            day=_training_day('recorded_at'))
+    ).fetchall()
+    trow = conn.execute("SELECT {today} AS d".format(today=TODAY_SQL)).fetchone()
+    conn.close()
+
+    try:
+        today = date.fromisoformat(trow['d'])
+    except (TypeError, ValueError):
+        today = date.today()
+
+    out = {}
+    for r in rows:
+        last_day, days = r['last_day'], None
+        if last_day:
+            try:
+                days = (today - date.fromisoformat(last_day)).days
+            except (TypeError, ValueError):
+                days = None
+        out[r['exercise_id']] = {'last_day': last_day, 'days_since': days}
+    return out
+
+
+def get_e1rm_bests(max_reps=12):
+    """{exercise_id: float} — best Epley estimated 1RM, w * (1 + reps/30).
+
+    Capped at max_reps because Epley diverges badly on high-rep work: an
+    EZ-Bar 777s set at 21 reps would otherwise outrank every genuine heavy
+    single and make the PR badge meaningless. Only weighted, rep-counted sets
+    qualify, so timed and bodyweight work is absent rather than zero.
+    """
+    conn = _gym_db()
+    rows = conn.execute(
+        "SELECT exercise_id, MAX(weight_kg * (1 + reps / 30.0)) AS best "
+        "FROM gym_progression "
+        "WHERE weight_kg > 0 AND reps > 0 AND reps <= ? "
+        "GROUP BY exercise_id",
+        (max_reps,)
+    ).fetchall()
+    conn.close()
+    return {r['exercise_id']: r['best'] for r in rows if r['best']}
+
+
+def get_previous_session_sets(exercise_id, limit=12):
+    """The ordered sets of the most recent PRIOR outing for one exercise.
+
+    Returns {'day': 'YYYY-MM-DD'|None, 'days_since': int|None, 'sets': [...]}.
+
+    "Prior" is the newest training day strictly before today on which this
+    exercise was logged. Grouping by training day rather than session_id is
+    deliberate: 33 legacy rows imported by import_history.py carry
+    session_id IS NULL, and those are exactly the oldest history worth showing.
+
+    Feeds the PREV column of the set table, so set 3 is compared against set 3
+    instead of against an undifferentiated blob from last time.
+    """
+    conn = _gym_db()
+    day_expr = _training_day('recorded_at')
+    drow = conn.execute(
+        "SELECT MAX({day}) AS d FROM gym_progression "
+        "WHERE exercise_id = ? AND {day} < {today}".format(
+            day=day_expr, today=TODAY_SQL),
+        (exercise_id,)
+    ).fetchone()
+    prev_day = drow['d'] if drow else None
+    if not prev_day:
+        conn.close()
+        return {'day': None, 'days_since': None, 'sets': []}
+
+    rows = conn.execute(
+        "SELECT weight_kg, sets, reps, duration_s, distance_m, setting, "
+        "successful, recorded_at FROM gym_progression "
+        "WHERE exercise_id = ? AND {day} = ? "
+        "ORDER BY recorded_at ASC, id ASC".format(day=day_expr),
+        (exercise_id, prev_day)
+    ).fetchall()
+    trow = conn.execute("SELECT {today} AS d".format(today=TODAY_SQL)).fetchone()
+    conn.close()
+
+    out = []
+    for r in rows:
+        # Legacy imported rows collapse several identical sets into one row with
+        # sets > 1. Expand them so the PREV column still lines up set-for-set;
+        # live rows are always sets = 1 and pass through untouched.
+        n = r['sets'] if (r['sets'] or 0) > 1 else 1
+        for _ in range(n):
+            if len(out) >= limit:
+                break
+            out.append({
+                'weight_kg': r['weight_kg'], 'reps': r['reps'],
+                'duration_s': r['duration_s'], 'distance_m': r['distance_m'],
+                'setting': r['setting'], 'successful': bool(r['successful']),
+            })
+        if len(out) >= limit:
+            break
+
+    days_since = None
+    try:
+        days_since = (date.fromisoformat(trow['d']) - date.fromisoformat(prev_day)).days
+    except (TypeError, ValueError, KeyError):
+        pass
+    return {'day': prev_day, 'days_since': days_since, 'sets': out}
+
+
 def _exercise_meta_map():
     """id -> {name, muscle_group, function, tier, tracking_type} for all
     exercises (including archived, so historical sets still resolve)."""
@@ -903,8 +1116,17 @@ def get_live_session_state():
             'weight_kg': r['weight_kg'], 'reps': r['reps'],
             'duration_s': r['duration_s'],
             'distance_m': r['distance_m'], 'setting': r['setting'],
+            'successful': bool(r['successful']),
             'recorded_at': r['recorded_at'],
         })
+
+    # 1-based ordinal within the exercise. The set table labels rows from this
+    # rather than from array position, so deleting set 2 renumbers 3 -> 2
+    # server-side instead of leaving the client to guess.
+    _seen = {}
+    for s_ in sets:
+        _seen[s_['exercise_id']] = _seen.get(s_['exercise_id'], 0) + 1
+        s_['n'] = _seen[s_['exercise_id']]
 
     by_muscle = {}
     fns_logged = {}
