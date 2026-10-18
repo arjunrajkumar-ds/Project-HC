@@ -1,0 +1,1346 @@
+{% extends 'base.html' %}
+{% block title %}Train{% endblock %}
+{% block body_class %}pandora{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── /train — the live session surface ───────────────────────────────────────
+   Rebuilt around the session rather than the exercise bank. Two instruments:
+   a coverage strip that answers "what have I not hit", and one always-visible
+   exercise card that answers "what am I lifting right now". The old per-muscle
+   sections, the day-driver muscle picker and the Fa Jin modal are gone; see
+   docs/PLAN-train-rehaul.md for what replaced what.
+
+   Pandora tokens only. The one hardcoded family is MG_COLORS (per-muscle
+   accents, set inline as --g) which predates this page. ───────────────────── */
+
+/* The footer is fixed above the bottom nav and grows by the height of the
+   rest bar when a countdown is running, so the page reserves for BOTH. Short
+   of this the primary Log button ends up underneath it mid-set — the same
+   class of bug as REVIEW §1.4, one layer up. */
+.tr-wrap { padding-bottom: 124px; }   /* .page already adds --nav-h + --sab */
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+.tr-head { display:flex; align-items:center; gap:9px; padding:4px 0 12px; }
+.tr-title { font-family:var(--font-sans); font-size:21px; font-weight:600; letter-spacing:-.02em; color:var(--text-strong); }
+.tr-stat { font-family:var(--font-mono); font-size:10px; letter-spacing:.04em; color:var(--dim);
+           font-variant-numeric:tabular-nums; margin-left:2px; }
+.tr-stat em { font-style:normal; color:var(--text-strong); }
+.tr-sp { margin-left:auto; }
+.tr-pill { display:inline-flex; align-items:center; gap:5px; background:none;
+           border:1px solid rgba(212,138,58,.45); color:#d48a3a; border-radius:var(--radius-pill);
+           font-family:var(--font-mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase;
+           padding:6px 9px; cursor:pointer; -webkit-tap-highlight-color:transparent; min-height:30px; }
+.fj-dot { width:5px; height:5px; border-radius:50%; background:#d48a3a; }
+.tr-ic { width:44px; height:44px; flex:none; border-radius:var(--radius-md); border:1px solid var(--border);
+         background:none; color:var(--muted); font-family:var(--font-mono); font-size:13px; cursor:pointer;
+         -webkit-tap-highlight-color:transparent; }
+
+/* ── Coverage strip ──────────────────────────────────────────────────────── */
+.cov { background:var(--panel); border:1px solid var(--border); border-radius:var(--radius-lg);
+       padding:7px 10px 7px; margin-bottom:11px; }
+.cov-top { display:flex; align-items:center; justify-content:space-between; padding:3px 2px 7px; }
+.cov-k { font-family:var(--font-mono); font-size:8px; letter-spacing:.17em; text-transform:uppercase; color:var(--muted); }
+.cov-hint { font-family:var(--font-mono); font-size:7.5px; letter-spacing:.07em; color:var(--dimmer); }
+.crow { display:flex; align-items:center; gap:9px; width:100%; text-align:left; background:none; border:0;
+        border-top:1px solid var(--border); padding:8px 4px; min-height:44px; border-radius:var(--radius-sm);
+        cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.cov-rows > .crow:first-child { border-top:0; }
+.crow .mark { width:2px; height:14px; border-radius:1px; background:var(--g); flex:none; }
+.crow .mark.off { background:transparent; }
+.crow .gname { font-family:var(--font-mono); font-size:9px; letter-spacing:.07em; text-transform:uppercase;
+               color:var(--g); width:66px; flex:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.meters { display:flex; gap:3px; flex:1; min-width:0; overflow:hidden; }
+.meter { width:5px; height:15px; border-radius:2px; background:var(--panel-soft); position:relative;
+         overflow:hidden; flex:none; box-shadow:inset 0 0 0 1px var(--g); }
+.meter > i { position:absolute; left:0; right:0; bottom:0; background:var(--g); display:block; transition:height .25s; }
+.crow .rt { font-family:var(--font-mono); font-size:8.5px; color:var(--dimmer); flex:none;
+            font-variant-numeric:tabular-nums; }
+.crow .rt.today { color:var(--text-strong); }
+.crow .rt.stale { color:#cc8f55; }
+.crow.open { background:var(--panel-soft); }
+.covexp { padding:2px 0 8px 77px; }
+.fnrow { display:flex; align-items:center; gap:8px; padding:7px 2px 4px; border-top:1px solid var(--border); }
+.fnrow .fl { font-family:var(--font-mono); font-size:8.5px; letter-spacing:.11em; text-transform:uppercase; color:var(--text); }
+.fnrow .fd { margin-left:auto; font-family:var(--font-mono); font-size:8px; color:#cc8f55; }
+.fnrow .fd.ok { color:var(--green); }
+.exrow { display:flex; align-items:center; gap:8px; width:100%; text-align:left; background:none; border:0;
+         padding:7px 2px; min-height:40px; cursor:pointer; -webkit-tap-highlight-color:transparent;
+         border-radius:var(--radius-sm); }
+.exrow .en { font-size:11.5px; color:var(--muted); line-height:1.3; min-width:0;
+             overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.exrow .ed { margin-left:auto; font-family:var(--font-mono); font-size:8px; color:var(--dimmer); flex:none;
+             font-variant-numeric:tabular-nums; }
+.exrow.coldest .en { color:var(--text-strong); }
+.exrow.coldest .ed { color:#cc8f55; }
+.exrow.live .en { color:var(--text-strong); }
+.exrow.live .ed { color:var(--green); }
+.exrow.cur { background:var(--panel-soft); }
+.exrow.cur .en { color:var(--g); }
+
+/* Collapsed form, shown while a cardio exercise is current */
+.cov-min { display:flex; align-items:center; gap:9px; width:100%; background:var(--panel);
+           border:1px solid var(--border); border-radius:var(--radius-lg); padding:12px 12px;
+           margin-bottom:11px; min-height:46px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.cov-min .mini { display:flex; gap:3px; margin-left:auto; }
+.cov-min .mini i { width:4px; height:12px; border-radius:1px; background:var(--panel-soft);
+                   box-shadow:inset 0 0 0 1px var(--g); display:block; }
+.cov-min .mini i.f { background:var(--g); }
+.cov-min .chev { font-family:var(--font-mono); font-size:12px; color:var(--dimmer); }
+
+/* ── Exercise card ───────────────────────────────────────────────────────── */
+.card { background:var(--panel); border:1px solid var(--border); border-radius:var(--radius-lg);
+        padding:12px 12px 13px; margin-bottom:11px; }
+.xb { display:flex; align-items:center; gap:8px; margin-bottom:5px; }
+.xb .crumb { font-family:var(--font-mono); font-size:8px; letter-spacing:.13em; text-transform:uppercase; color:var(--g); }
+.xb .swap { margin-left:auto; background:none; border:1px solid var(--border); border-radius:var(--radius-sm);
+            color:var(--dim); font-family:var(--font-mono); font-size:8px; letter-spacing:.09em;
+            text-transform:uppercase; padding:6px 8px; cursor:pointer; -webkit-tap-highlight-color:transparent; min-height:30px; }
+.xname { font-family:var(--font-sans); font-size:18px; font-weight:600; letter-spacing:-.018em;
+         color:var(--text-strong); line-height:1.18; }
+.xmeta { display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; }
+.tag { font-family:var(--font-mono); font-size:7.5px; letter-spacing:.09em; text-transform:uppercase;
+       color:var(--dim); background:var(--panel-soft); border-radius:var(--radius-sm); padding:4px 6px; border:0; }
+.tag.hot { color:#e0c04a; background:rgba(224,192,74,.13); }
+.tag.prog { color:var(--green); background:rgba(127,176,105,.14); cursor:pointer;
+            -webkit-tap-highlight-color:transparent; min-height:34px; padding:9px 10px; }
+
+/* Set table */
+.tbl { margin-top:12px; border-top:1px solid var(--border); }
+.thead, .trow { display:grid; grid-template-columns:22px 1fr 1fr 46px; gap:6px; align-items:center; }
+.thead { padding:8px 2px 5px; font-family:var(--font-mono); font-size:7px; letter-spacing:.13em; color:var(--dimmer); }
+.trow { padding:0; border-top:1px solid var(--border); }
+.trow > button { background:none; border:0; padding:9px 0; text-align:left; color:inherit; cursor:pointer;
+                 -webkit-tap-highlight-color:transparent; min-height:40px; font:inherit; }
+.trow .sn { font-family:var(--font-mono); font-size:9px; color:var(--dimmer); font-variant-numeric:tabular-nums; }
+.trow .pv { font-family:var(--font-mono); font-size:9.5px; color:var(--dimmer); font-variant-numeric:tabular-nums;
+            overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.trow .cu { font-family:var(--font-mono); font-size:11.5px; color:var(--text-strong); font-weight:500;
+            font-variant-numeric:tabular-nums; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* The only destructive control on the page, and its three left-hand
+   neighbours are all "load this set" targets. Give it a full 46x44 and its
+   own visual lane so a thumb 5px off does not delete instead of load. */
+.trow .x { font-family:var(--font-mono); font-size:13px; color:var(--dimmer); text-align:center;
+           justify-self:stretch; min-height:44px; border-left:1px solid var(--border); }
+.trow .x:active { color:var(--red); background:rgba(201,112,100,.1); }
+.trow.pr .cu { color:#e0c04a; }
+.prb { font-family:var(--font-mono); font-size:7px; letter-spacing:.09em; color:#17120a; background:#e0c04a;
+       border-radius:3px; padding:1px 4px; margin-left:5px; }
+.trow.ghost { opacity:.45; }
+.trow.ghost .cu, .trow.ghost .sn, .trow.ghost .pv { color:var(--muted); }
+.trow.ghost > span { padding:9px 0; font-family:var(--font-mono); font-size:11.5px; font-variant-numeric:tabular-nums; }
+.trow.ghost > span.sn { font-size:9px; }
+.trow.ghost > span.pv { font-size:9.5px; }
+
+/* Steppers */
+.steppers { display:grid; gap:8px; margin-top:12px; }
+.steppers.two { grid-template-columns:1fr 1fr; }
+.stp { background:var(--panel-soft); border:1px solid var(--border); border-radius:var(--radius-md); padding:5px 5px 7px; }
+.stp .sl { display:block; width:100%; text-align:center; background:none; border:0; padding:3px;
+           font-family:var(--font-mono); font-size:7px; letter-spacing:.15em; text-transform:uppercase; color:var(--dimmer); }
+.stp .sl.tapp { color:var(--muted); text-decoration:underline; text-decoration-style:dotted;
+                text-underline-offset:2px; cursor:pointer; -webkit-tap-highlight-color:transparent;
+                font-size:8px; padding:9px 3px; min-height:30px; }
+.stp .sv { display:flex; align-items:center; gap:4px; }
+.stp .sv input { flex:1; min-width:0; background:none; border:0; outline:0; text-align:center; color:var(--text-strong);
+                 font-family:var(--font-sans); font-size:22px; font-weight:700; letter-spacing:-.03em;
+                 font-variant-numeric:tabular-nums; padding:2px 0; min-height:40px; }
+.stp .sv button { width:40px; height:40px; flex:none; border:0; border-radius:var(--radius-sm);
+                  background:var(--surface-2); color:var(--muted); font-family:var(--font-mono); font-size:16px;
+                  cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.stp .sv button:active { background:var(--border-bright); }
+.stp.txt input { font-family:var(--font-mono); font-size:16px; font-weight:400; letter-spacing:0; }
+
+.log-btn { width:100%; margin-top:10px; background:var(--text-strong); color:#0d0e10; border:0;
+           border-radius:var(--radius-md); padding:15px; font-family:var(--font-mono); font-size:11px;
+           letter-spacing:.16em; text-transform:uppercase; font-weight:700; cursor:pointer;
+           -webkit-tap-highlight-color:transparent; min-height:52px; }
+.log-btn:active { opacity:.88; }
+.log-btn.saving { background:var(--panel-soft); color:var(--muted); }
+.log-btn.saved { background:var(--green); color:#0d1409; }
+.log-btn.failed { background:var(--red); color:#1a0b09; }
+.log-btn.danger { background:var(--red); color:#1a0b09; }
+.finish-note { font-family:var(--font-mono); font-size:9px; letter-spacing:.04em; color:var(--dimmer);
+               text-align:center; padding:7px 2px 0; line-height:1.5; }
+.log-btn.sec { background:none; border:1px solid var(--border); color:var(--dim); font-weight:400;
+               font-size:9.5px; padding:12px; min-height:44px; margin-top:8px; }
+
+/* Inline Fa Jin offer — REVIEW §2.2: a strip under the logger, not a modal */
+.fajin-row { width:100%; display:flex; align-items:center; gap:9px; margin-top:9px; padding:10px 10px;
+             border-radius:var(--radius-md); border:1px solid rgba(212,138,58,.38);
+             background:rgba(212,138,58,.07); cursor:pointer; -webkit-tap-highlight-color:transparent;
+             text-align:left; min-height:44px; }
+.fajin-row .fk { font-family:var(--font-mono); font-size:7.5px; letter-spacing:.14em; color:#d48a3a; flex:none; }
+.fajin-row .fnm { font-size:11.5px; color:var(--text-strong); min-width:0; line-height:1.25;
+                  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fajin-row .fv { margin-left:auto; font-family:var(--font-mono); font-size:8.5px; color:var(--muted); flex:none; }
+.fajin-row .fp { font-family:var(--font-mono); font-size:13px; color:#d48a3a; flex:none; }
+
+/* Duration timer (lifted unchanged from the old exercise sheet) */
+.dur-modes { display:flex; gap:6px; margin-top:12px; }
+.dur-modes button { flex:1; background:var(--panel-soft); border:1px solid var(--border); border-radius:var(--radius-sm);
+                    color:var(--dim); font-family:var(--font-mono); font-size:9px; letter-spacing:.08em;
+                    text-transform:uppercase; padding:10px 6px; cursor:pointer; min-height:42px;
+                    -webkit-tap-highlight-color:transparent; }
+.dur-modes button.active { border-color:var(--accent); color:var(--accent); background:var(--accent-soft); }
+.dur-display { font-family:var(--font-mono); font-size:44px; font-weight:700; text-align:center; color:var(--text-strong);
+               font-variant-numeric:tabular-nums; padding:14px 0 6px; letter-spacing:-.02em; }
+.dur-display.over { color:var(--accent); }
+.dur-display.fire { animation:durFire .5s ease-in-out 3; }
+@keyframes durFire { 0%,100%{color:var(--text-strong);} 50%{color:var(--green);} }
+.dur-controls { display:flex; gap:8px; }
+.dur-controls button { flex:1; border:0; border-radius:var(--radius-md); padding:14px; min-height:50px;
+                       font-family:var(--font-mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase;
+                       font-weight:700; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.dur-start { background:var(--green); color:#0d1409; }
+.dur-stop  { background:var(--red); color:#1a0b09; }
+.manual-dur { margin-top:10px; }
+
+/* ── Fixed footer: rest countdown + actions ─────────────────────────────── */
+.tr-foot { position:fixed; left:0; right:0; bottom:calc(var(--nav-h) + var(--sab)); z-index:90;
+           background:var(--bg); border-top:1px solid var(--border); }
+.tr-foot > .inner { max-width:520px; margin:0 auto; padding:0 16px; }
+/* Always laid out, only hidden. If the bar appeared on first log it grew
+   .tr-foot upward over the Log button, so the tap for set N+1 landed on
+   -15/+15/Skip — REVIEW §1.4's bug one layer up. */
+.rest-bar { display:flex; align-items:center; gap:10px; padding:9px 0; position:relative;
+            border-bottom:1px solid var(--border); overflow:hidden; visibility:hidden; }
+.rest-bar.on { visibility:visible; }
+.rest-t.fire { animation:durFire .5s ease-in-out 3; }
+.rest-fill { position:absolute; inset:0; background:var(--accent-soft); transform-origin:left;
+             transition:transform .25s linear; }
+.rest-bar > *:not(.rest-fill) { position:relative; }
+.rest-k { font-family:var(--font-mono); font-size:7.5px; letter-spacing:.15em; text-transform:uppercase; color:var(--dimmer); }
+.rest-t { font-family:var(--font-mono); font-size:18px; font-weight:700; color:var(--text-strong);
+          font-variant-numeric:tabular-nums; }
+.rest-t.done { color:var(--green); }
+.rest-sp { margin-left:auto; display:flex; gap:5px; }
+.rest-sp button { background:none; border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--muted);
+                  font-family:var(--font-mono); font-size:9px; padding:8px 8px; min-height:36px; cursor:pointer;
+                  -webkit-tap-highlight-color:transparent; }
+.abar { display:flex; gap:8px; padding:9px 0 11px; }
+.act { flex:1; background:none; border:1px solid var(--border); border-radius:var(--radius-md); color:var(--muted);
+       font-family:var(--font-mono); font-size:9px; letter-spacing:.12em; text-transform:uppercase; padding:13px 8px;
+       min-height:48px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+.act.cardio { flex:none; padding-inline:15px; color:var(--red); border-color:rgba(201,112,100,.42); }
+.act.cardio.on { background:rgba(201,112,100,.13); color:var(--red); border-color:var(--red); }
+
+/* ── Sheets (picker / summary / Fa Jin list) ─────────────────────────────── */
+.sheet { display:none; position:fixed; inset:0; z-index:200; background:var(--scrim); align-items:flex-end; justify-content:center; }
+.sheet.on { display:flex; }
+/* The bottom nav is fixed over the sheet, so the panel must clear --nav-h as
+   well as the safe-area inset. Without it the primary action sat underneath
+   the nav bar: it looked tappable but the tap landed on the nav and navigated
+   away mid-set. (REVIEW §1.4 — do not remove this padding.) */
+.sheet-panel { background:var(--panel); border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+               padding:14px 16px calc(18px + var(--nav-h) + var(--sab));
+               width:100%; max-width:520px; max-height:86vh; overflow-y:auto; overscroll-behavior:contain; }
+.sheet-h { display:flex; align-items:baseline; gap:8px; margin-bottom:10px; }
+.sheet-title { font-family:var(--font-sans); font-size:17px; font-weight:600; color:var(--text-strong); }
+.sheet-sub { margin-left:auto; font-family:var(--font-mono); font-size:8px; letter-spacing:.07em;
+             text-transform:uppercase; color:var(--dimmer); }
+.sheet-close { background:none; border:0; color:var(--dim); font-family:var(--font-mono); font-size:17px;
+               cursor:pointer; min-height:36px; padding:0 4px; }
+.srch { display:flex; align-items:center; gap:8px; background:var(--panel-soft); border:1px solid var(--border);
+        border-radius:var(--radius-md); padding:0 12px; }
+.srch input { flex:1; min-width:0; background:none; border:0; outline:0; color:var(--text-strong);
+              font-family:var(--font-sans); font-size:16px; padding:12px 0; min-height:48px; }
+.srch input::placeholder { color:var(--dimmer); }
+.sect { font-family:var(--font-mono); font-size:7.5px; letter-spacing:.16em; text-transform:uppercase;
+        color:var(--dimmer); margin:15px 0 2px; }
+.pick { display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:none; border:0;
+        border-top:1px solid var(--border); padding:10px 2px; min-height:52px; cursor:pointer;
+        -webkit-tap-highlight-color:transparent; }
+.pick .dot { width:5px; height:5px; border-radius:50%; background:var(--g); flex:none; }
+.pick .pn { font-size:13px; color:var(--text-strong); line-height:1.25; display:block;
+            overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pick .pg { font-family:var(--font-mono); font-size:7.5px; letter-spacing:.08em; text-transform:uppercase;
+            color:var(--dimmer); display:block; margin-top:2px; }
+.pick .pcol { min-width:0; }
+.pick .pm { margin-left:auto; font-family:var(--font-mono); font-size:8.5px; color:var(--dimmer); flex:none;
+            font-variant-numeric:tabular-nums; }
+.pick .pm.live { color:var(--green); }
+.pick .pm.stale { color:#cc8f55; }
+.back-btn { background:none; border:1px solid var(--border); border-radius:var(--radius-sm); color:var(--muted);
+            font-family:var(--font-mono); font-size:8.5px; letter-spacing:.09em; text-transform:uppercase;
+            padding:8px 10px; min-height:38px; cursor:pointer; margin-bottom:4px; }
+.empty-note { font-size:12.5px; color:var(--dimmer); padding:18px 2px; text-align:center; }
+
+.sumgrid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:6px; }
+.sumcell { background:var(--panel-soft); border-radius:var(--radius-md); padding:11px 10px; }
+.sumcell .sv { font-family:var(--font-sans); font-size:21px; font-weight:700; letter-spacing:-.03em;
+               color:var(--text-strong); font-variant-numeric:tabular-nums; line-height:1.1; }
+.sumcell .sk { font-family:var(--font-mono); font-size:7px; letter-spacing:.13em; text-transform:uppercase;
+               color:var(--dimmer); margin-top:4px; }
+.sumrow { display:flex; align-items:center; gap:9px; padding:8px 2px; border-top:1px solid var(--border); }
+.sumrow .sg { font-family:var(--font-mono); font-size:9px; letter-spacing:.07em; text-transform:uppercase;
+              color:var(--g); width:62px; flex:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sumrow .sx { font-size:11.5px; color:var(--muted); min-width:0; line-height:1.35; }
+.sumrow .sn { margin-left:auto; font-family:var(--font-mono); font-size:9px; color:var(--dimmer); flex:none; }
+.sumrow.warn .sx { color:#cc8f55; }
+.plate { display:flex; align-items:center; gap:8px; padding:9px 2px; border-top:1px solid var(--border);
+         font-family:var(--font-mono); font-size:11px; font-variant-numeric:tabular-nums; }
+.plate .pl { font-size:8px; letter-spacing:.1em; text-transform:uppercase; color:var(--dimmer); }
+.plate .pp { margin-left:auto; color:var(--text-strong); }
+
+.manage-link { text-align:center; padding:2px 0; }
+.manage-link a { display:inline-block; font-family:var(--font-mono); font-size:10px; letter-spacing:.06em;
+                 color:var(--dim); text-decoration:none; padding:14px 18px; min-height:44px; }
+
+.toast { position:fixed; left:50%; transform:translateX(-50%);
+         bottom:calc(var(--nav-h) + var(--sab) + 108px); z-index:300;
+         background:var(--red); color:#fff; font-family:var(--font-mono); font-size:12px;
+         padding:6px 8px 6px 14px; border-radius:var(--radius-md); opacity:0; pointer-events:none;
+         transition:opacity .18s; max-width:92vw; display:flex; align-items:center; gap:10px; }
+.toast.on { opacity:1; pointer-events:auto; }
+.toast .tmsg { text-align:left; }
+.toast .tact { background:rgba(255,255,255,.16); border:0; color:#fff; font-family:var(--font-mono);
+               font-size:11px; letter-spacing:.1em; text-transform:uppercase; padding:9px 11px;
+               min-height:38px; border-radius:var(--radius-sm); cursor:pointer; flex:none; }
+.hidden { display:none !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="tr-wrap">
+
+  <div class="tr-head">
+    <span class="tr-title">Train</span>
+    <span class="tr-stat" id="lw-status">—</span>
+    <span class="tr-sp"></span>
+    <button type="button" class="tr-pill hidden" id="fajin-cta" onclick="openFajinList()">
+      <span class="fj-dot"></span> Fa Jin</button>
+    <button type="button" class="tr-ic" id="summary-cta" onclick="openSummary()"
+            aria-label="Session summary">&#8721;</button>
+  </div>
+
+  <!-- Coverage strip: all six lifting groups, standing goals first -->
+  <div id="cov-root"></div>
+
+  <!-- The current exercise. Always present — this is the resting state. -->
+  <div id="card-root"></div>
+
+  <div class="manage-link"><a href="/exercise-db">Manage databank &rarr;</a></div>
+</div>
+
+<!-- Fixed footer: rest countdown above the action bar, both clearing the nav -->
+<div class="tr-foot">
+  <div class="inner">
+    <div class="rest-bar" id="rest-bar">
+      <span class="rest-fill" id="rest-fill"></span>
+      <span class="rest-k">Rest</span>
+      <span class="rest-t" id="rest-time">0:00</span>
+      <span class="rest-sp">
+        <button type="button" onclick="bumpRest(-15)">&minus;15</button>
+        <button type="button" onclick="bumpRest(15)">+15</button>
+        <button type="button" id="rest-skip" onclick="stopRest()">Skip</button>
+      </span>
+    </div>
+    <div class="abar">
+      <button type="button" class="act" onclick="openPicker()">&#8981; Change exercise</button>
+      <button type="button" class="act cardio" id="cardio-btn" onclick="openPicker('cardio')">Cardio</button>
+    </div>
+  </div>
+</div>
+
+<div class="sheet" id="pick-sheet" onclick="if(event.target===this)closePicker()">
+  <div class="sheet-panel" id="pick-panel"></div>
+</div>
+<div class="sheet" id="sum-sheet" onclick="if(event.target===this)closeSummary()">
+  <div class="sheet-panel" id="sum-panel"></div>
+</div>
+<div class="sheet" id="fajin-sheet" onclick="if(event.target===this)closeFajin()">
+  <div class="sheet-panel" id="fajin-panel"></div>
+</div>
+<div class="sheet" id="plate-sheet" onclick="if(event.target===this)closePlates()">
+  <div class="sheet-panel" id="plate-panel"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Server-provided data ──────────────────────────────────────────────────
+const BANK     = {{ bank | tojson }};      // muscle -> function -> exercises (tier != 4)
+const COVERAGE = {{ coverage | tojson }};  // the six lifting groups, ordered, with staleness
+const FAJIN    = {{ fajin | tojson }};     // tier-4, reached contextually or from the pill
+let   LIVE     = {{ live | tojson }};      // today's rehydrated session
+
+const MG_COLORS = {chest:'#e07a7a',shoulders:'#d4a574',back:'#6b93c9',legs:'#7fb069',
+                   core:'#a785c2',arms:'#6bb0a8',cardio:'#c97064',stability:'#8a8a8a',muay_thai:'#d1495b'};
+function mgColor(k){ return MG_COLORS[k] || 'var(--accent)'; }
+
+// Flat id -> exercise lookup across the bank AND the Fa Jin list, so a Fa Jin
+// can be made current and logged through exactly the same path as anything
+// else. That is the whole of REVIEW §2.2: stop giving it a private flow.
+const EX_BY_ID = {};
+BANK.forEach(g => g.functions.forEach(fn => fn.exercises.forEach(e => {
+    EX_BY_ID[e.id] = Object.assign({ muscle_group:g.key, muscle_label:g.label }, e);
+})));
+FAJIN.forEach(e => {
+    if(!EX_BY_ID[e.id]) EX_BY_ID[e.id] = Object.assign({ is_fajin:true }, e);
+});
+
+// ── Client state ──────────────────────────────────────────────────────────
+let CURRENT = null;    // exercise id showing in the card
+let PREFILL = null;    // /prefill payload for CURRENT (incl. previous_session)
+let COV_OPEN = null;   // expanded coverage row
+let PICK_SCOPE = null; // 'cardio' narrows the picker to cardio only
+let PICK_Q = '';
+let PICK_BROWSE = null;
+let LAST_CARD_ID = null, LAST_CARD_PRIMED = false;   // see renderCard()'s samePass
+
+function curEx(){ return CURRENT ? EX_BY_ID[CURRENT] : null; }
+function isCardio(){ const e = curEx(); return !!e && e.muscle_group === 'cardio'; }
+
+// ── CSRF-aware fetch (preserved verbatim — REVIEW §1.2) ───────────────────
+// fetch() REJECTS on a dropped connection — phone Wi-Fi handing over mid-gym
+// is the common case. Both helpers resolve instead of throwing so every caller
+// gets a definite {ok:false} it can show, rather than an unhandled rejection
+// that leaves the UI frozen mid-save.
+const API_TIMEOUT_MS = 15000;
+async function apiFetch(url, opts){
+    const ctl = ('AbortController' in window) ? new AbortController() : null;
+    const timer = ctl ? setTimeout(()=>ctl.abort(), API_TIMEOUT_MS) : null;
+    try {
+        const res = await fetch(url, Object.assign({}, opts, ctl?{signal:ctl.signal}:{}));
+        let data={}; try { data = await res.json(); } catch(e){}
+        return { ok:res.ok, status:res.status, data, offline:false };
+    } catch(e){
+        return { ok:false, status:0, data:{}, offline:true };
+    } finally { if(timer) clearTimeout(timer); }
+}
+async function apiPost(url, body) {
+    return apiFetch(url, {
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-CSRF-Token':window._csrf},
+        body:JSON.stringify(body||{})
+    });
+}
+async function apiGet(url){ return apiFetch(url, {method:'GET'}); }
+
+// Every value below is interpolated into innerHTML. Exercise names, function
+// labels and machine settings are all free text the user types in the
+// databank, so an apostrophe or an angle bracket would otherwise break the
+// markup (or the inline onclick handlers) and blank the page. (REVIEW §1.10)
+function esc(v){
+    if(v===null||v===undefined) return '';
+    return String(v).replace(/[&<>"']/g, c=>(
+        {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function jsStr(v){ return JSON.stringify(String(v===null||v===undefined?'':v)).slice(1,-1)
+    .replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+let toastAct = null;
+function toast(msg, action){
+    const t=document.getElementById('toast');
+    toastAct = action || null;
+    t.innerHTML = '<span class="tmsg">'+esc(msg)+'</span>'
+        + (action ? '<button type="button" class="tact" onclick="runToastAction()">'+esc(action.label)+'</button>' : '');
+    t.classList.add('on');
+    clearTimeout(t._h);
+    // An actionable toast needs long enough to actually reach for.
+    t._h=setTimeout(()=>{ t.classList.remove('on'); toastAct=null; }, action ? 7000 : 2600);
+}
+function runToastAction(){
+    const a = toastAct; toastAct = null;
+    document.getElementById('toast').classList.remove('on');
+    if(a && typeof a.fn === 'function') a.fn();
+}
+function saveErr(r){
+    if(r.offline) return 'No connection — set not saved';
+    if(r.data && r.data.error) return r.data.error;
+    if(r.status>=500) return 'Server error — set not saved';
+    return 'Could not save the set';
+}
+function fmtW(w){ if(w===null||w===undefined) return null; return (w%1===0)?String(w|0):String(Math.round(w*100)/100); }
+function fmtDur(sec){ sec=parseInt(sec)||0; const m=Math.floor(sec/60), s=Math.abs(sec%60);
+    return m+':'+String(s).padStart(2,'0'); }
+function e1rm(w,r){ return (w>0 && r>0) ? w*(1+r/30) : 0; }
+
+// How one logged set reads, by tracking type. Returns RAW text — every call
+// site escapes. Having setLabel escape its own `setting` while two of three
+// callers also escaped the result produced &amp;quot; in the PREV column and
+// correct text one cell to its right.
+function setLabel(s){
+    const tt = s.tracking_type || 'weight_reps';
+    if(tt==='time') return fmtDur(s.duration_s);
+    if(tt==='reps') return (s.reps||0)+' reps';
+    if(tt==='cardio'){
+        const bits=[fmtDur(s.duration_s)];
+        if(s.distance_m) bits.push(s.distance_m+'m');
+        if(s.setting) bits.push(s.setting);
+        return bits.join(' · ');
+    }
+    if(tt==='weight_time') return (s.weight_kg?fmtW(s.weight_kg)+'kg · ':'')+fmtDur(s.duration_s);
+    return (s.weight_kg>0 ? fmtW(s.weight_kg) : 'BW') + ' × ' + (s.reps||0);
+}
+
+// ── Session-level derivations (all from LIVE.sets) ────────────────────────
+function setsFor(id){ return (LIVE.sets||[]).filter(s=>s.exercise_id===id); }
+function liftingSets(){ return (LIVE.sets||[]).filter(s=>s.muscle_group!=='cardio'); }
+function volume(){
+    return (LIVE.sets||[]).reduce((a,s)=>
+        a + ((s.tracking_type==='weight_reps' && s.weight_kg>0) ? s.weight_kg*(s.reps||0) : 0), 0);
+}
+function fnSetCount(mg, fnKey){
+    return (LIVE.sets||[]).filter(s=>s.muscle_group===mg && s.function===fnKey).length;
+}
+function groupSetCount(mg){ return (LIVE.sets||[]).filter(s=>s.muscle_group===mg).length; }
+// Days since, overridden to 0 the moment something is logged today.
+function exDays(e){ return setsFor(e.id).length ? 0 : e.days_since; }
+function dayLabel(d){ return (d===null||d===undefined) ? 'never' : (d===0 ? 'today' : d+'d'); }
+
+// ── Rest countdown (target by tier, survives a refresh) ───────────────────
+// Replaces the old count-up stopwatch. REVIEW §2.5 asked for this and noted it
+// reverses the original "ephemeral by design" note: a phone that locks between
+// sets is exactly when the timer matters, so the end-timestamp is persisted.
+const REST_KEY = 'train_rest';
+let restEnd=0, restTotal=0, restTick=null, restFired=false;
+function clearRest(){ try { sessionStorage.removeItem(REST_KEY); } catch(e){} }
+function writeRest(){
+    try {
+        if(restEnd) sessionStorage.setItem(REST_KEY, JSON.stringify({end:restEnd, total:restTotal}));
+        else sessionStorage.removeItem(REST_KEY);
+    } catch(e){}
+}
+function readRest(){
+    try {
+        const raw = JSON.parse(sessionStorage.getItem(REST_KEY)||'null');
+        // A non-numeric end makes every comparison below NaN-false, which used to
+        // leave the bar stuck on GO with a 250ms interval running forever.
+        if(!raw || typeof raw.end !== 'number' || !isFinite(raw.end)){ clearRest(); return; }
+        // More than two minutes past zero and the rest is over in any real sense.
+        if(Date.now() - raw.end > 120000){ clearRest(); return; }
+        restEnd = raw.end;
+        restTotal = (typeof raw.total === 'number' && isFinite(raw.total) && raw.total > 0) ? raw.total : 90;
+        restFired = Date.now() >= raw.end;
+        runRest();
+    } catch(e){}
+}
+function startRest(sec){
+    const t=document.getElementById('rest-time'); if(t) t.classList.remove('fire');
+    restTotal = Math.max(15, parseInt(sec)||90);
+    restEnd = Date.now() + restTotal*1000;
+    restFired = false; writeRest(); runRest();
+}
+function runRest(){
+    document.getElementById('rest-bar').classList.add('on');
+    clearInterval(restTick); renderRest(); restTick = setInterval(renderRest, 250);
+}
+function renderRest(){
+    if(!restEnd) return;
+    const left = Math.round((restEnd - Date.now())/1000);
+    const t = document.getElementById('rest-time'), f = document.getElementById('rest-fill'),
+          k = document.getElementById('rest-skip');
+    if(t){ t.textContent = left>0 ? fmtDur(left) : 'GO'; t.classList.toggle('done', left<=0); }
+    if(f) f.style.transform = 'scaleX(' + Math.max(0, Math.min(1, restTotal? left/restTotal : 0)) + ')';
+    if(k) k.textContent = left>0 ? 'Skip' : 'Done';
+    if(left<=0 && !restFired){ restFired = true; fireRestCue(); }
+    if(left <= -120) stopRest();     // self-clears rather than sitting there
+}
+function stopRest(){
+    clearInterval(restTick); restTick=null; restEnd=0; restTotal=0; restFired=false; writeRest();
+    document.getElementById('rest-bar').classList.remove('on');
+}
+function bumpRest(d){
+    if(!restEnd) return;
+    restEnd = Math.max(Date.now(), restEnd + d*1000);
+    restTotal = Math.max(15, restTotal + d);
+    restFired = false; writeRest(); renderRest();
+}
+
+// ── Render: status line ───────────────────────────────────────────────────
+function renderStatus(){
+    const n = (LIVE.sets||[]).length, v = volume();
+    const el = document.getElementById('lw-status');
+    if(!n){ el.textContent = '—'; return; }
+    const vol = v >= 1000 ? (v/1000).toFixed(1)+'k' : Math.round(v);
+    // Lifting sets and cardio are counted separately here for the same reason
+    // the summary keeps them apart: they are not the same kind of work.
+    const lift = liftingSets().length;
+    const cSecs = (LIVE.sets||[]).filter(x=>x.muscle_group==='cardio')
+                                 .reduce((a,x)=>a+(x.duration_s||0),0);
+    const bits = [];
+    if(lift) bits.push('<em>'+lift+'</em> set'+(lift===1?'':'s'));
+    if(v>0)  bits.push('<em>'+vol+'</em> kg');
+    if(cSecs) bits.push('<em>'+Math.round(cSecs/60)+'</em> min cardio');
+    el.innerHTML = bits.join(' · ') || '—';
+}
+
+// ── Render: coverage strip ────────────────────────────────────────────────
+// One row per lifting group. Meters fill with sets logged against each
+// function today; the right column is "N today" once anything lands, and how
+// stale the group is otherwise. Cardio is deliberately absent.
+function renderCoverage(){
+    const root = document.getElementById('cov-root');
+
+    // While a cardio exercise is current the strip has nothing to say, so it
+    // collapses to a single line rather than sitting there at full height.
+    if(isCardio()){
+        const mini = COVERAGE.map(g =>
+            '<i class="'+(groupSetCount(g.key)?'f':'')+'" style="--g:'+mgColor(g.key)+'"></i>').join('');
+        root.innerHTML = '<button type="button" class="cov-min" onclick="backToLifting()">'
+            + '<span class="cov-k">Coverage</span><span class="mini">'+mini+'</span>'
+            + '<span class="chev">&rsaquo;</span></button>';
+        return;
+    }
+
+    const rows = COVERAGE.map(g => {
+        const open = COV_OPEN === g.key, total = groupSetCount(g.key);
+        const meters = '<span class="meters">' + g.functions.map(fn => {
+            const pct = Math.min(fnSetCount(g.key, fn.key), 3) / 3 * 100;
+            return '<span class="meter"><i style="height:'+pct+'%"></i></span>';
+        }).join('') + '</span>';
+        const stale = g.days_since===null || g.days_since===undefined || g.days_since>=7;
+        const right = total > 0
+            ? '<span class="rt today">'+total+' today</span>'
+            : '<span class="rt'+(stale?' stale':'')+'">'+dayLabel(g.days_since)+'</span>';
+        let html = '<button type="button" class="crow'+(open?' open':'')+'" style="--g:'+mgColor(g.key)+'" '
+            + 'onclick="toggleCov(\''+jsStr(g.key)+'\')">'
+            + '<span class="mark'+(g.every_session?'':' off')+'"></span>'
+            + '<span class="gname">'+esc(g.label)+'</span>' + meters + right + '</button>';
+        if(open) html += renderCovExpand(g);
+        return html;
+    }).join('');
+
+    root.innerHTML = '<section class="cov"><div class="cov-top"><span class="cov-k">Coverage</span>'
+        + '<span class="cov-hint">&#9475; every session</span></div>'
+        + '<div class="cov-rows">' + rows + '</div></section>';
+}
+
+// Drilldown: functions by staleness, then the exercises inside them. This is
+// where "encourage all functions" lives now — a function that looks merely
+// stale often hides one exercise nobody has touched in a month.
+function renderCovExpand(g){
+    const bg = BANK.find(x=>x.key===g.key);
+    if(!bg) return '';
+    const body = bg.functions.map(fn => {
+        const ds = fn.exercises.map(exDays).filter(d=>d!==null && d!==undefined);
+        const coldest = ds.length ? Math.max.apply(null, ds) : null;
+        const hit = fnSetCount(g.key, fn.key);
+        const head = '<div class="fnrow"><span class="fl">'+esc(fn.label)+'</span>'
+            + '<span class="fd'+(hit?' ok':'')+'">'
+            + (hit ? hit+' set'+(hit>1?'s':'') : dayLabel(ds.length?Math.min.apply(null,ds):null))
+            + '</span></div>';
+        const rows = fn.exercises.map(e => {
+            const d = exDays(e), live = setsFor(e.id).length;
+            const cls = (e.id===CURRENT) ? ' cur'
+                      : live ? ' live'
+                      : (coldest!==null && d===coldest && d>=7) ? ' coldest' : '';
+            return '<button type="button" class="exrow'+cls+'" style="--g:'+mgColor(g.key)+'" '
+                + 'onclick="openExercise('+e.id+')">'
+                + '<span class="en">'+esc(e.name)+'</span>'
+                + '<span class="ed">'+(live?'today':dayLabel(d))+'</span></button>';
+        }).join('');
+        return head + rows;
+    }).join('');
+    return '<div class="covexp" style="--g:'+mgColor(g.key)+'">' + body + '</div>';
+}
+function toggleCov(key){ COV_OPEN = (COV_OPEN===key) ? null : key; renderCoverage(); }
+function backToLifting(){
+    // Leaving cardio: fall back to the last non-cardio exercise of the session.
+    const last = liftingSets().slice(-1)[0];
+    if(last && EX_BY_ID[last.exercise_id]) openExercise(last.exercise_id);
+    else { CURRENT=null; PREFILL=null; renderAll(); }
+}
+
+// ── Render: the exercise card ─────────────────────────────────────────────
+function renderCard(){
+    const root = document.getElementById('card-root');
+    const e = curEx();
+    document.getElementById('cardio-btn').classList.toggle('on', isCardio());
+    if(!e){
+        root.innerHTML = '<section class="card"><div class="xname">No exercise selected</div>'
+            + '<div class="xmeta"><span class="tag">Pick one to start logging</span></div>'
+            + '<button type="button" class="log-btn" onclick="openPicker()">Choose exercise</button></section>';
+        return;
+    }
+
+    // Anything typed since the last render is carried across. The card is
+    // re-rendered 550ms after a save, which used to wipe the next set's
+    // weight/reps out from under anyone who started typing straight away.
+    //
+    // But only across renders of the SAME pass. openExercise() renders once
+    // immediately (no prefill yet, so the inputs sit at their fallbacks) and
+    // again when the prefill lands — carrying values across THAT boundary
+    // pinned every exercise to its fallback and quietly logged 0 kg sets.
+    const samePass = (LAST_CARD_ID === e.id) && (LAST_CARD_PRIMED === !!PREFILL);
+    const keep = {};
+    if(samePass){
+        ['ws-w','ws-r','ws-dist','ws-setting','man-dur','dur-target'].forEach(id=>{
+            const el=document.getElementById(id); if(el) keep[id]=el.value;
+        });
+    }
+    LAST_CARD_ID = e.id; LAST_CARD_PRIMED = !!PREFILL;
+    const focusId = document.activeElement ? document.activeElement.id : null;
+
+    const tt = (PREFILL && PREFILL.tracking_type) || e.tracking_type || 'weight_reps';
+    const g = mgColor(e.muscle_group);
+    const mine = setsFor(e.id);
+    const best = e.best_e1rm || 0;
+
+    // Tags: equipment-free facts worth a glance before the first set.
+    const tags = [];
+    tags.push('<span class="tag">'+esc((e.function_label||e.function||'').toUpperCase() || 'UNASSIGNED')+'</span>');
+    tags.push('<span class="tag">'+(mine.length ? 'LOGGED TODAY' : 'LAST '+dayLabel(e.days_since).toUpperCase())+'</span>');
+    if(tt==='weight_reps'){
+        const w = parseFloat((keep['ws-w']!==undefined?keep['ws-w']:primeW(e,tt)))||0;
+        const r = parseInt((keep['ws-r']!==undefined?keep['ws-r']:primeR(e,tt)))||0;
+        const est = e1rm(w,r);
+        if(est>0){
+            const isPr = est > best + 0.01;
+            tags.push('<span class="tag'+(isPr?' hot':'')+'">e1RM '+fmtW(Math.round(est*10)/10)
+                + (isPr ? ' &uarr; PR' : (best?' · best '+fmtW(Math.round(best*10)/10):'')) + '</span>');
+        }
+        const nudge = progression(e, tt);
+        if(nudge) tags.push('<button type="button" class="tag prog" onclick="applyProg('+nudge+')">&uarr; try '+fmtW(nudge)+' kg</button>');
+    }
+
+    root.innerHTML = '<section class="card" style="--g:'+g+'">'
+        + '<div class="xb"><span class="crumb">'+esc((e.muscle_label||e.muscle_group||'').toUpperCase())
+          + (e.is_fajin ? ' · FA JIN' : '') + '</span>'
+          + '<button type="button" class="swap" onclick="openPicker()">Swap</button></div>'
+        + '<h2 class="xname">'+esc(e.name)+'</h2>'
+        + '<div class="xmeta">'+tags.join('')+'</div>'
+        + renderSetTable(e, tt)
+        + renderInputs(e, tt, keep)
+        + renderFajinRow(e)
+        + '</section>';
+
+    if(focusId){ const f=document.getElementById(focusId); if(f && f.focus) f.focus(); }
+    if(tt==='time'||tt==='weight_time'||tt==='cardio'){ setDurModeUI(durMode); restoreDurUI(); }
+}
+
+function primeW(e,tt){
+    const mine=setsFor(e.id);
+    if(mine.length) return mine[mine.length-1].weight_kg||0;
+    if(PREFILL && PREFILL.most_recent) return PREFILL.most_recent.weight_kg||0;
+    return 0;
+}
+function primeR(e,tt){
+    const mine=setsFor(e.id);
+    if(mine.length) return mine[mine.length-1].reps||0;
+    if(PREFILL && PREFILL.most_recent) return PREFILL.most_recent.reps||0;
+    return tt==='reps' ? 10 : 8;
+}
+// Suggest the next jump only before the first set of the day, and only when
+// last time's top set actually finished its rep range.
+function progression(e, tt){
+    if(tt!=='weight_reps' || setsFor(e.id).length) return null;
+    const prev = PREFILL && PREFILL.previous_session;
+    if(!prev || !prev.sets || !prev.sets.length) return null;
+    // The heaviest set of last session, not the first one logged — opening with
+    // a back-off or a working warm-up used to make the nudge suggest LESS than
+    // was already done.
+    const top = prev.sets.reduce((a,b)=>((b.weight_kg||0) > (a.weight_kg||0) ? b : a), prev.sets[0]);
+    if(!(top.weight_kg>0) || (top.reps||0) < 8) return null;
+    const step = e.bar_kg ? 2.5 : 2;
+    return Math.round((top.weight_kg + step)*100)/100;
+}
+function applyProg(v){ const el=document.getElementById('ws-w'); if(el){ el.value=v; renderCard(); } }
+
+// Set table: today's sets against the same-numbered set from last time.
+function renderSetTable(e, tt){
+    const mine = setsFor(e.id);
+    const prev = (PREFILL && PREFILL.previous_session) || {sets:[], days_since:null};
+    const best = e.best_e1rm || 0;
+    const head = '<div class="thead"><span>#</span><span>PREV'
+        + (prev.days_since!==null && prev.days_since!==undefined ? ' '+prev.days_since+'D' : '')
+        + '</span><span>DONE</span><span></span></div>';
+    // best_e1rm is a load-time snapshot, so badging every set that beats it
+    // stacked a PR badge on each successive set of a good session. Badge the
+    // single best set of today, and only if it actually beats that snapshot.
+    let prIdx = -1;
+    if(tt==='weight_reps'){
+        let bestToday = 0;
+        mine.forEach((s,i)=>{ const v=e1rm(s.weight_kg,s.reps); if(v>bestToday){ bestToday=v; prIdx=i; } });
+        if(!(bestToday > best + 0.01)) prIdx = -1;
+    }
+    const rows = mine.map((s,i) => {
+        const p = prev.sets[(s.n||i+1)-1];
+        const isPr = (i === prIdx);
+        return '<div class="trow'+(isPr?' pr':'')+'">'
+            + '<button type="button" class="sn" onclick="editSet('+s.id+')">'+(s.n||i+1)+'</button>'
+            + '<button type="button" class="pv" onclick="editSet('+s.id+')">'+(p?esc(setLabel(Object.assign({tracking_type:tt},p))):'&ndash;')+'</button>'
+            + '<button type="button" class="cu" onclick="editSet('+s.id+')">'+esc(setLabel(s))
+              + (isPr?'<span class="prb">PR</span>':'')+'</button>'
+            + '<button type="button" class="x" onclick="removeSet('+s.id+','+e.id+')" aria-label="Remove set">&#10005;</button>'
+            + '</div>';
+    }).join('');
+    const nextN = mine.length + 1;
+    const gp = prev.sets[nextN-1];
+    const ghost = '<div class="trow ghost"><span class="sn">'+nextN+'</span>'
+        + '<span class="pv">'+(gp?esc(setLabel(Object.assign({tracking_type:tt},gp))):'&ndash;')+'</span>'
+        + '<span class="cu">next</span><span></span></div>';
+    return '<div class="tbl">'+head+rows+ghost+'</div>';
+}
+
+// Inputs differ by tracking_type. The ids (ws-w, ws-r, ws-dist, ws-setting,
+// man-dur, dur-*) are the same ones bump(), logSet() and the duration timer
+// have always used, so those functions carry over untouched.
+function renderInputs(e, tt, keep){
+    const v = (id, fallback) => (keep && keep[id]!==undefined && keep[id]!=='') ? keep[id] : fallback;
+    const kg = '<div class="stp"><button type="button" class="sl tapp" onclick="openPlates()">kg · plates</button>'
+        + '<div class="sv"><button type="button" onclick="bump(\'ws-w\',-'+(e.bar_kg?2.5:2)+')">&minus;</button>'
+        + '<input id="ws-w" type="number" inputmode="decimal" step="any" value="'+esc(v('ws-w',fmtW(primeW(e,tt))))+'">'
+        + '<button type="button" onclick="bump(\'ws-w\','+(e.bar_kg?2.5:2)+')">+</button></div></div>';
+    const reps = '<div class="stp"><span class="sl">reps</span>'
+        + '<div class="sv"><button type="button" onclick="bump(\'ws-r\',-1)">&minus;</button>'
+        + '<input id="ws-r" type="number" inputmode="numeric" step="1" value="'+esc(v('ws-r',primeR(e,tt)))+'">'
+        + '<button type="button" onclick="bump(\'ws-r\',1)">+</button></div></div>';
+
+    if(tt==='weight_reps')
+        return '<div class="steppers two">'+kg+reps+'</div>'+logButton(e,tt);
+    if(tt==='reps')
+        return '<div class="steppers">'+reps+'</div>'+logButton(e,tt);
+
+    // Timed work: the Endure/Target timer, lifted from the old sheet.
+    const spec = (PREFILL && PREFILL.engagement) || e.engagement || {};
+    const target = spec.target_s || (tt==='cardio' ? 600 : 60);
+    let extra = '';
+    if(tt==='weight_time') extra = '<div class="steppers">'+kg+'</div>';
+    if(tt==='cardio'){
+        const dist = spec.distance ? '<div class="stp txt"><span class="sl">distance m</span>'
+            + '<div class="sv"><button type="button" onclick="bump(\'ws-dist\',-100)">&minus;</button>'
+            + '<input id="ws-dist" type="number" inputmode="numeric" step="1" value="'+esc(v('ws-dist',''))+'">'
+            + '<button type="button" onclick="bump(\'ws-dist\',100)">+</button></div></div>' : '';
+        const setting = spec.setting ? '<div class="stp txt"><span class="sl">setting</span>'
+            + '<div class="sv"><input id="ws-setting" type="text" value="'+esc(v('ws-setting',''))+'" placeholder="level"></div></div>' : '';
+        if(dist||setting) extra = '<div class="steppers'+(dist&&setting?' two':'')+'">'+dist+setting+'</div>';
+    }
+    return extra
+        + '<div class="dur-modes">'
+          + '<button type="button" id="mode-endure" onclick="setDurMode(\'endure\')">Endure &#9650;</button>'
+          + '<button type="button" id="mode-target" onclick="setDurMode(\'target\')">Target &#9660;</button>'
+        + '</div>'
+        + '<div id="target-row" class="steppers hidden"><div class="stp"><span class="sl">target seconds</span>'
+          + '<div class="sv"><button type="button" onclick="bump(\'dur-target\',-15)">&minus;</button>'
+          + '<input id="dur-target" type="number" inputmode="numeric" step="1" value="'+esc(v('dur-target',target))+'">'
+          + '<button type="button" onclick="bump(\'dur-target\',15)">+</button></div></div></div>'
+        + '<div class="dur-display" id="dur-display">0:00</div>'
+        + '<div class="dur-controls">'
+          + '<button type="button" class="dur-start" id="dur-start" onclick="durStart()">Start</button>'
+          + '<button type="button" class="dur-stop hidden" id="dur-stop" onclick="durStop('+e.id+',\''+jsStr(tt)+'\')">Stop &amp; log</button>'
+        + '</div>'
+        + '<div class="manual-dur steppers"><div class="stp txt"><span class="sl">or enter mm:ss</span>'
+          + '<div class="sv"><button type="button" onclick="bump(\'man-dur\',-15)">&minus;</button>'
+          + '<input id="man-dur" type="text" inputmode="numeric" value="'+esc(v('man-dur',''))+'" placeholder="1:30">'
+          + '<button type="button" onclick="bump(\'man-dur\',15)">+</button></div></div></div>'
+        + '<button type="button" class="log-btn sec" id="log-tick" onclick="'
+          + (tt==='cardio' ? 'logCardioManual('+e.id+')' : 'logTimedManual('+e.id+',\''+jsStr(tt)+'\')')
+          + '">Log without timer</button>';
+}
+function logButton(e,tt){
+    const n = setsFor(e.id).length + 1;
+    return '<button type="button" class="log-btn" id="log-tick" onclick="logSet('+e.id+',\''+jsStr(tt)+'\')">'
+        + 'Log set '+n+'</button>';
+}
+
+// The Fa Jin offer: one row, under the logger, ignorable. It replaces the
+// modal that fired on selection (REVIEW §2.2) — with nothing covering the
+// screen there is no snooze state, no offered-once guard and no per-day
+// dismissal store to keep in sync with the server's training day.
+function renderFajinRow(e){
+    if(e.is_fajin || e.muscle_group==='cardio') return '';   // never a Fa Jin for a Fa Jin
+    const exact = FAJIN.find(f=>f.muscle_group===e.muscle_group && f.function===e.function);
+    const fb = exact || FAJIN.find(f=>f.muscle_group===e.muscle_group);
+    if(!fb) return '';
+    if(setsFor(fb.id).length) return '';                     // already done today — don't nag
+    const meta = EX_BY_ID[fb.id] || {};
+    const d = meta.days_since;
+    return '<button type="button" class="fajin-row" onclick="openExercise('+fb.id+')">'
+        + '<span class="fk">Fa Jin</span>'
+        + '<span class="fnm">'+esc(fb.name)+'</span>'
+        + '<span class="fv">'+(exact ? esc(fb.function_label||'') : 'same muscle')
+          + (d!==null&&d!==undefined?' · '+dayLabel(d):'')+'</span>'
+        + '<span class="fp">&rsaquo;</span></button>';
+}
+
+function renderAll(){ renderStatus(); renderCoverage(); renderCard(); updateFajinPill(); }
+
+// ── Steppers ──────────────────────────────────────────────────────────────
+// Per-field stepping rules. Reps, distance and the target are integers (reps
+// used to inherit the float path, so +1 on 2.5 gave 3.5 reps); man-dur holds
+// mm:ss. (REVIEW §1.15)
+const INT_FIELDS = new Set(['ws-r','ws-dist','dur-target']);
+function bump(id,delta){
+    const el=document.getElementById(id); if(!el) return;
+    if(id==='man-dur'){
+        const cur=parseDuration(el.value);
+        const base=isNaN(cur)?0:cur;
+        const next=Math.max(0, base+delta);
+        el.value = next ? fmtDur(next) : '';
+        return;
+    }
+    let v=parseFloat(el.value)||0;
+    v=Math.max(0,Math.round((v+delta)*100)/100);
+    el.value = INT_FIELDS.has(id) ? Math.round(v) : v;
+    if(id==='ws-w' || id==='ws-r') renderCard();   // keeps the e1RM/PR tag live
+}
+
+// ── Duration timer (lifted from the old exercise sheet, unchanged) ────────
+let durMode='endure', durT0=null, durTick=null, durTargetFired=false;
+function setDurMode(m){ durMode=m; durReset(); setDurModeUI(m); }
+function setDurModeUI(m){
+    const e=document.getElementById('mode-endure'), t=document.getElementById('mode-target'),
+          row=document.getElementById('target-row');
+    if(e) e.classList.toggle('active',m==='endure');
+    if(t) t.classList.toggle('active',m==='target');
+    if(row) row.classList.toggle('hidden', m!=='target');
+}
+function durDisplay(sec){ const d=document.getElementById('dur-display'); if(!d) return;
+    const m=Math.floor(sec/60), ss=String(Math.abs(sec%60)).padStart(2,'0'); d.textContent=m+':'+ss; }
+function durStart(){
+    if(durT0) return;                 // already running — a second tap must not restart it
+    const st=document.getElementById('dur-start'), sp=document.getElementById('dur-stop');
+    if(!st || !sp) return;            // card was rebuilt out from under the tap
+    durTargetFired=false;
+    const d=document.getElementById('dur-display'); if(d) d.classList.remove('fire');
+    st.classList.add('hidden');
+    sp.classList.remove('hidden');
+    durT0=Date.now(); clearInterval(durTick); durLoop(); durTick=setInterval(durLoop,200);
+}
+function durLoop(){
+    if(!durT0){ clearInterval(durTick); return; }   // sheet was rebuilt under us
+    const elapsed=Math.floor((Date.now()-durT0)/1000);
+    if(durMode==='endure'){ durDisplay(elapsed); }
+    else {
+        const targetEl=document.getElementById('dur-target');
+        const target=targetEl?(parseInt(targetEl.value)||0):0;
+        const remain=target-elapsed;
+        // Past the target, count the overrun up rather than sitting on 0:00 —
+        // otherwise there is no way to tell a 10s hold from a 90s one.
+        durDisplay(remain>=0 ? remain : -remain);
+        const d=document.getElementById('dur-display');
+        if(d) d.classList.toggle('over', remain<0);
+        if(remain<=0 && !durTargetFired){ durTargetFired=true; fireTargetCue(); }
+    }
+}
+// The rest countdown and the work timer are different instruments; the cue
+// must flash the one that actually finished.
+function fireRestCue(){
+    const t=document.getElementById('rest-time'); if(t) t.classList.add('fire');
+    beepCue();
+}
+function fireTargetCue(){
+    const d=document.getElementById('dur-display'); if(d) d.classList.add('fire');
+    beepCue();
+}
+function beepCue(){
+    try { const ctx=new (window.AudioContext||window.webkitAudioContext)();
+        const o=ctx.createOscillator(), g=ctx.createGain(); o.connect(g); g.connect(ctx.destination);
+        o.frequency.value=880; g.gain.value=0.15; o.start();
+        setTimeout(()=>{o.frequency.value=1320;},180); setTimeout(()=>{o.stop();ctx.close();},420);
+    } catch(e){}
+    try { if(navigator.vibrate) navigator.vibrate([120,60,120]); } catch(e){}
+}
+async function durStop(id,tt){
+    clearInterval(durTick);
+    if(!durT0){ return; }                      // Stop tapped with no run in flight
+    const elapsed=Math.floor((Date.now()-durT0)/1000);
+    durT0=null;
+    let secs = elapsed;
+    if(durMode==='target'){
+        const target = parseInt((document.getElementById('dur-target')||{}).value)||0;
+        // Stopping early in Target mode logged the FULL target, crediting work
+        // that wasn't done. Log whichever is smaller. (REVIEW §1.7)
+        secs = target>0 ? Math.min(target, elapsed) : elapsed;
+    }
+    const stopBtn=document.getElementById('dur-stop'), startBtn=document.getElementById('dur-start');
+    if(stopBtn) stopBtn.classList.add('hidden');
+    if(startBtn) startBtn.classList.remove('hidden');
+    if(secs<=0){ toast('Timer ran for less than a second — not logged.'); return; }
+    await logSet(id, tt, {duration_s:secs});
+}
+// renderCard() re-emits the timer controls in their idle state, but durT0 and
+// durTick survive the rebuild. Without this the clock keeps counting while
+// Start is showing and Stop is gone, durStart() refuses to restart, and the
+// set can only be logged by typing the duration by hand. Reachable three ways:
+// a kg stepper tap on weight_time, tapping a logged row, or the phone locking
+// and resyncLive() firing. REVIEW §1.6's invariant, broken through a new door.
+function restoreDurUI(){
+    if(!durT0) return;
+    const st=document.getElementById('dur-start'), sp=document.getElementById('dur-stop');
+    if(st) st.classList.add('hidden');
+    if(sp) sp.classList.remove('hidden');
+    clearInterval(durTick); durLoop(); durTick=setInterval(durLoop,200);
+}
+function durReset(){ clearInterval(durTick); durT0=null; durTargetFired=false;
+    const d=document.getElementById('dur-display'); if(d){d.textContent='0:00'; d.classList.remove('fire','over');}
+    const s=document.getElementById('dur-start'), st=document.getElementById('dur-stop');
+    if(s)s.classList.remove('hidden'); if(st)st.classList.add('hidden');
+}
+// Accepts "90", "1:30" or "1:30:00" and returns seconds (NaN when unparseable).
+function parseDuration(raw){
+    const t=String(raw==null?'':raw).trim();
+    if(!t) return 0;
+    if(!/^\d+(:\d{1,2}){0,2}$/.test(t)) return NaN;
+    const parts=t.split(':').map(Number);
+    if(parts.some(n=>!isFinite(n))) return NaN;
+    if(parts.length===1) return parts[0];
+    if(parts.length===2) return parts[0]*60 + parts[1];
+    return parts[0]*3600 + parts[1]*60 + parts[2];
+}
+function manualDuration(){
+    const el=document.getElementById('man-dur');
+    const secs = parseDuration(el ? el.value : '');
+    if(isNaN(secs)){ toast('Duration should look like 90 or 1:30'); return null; }
+    if(secs<=0){ toast('Enter a duration, or use the timer.'); return null; }
+    if(secs>86400){ toast('That duration looks wrong.'); return null; }
+    return secs;
+}
+function logTimedManual(id,tt){ const s=manualDuration(); if(s===null) return; logSet(id, tt, {duration_s:s}); }
+function logCardioManual(id){ const s=manualDuration(); if(s===null) return; logSet(id, 'cardio', {duration_s:s}); }
+
+// ── Logging ───────────────────────────────────────────────────────────────
+let logInFlight = false;
+async function logSet(id, tt, extra){
+    if(logInFlight) return;          // a double tap must not log twice (REVIEW §1.3)
+    extra = extra || {};
+    const btn=document.getElementById('log-tick');
+    const body={ exercise_id:id, successful:true };
+    if(tt==='weight_reps' || tt==='weight_time'){ body.weight_kg = parseFloat((document.getElementById('ws-w')||{}).value)||0; }
+    if(tt==='weight_reps' || tt==='reps'){
+        body.reps = parseInt((document.getElementById('ws-r')||{}).value)||0;
+        if(body.reps<=0){ toast('Enter reps'); return; }
+    }
+    if(extra.duration_s!=null){ body.duration_s=extra.duration_s; }
+    if(tt==='cardio'){
+        const dEl=document.getElementById('ws-dist'), sEl=document.getElementById('ws-setting');
+        if(dEl && dEl.value) body.distance_m=parseInt(dEl.value)||0;
+        if(sEl && sEl.value) body.setting=sEl.value.trim();
+    }
+
+    const label = btn ? btn.textContent : '';
+    if(btn){ btn.classList.remove('failed','saved'); btn.classList.add('saving');
+             btn.textContent='Saving…'; btn.disabled=true; }
+    logInFlight = true;
+    let r;
+    try { r = await apiPost('/api/gym/log-set', body); }
+    finally { logInFlight = false; if(btn) btn.disabled=false; }
+
+    if(r.ok && r.data.ok){
+        LIVE = r.data.workout_so_far;
+        if(btn){ btn.classList.remove('saving'); btn.classList.add('saved'); btn.textContent='✓ Saved'; }
+        const e = EX_BY_ID[id];
+        // Cardio is continuous work, not sets with rest between them.
+        if(e && e.muscle_group!=='cardio') startRest(e.rest_s || 90);
+        durReset();
+        setTimeout(()=>{ if(CURRENT===id) renderAll(); }, 550);
+        renderStatus(); renderCoverage();
+    } else {
+        // Explicit failed state + retry — the set is not dropped from intent.
+        // A 4xx means the server will never accept this set, so don't dress it
+        // up as a retry; only a network drop or a 5xx is worth tapping again.
+        const retryable = r.offline || r.status===0 || r.status>=500;
+        if(btn){ btn.classList.remove('saving'); btn.classList.add('failed');
+            btn.textContent = retryable ? '✕ Failed — tap to retry' : '✕ ' + saveErr(r);
+            if(retryable) btn.onclick=()=>{ btn.textContent=label; logSet(id,tt,extra); }; }
+        toast(saveErr(r));
+    }
+}
+
+// Tapping a logged row loads its numbers back into the steppers, so correcting
+// a mistyped set is: load, fix, remove the bad one, log again.
+function editSet(setId){
+    const s=(LIVE.sets||[]).find(x=>x.id===setId); if(!s) return;
+    const w=document.getElementById('ws-w'), r=document.getElementById('ws-r'),
+          d=document.getElementById('man-dur');
+    if(w && s.weight_kg!=null) w.value=fmtW(s.weight_kg);
+    if(r && s.reps) r.value=s.reps;
+    if(d && s.duration_s) d.value=fmtDur(s.duration_s);
+    renderCard();
+    toast('Set '+(s.n||'')+' loaded — remove it if you are replacing it.');
+}
+
+// Delete is the one destructive control here and the page cannot use confirm()
+// (the artifact/webview frame no-ops it), so the safety net is an undo that
+// actually works rather than a dialog. Same double-tap discipline as logSet.
+let removeInFlight=false;
+async function removeSet(setId, exId){
+    if(removeInFlight) return;
+    const s=(LIVE.sets||[]).find(x=>x.id===setId);
+    removeInFlight = true;
+    let r;
+    try { r = await apiPost('/api/gym/set/delete', {set_id:setId}); }
+    finally { removeInFlight = false; }
+
+    if(r.ok && r.data.ok){
+        LIVE=r.data.workout_so_far;
+        renderAll();
+        if(!r.data.removed){ toast('That set was already gone.'); return; }
+        if(s) toast('Set removed.', {label:'Undo', fn:()=>relogSet(s)});
+        else  toast('Set removed.');
+    } else {
+        toast(r.offline ? 'No connection — set not removed' : (r.data.error||'Could not remove that set'));
+    }
+}
+// Undo re-logs the set through the normal path, so it lands at the end of the
+// exercise's list rather than back in its old position. That is honest about
+// what happened and avoids inventing an update endpoint for it.
+async function relogSet(s){
+    const body={exercise_id:s.exercise_id, successful:true};
+    if(s.weight_kg!=null) body.weight_kg=s.weight_kg;
+    if(s.reps) body.reps=s.reps;
+    if(s.duration_s) body.duration_s=s.duration_s;
+    if(s.distance_m) body.distance_m=s.distance_m;
+    if(s.setting) body.setting=s.setting;
+    const r=await apiPost('/api/gym/log-set', body);
+    if(r.ok && r.data.ok){ LIVE=r.data.workout_so_far; renderAll(); toast('Set restored.'); }
+    else toast(saveErr(r));
+}
+
+// ── Choosing an exercise ──────────────────────────────────────────────────
+async function openExercise(id){
+    const e = EX_BY_ID[id]; if(!e) return;
+    CURRENT = id; PREFILL = null; durReset(); durMode='endure';
+    closePicker(); closeFajin();
+    renderAll();
+    const r = await apiGet('/api/gym/exercise/'+id+'/prefill');
+    // A failed prefill degrades to the bank's own tracking_type with no
+    // reference values rather than blocking the logger.
+    if(r.ok && r.data.ok && CURRENT===id){ PREFILL = r.data; renderAll(); }
+}
+
+// ── Picker sheet: search, continue, recent, browse ────────────────────────
+function openPicker(scope){
+    PICK_SCOPE = scope || null; PICK_Q=''; PICK_BROWSE = (scope==='cardio') ? 'cardio' : null;
+    renderPicker();
+    document.getElementById('pick-sheet').classList.add('on');
+    // Deliberately NOT focusing the search box: on a phone the keyboard then
+    // covers the recents, which is what you want 90% of the time.
+}
+function closePicker(){ document.getElementById('pick-sheet').classList.remove('on'); }
+function renderPicker(){
+    document.getElementById('pick-panel').innerHTML =
+        '<div class="sheet-h"><span class="sheet-title">'
+        + (PICK_SCOPE==='cardio' ? 'Cardio' : 'Choose exercise') + '</span>'
+        + '<button type="button" class="sheet-close" onclick="closePicker()">&#10005;</button></div>'
+        + (PICK_SCOPE==='cardio'
+            ? '<div class="sheet-sub" style="margin:0 0 8px">Separate from lifting · pick a modality</div>'
+            : '<div class="srch"><span style="color:var(--dimmer);font-family:var(--font-mono)">&#8981;</span>'
+              + '<input id="pick-q" type="text" placeholder="Search exercises" autocomplete="off" '
+              + 'oninput="onPickQuery(this.value)" value="'+esc(PICK_Q)+'"></div>')
+        + '<div id="pick-results">'+pickResults()+'</div>';
+}
+function onPickQuery(v){ PICK_Q=v; document.getElementById('pick-results').innerHTML = pickResults(); }
+
+function pickRow(e, meta, cls){
+    return '<button type="button" class="pick" style="--g:'+mgColor(e.muscle_group)+'" onclick="openExercise('+e.id+')">'
+        + '<span class="dot"></span><span class="pcol"><span class="pn">'+esc(e.name)+'</span>'
+        + '<span class="pg">'+esc((e.muscle_label||e.muscle_group||'')+' · '+(e.function_label||e.function||''))+'</span></span>'
+        + '<span class="pm'+(cls||'')+'">'+esc(meta)+'</span></button>';
+}
+function allLoggable(){
+    return Object.keys(EX_BY_ID).map(k=>EX_BY_ID[k]).filter(e=>!e.is_fajin);
+}
+// The picker is scoped, and the scopes do not overlap: cardio is reachable
+// ONLY through the Cardio button, and never shows up in search, recents or
+// browse on the lifting side. That separation is the point of giving cardio
+// its own door — letting it drift back into the general list would quietly
+// undo it.
+function pickPool(){
+    return allLoggable().filter(e => PICK_SCOPE==='cardio'
+        ? e.muscle_group==='cardio' : e.muscle_group!=='cardio');
+}
+function pickGroups(){
+    return BANK.filter(g => PICK_SCOPE==='cardio' ? g.key==='cardio' : g.key!=='cardio');
+}
+function pickResults(){
+    const q = PICK_Q.trim().toLowerCase();
+    if(q){
+        const hits = pickPool().filter(e=>e.name.toLowerCase().indexOf(q)>=0).slice(0,16);
+        if(!hits.length) return '<div class="empty-note">Nothing matches “'+esc(PICK_Q)+'”</div>';
+        return '<div class="sect">'+hits.length+' match'+(hits.length>1?'es':'')+'</div>'
+            + hits.map(e=>{ const d=exDays(e);
+                return pickRow(e, dayLabel(d), d===0?' live':((d===null||d>=7)?' stale':'')); }).join('');
+    }
+    if(PICK_BROWSE){
+        const g = BANK.find(x=>x.key===PICK_BROWSE);
+        if(!g) return '<div class="empty-note">Nothing in that group.</div>';
+        return (PICK_SCOPE==='cardio' ? '' : '<button type="button" class="back-btn" onclick="setBrowse(null)">&lsaquo; All groups</button>')
+            + g.functions.map(fn => '<div class="sect">'+esc(fn.label)+'</div>'
+                + fn.exercises.map(x=>{ const e=EX_BY_ID[x.id], d=exDays(e);
+                    return pickRow(e, dayLabel(d), d===0?' live':((d===null||d>=7)?' stale':'')); }).join('')).join('');
+    }
+    // Default view: what you already started, then what you reached for most
+    // recently — freshest first, because mid-session you are coming back to
+    // something, not shopping for the stalest thing in the bank.
+    const started=[];
+    const inScope = new Set(pickPool().map(e=>e.id));
+    (LIVE.sets||[]).forEach(s=>{ if(s.exercise_id!==CURRENT && started.indexOf(s.exercise_id)<0
+        && inScope.has(s.exercise_id)) started.push(s.exercise_id); });
+    const cont = started.length
+        ? '<div class="sect">Continue</div>' + started.map(id =>
+            pickRow(EX_BY_ID[id], setsFor(id).length+' sets', ' live')).join('')
+        : '';
+    const recent = pickPool()
+        .filter(e=>e.id!==CURRENT && started.indexOf(e.id)<0 && e.days_since!==null && e.days_since!==undefined)
+        .sort((a,b)=>a.days_since-b.days_since).slice(0,5);
+    const groups = pickGroups().map(g=>{
+        const hit=groupSetCount(g.key), cov=COVERAGE.find(c=>c.key===g.key);
+        const d = cov ? cov.days_since : null;
+        return '<button type="button" class="pick" style="--g:'+mgColor(g.key)+'" onclick="setBrowse(\''+jsStr(g.key)+'\')">'
+            + '<span class="dot"></span><span class="pcol"><span class="pn">'+esc(g.label)+'</span>'
+            + '<span class="pg">'+g.functions.length+' function'+(g.functions.length===1?'':'s')+'</span></span>'
+            + '<span class="pm'+(hit?' live':((d===null||d>=7)?' stale':''))+'">'
+            + (hit ? hit+' today' : dayLabel(d))+'</span></button>';
+    }).join('');
+    return cont
+        + (recent.length ? '<div class="sect">Recent</div>'
+            + recent.map(e=>pickRow(e, dayLabel(exDays(e)))).join('') : '')
+        + '<div class="sect">Browse by group</div>' + groups;
+}
+function setBrowse(k){ PICK_BROWSE=k; document.getElementById('pick-results').innerHTML = pickResults(); }
+
+// ── Fa Jin list (the manual entry point — ignores every suppression) ──────
+function updateFajinPill(){
+    document.getElementById('fajin-cta').classList.toggle('hidden', FAJIN.length===0);
+}
+function openFajinList(){
+    document.getElementById('fajin-panel').innerHTML =
+        '<div class="sheet-h"><span class="sheet-title">Fa Jin</span>'
+        + '<span class="sheet-sub">Explosive work</span>'
+        + '<button type="button" class="sheet-close" onclick="closeFajin()">&#10005;</button></div>'
+        + FAJIN.map(f=>{ const e=EX_BY_ID[f.id], d=e?exDays(e):null, done=setsFor(f.id).length;
+            return pickRow(Object.assign({}, f, {muscle_label:f.muscle_label}),
+                           done?done+' today':dayLabel(d), done?' live':''); }).join('');
+    document.getElementById('fajin-sheet').classList.add('on');
+}
+function closeFajin(){ document.getElementById('fajin-sheet').classList.remove('on'); }
+
+// ── Plate maths ──────────────────────────────────────────────────────────
+// bar_kg rides the exercise's engagement blob (same place target_s lives), so
+// an exercise without one simply says so rather than guessing from its name.
+const PLATES = [25,20,15,10,5,2.5,1.25];
+function openPlates(){
+    const e=curEx(); if(!e) return;
+    const w=parseFloat((document.getElementById('ws-w')||{}).value)||0;
+    let body;
+    if(!e.bar_kg){
+        body = '<div class="empty-note">No bar weight set for this exercise.<br>'
+             + 'Add <code>bar_kg</code> to it in the databank to get plate maths here.</div>';
+    } else if(w <= e.bar_kg){
+        body = '<div class="plate"><span class="pl">Bar</span><span class="pp">'+fmtW(e.bar_kg)+' kg</span></div>'
+             + '<div class="empty-note">Target is at or under the bar — nothing to load.</div>';
+    } else {
+        let side=(w-e.bar_kg)/2; const counts={};
+        PLATES.forEach(p=>{ while(side >= p-0.001){ counts[p]=(counts[p]||0)+1; side=Math.round((side-p)*100)/100; } });
+        body = '<div class="plate"><span class="pl">Bar</span><span class="pp">'+fmtW(e.bar_kg)+' kg</span></div>'
+             + Object.keys(counts).sort((a,b)=>b-a).map(k=>
+                 '<div class="plate"><span class="pl">'+k+' kg</span><span class="pp">&times; '+counts[k]+' per side</span></div>').join('')
+             + (side>0.01 ? '<div class="plate"><span class="pl" style="color:var(--red)">Unloadable</span>'
+                 + '<span class="pp" style="color:var(--red)">'+fmtW(Math.round(side*200)/100)+' kg short</span></div>' : '');
+    }
+    document.getElementById('plate-panel').innerHTML =
+        '<div class="sheet-h"><span class="sheet-title">Loading '+fmtW(w)+' kg</span>'
+        + '<button type="button" class="sheet-close" onclick="closePlates()">&#10005;</button></div>'
+        + body + '<button type="button" class="log-btn sec" onclick="closePlates()">Close</button>';
+    document.getElementById('plate-sheet').classList.add('on');
+}
+function closePlates(){ document.getElementById('plate-sheet').classList.remove('on'); }
+
+// ── Session summary + finish ─────────────────────────────────────────────
+// end_gym_session() has existed since the session tables were added but
+// nothing ever called it, so ended_at was only ever stamped days late by the
+// lazy roll-over. (REVIEW §2.3)
+let finishArmed=false;
+function openSummary(){
+    finishArmed=false;
+    renderSummary();
+    document.getElementById('sum-sheet').classList.add('on');
+}
+function armFinish(){ finishArmed=true; renderSummary(); }
+function renderSummary(){
+    const sets=LIVE.sets||[], v=volume();
+    const byG={};
+    sets.forEach(s=>{ const k=s.muscle_group||'other';
+        if(!byG[k]) byG[k]={n:0, names:[]};
+        byG[k].n++; if(byG[k].names.indexOf(s.exercise_name)<0) byG[k].names.push(s.exercise_name); });
+    const lift = Object.keys(byG).filter(k=>k!=='cardio').map(k=>
+        '<div class="sumrow" style="--g:'+mgColor(k)+'"><span class="sg">'+esc(k)+'</span>'
+        + '<span class="sx">'+esc(byG[k].names.join(', '))+'</span>'
+        + '<span class="sn">'+byG[k].n+'</span></div>').join('');
+    // Cardio is reported on its own line, in minutes — never folded into
+    // lifting volume, because it is a different kind of work.
+    const cSecs = sets.filter(s=>s.muscle_group==='cardio').reduce((a,s)=>a+(s.duration_s||0),0);
+    const cardio = cSecs ? '<div class="sumrow" style="--g:'+mgColor('cardio')+'">'
+        + '<span class="sg">Cardio</span><span class="sx">'+esc(byG.cardio.names.join(', '))+'</span>'
+        + '<span class="sn">'+Math.round(cSecs/60)+' min</span></div>' : '';
+    const missing = COVERAGE.filter(g=>g.every_session && !groupSetCount(g.key)).map(g=>g.label);
+    const vol = v>=1000 ? (v/1000).toFixed(1)+'k' : Math.round(v);
+
+    document.getElementById('sum-panel').innerHTML =
+        '<div class="sheet-h"><span class="sheet-title">Session</span>'
+        + '<span class="sheet-sub">'+(LIVE.session_id?('#'+LIVE.session_id):'not started')+'</span>'
+        + '<button type="button" class="sheet-close" onclick="closeSummary()">&#10005;</button></div>'
+        + '<div class="sumgrid">'
+          + '<div class="sumcell"><div class="sv">'+sets.length+'</div><div class="sk">Sets</div></div>'
+          + '<div class="sumcell"><div class="sv">'+vol+'</div><div class="sk">Volume kg</div></div>'
+          + '<div class="sumcell"><div class="sv">'+Object.keys(byG).length+'</div><div class="sk">Groups</div></div>'
+        + '</div>'
+        + (lift+cardio || '<div class="empty-note">No sets logged yet.</div>')
+        + (missing.length ? '<div class="sect">Still outstanding</div>'
+            + '<div class="sumrow warn"><span class="sx">'+esc(missing.join(', '))
+            + ' — every-session groups not hit</span></div>' : '')
+        + (LIVE.session_id
+            ? (finishArmed
+                ? '<button type="button" class="log-btn danger" onclick="finishSession()">Tap again to finish</button>'
+                  + '<div class="finish-note">Closes the session. Logging another set re-opens it.</div>'
+                : '<button type="button" class="log-btn" onclick="armFinish()">Finish session</button>')
+            : '')
+        + '<button type="button" class="log-btn sec" onclick="closeSummary()">Keep going</button>';
+}
+function closeSummary(){ finishArmed=false; document.getElementById('sum-sheet').classList.remove('on'); }
+async function finishSession(){
+    finishArmed=false;
+    const r=await apiPost('/api/gym/session/finish', {});
+    if(r.ok && r.data.ok){
+        closeSummary(); stopRest();
+        LIVE = r.data.workout_so_far || LIVE;
+        renderAll();
+        toast('Session finished.');
+    } else { toast(r.offline ? 'No connection — not finished' : (r.data.error||'Could not finish the session')); }
+}
+
+// ── Re-sync when the page comes back ──────────────────────────────────────
+// A phone locks mid-workout, or the same session is open on a second device.
+// Without this the page keeps rendering whatever LIVE was at load time, so a
+// set logged elsewhere (or a roll-over past 4 AM) never shows up and the
+// counts silently drift from the database.
+let resyncing = false;
+async function resyncLive(){
+    if(resyncing || logInFlight) return;
+    resyncing = true;
+    try {
+        const r = await apiGet('/api/gym/live-session');
+        if(r.ok && r.data && Array.isArray(r.data.sets)){
+            LIVE = r.data;
+            if(!Array.isArray(LIVE.muscles)) LIVE.muscles = [];
+            renderAll();
+        }
+    } finally { resyncing = false; }
+}
+document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState==='visible') resyncLive();
+});
+window.addEventListener('pageshow', e=>{ if(e.persisted) resyncLive(); });
+
+// ── Init ──────────────────────────────────────────────────────────────────
+// Open on where the session left off; failing that, on the thing lifted most
+// recently, so the page is never a blank shell waiting for a decision.
+(function init(){
+    if(!Array.isArray(LIVE.sets)) LIVE.sets = [];
+    if(!Array.isArray(LIVE.muscles)) LIVE.muscles = [];
+    let start = LIVE.current_exercise_id;
+    if(!start || !EX_BY_ID[start]){
+        const pool = allLoggable().filter(e=>e.muscle_group!=='cardio'
+            && e.days_since!==null && e.days_since!==undefined);
+        pool.sort((a,b)=>a.days_since-b.days_since);
+        start = pool.length ? pool[0].id : null;
+    }
+    readRest();
+    if(start) openExercise(start); else renderAll();
+})();
+</script>
+{% endblock %}

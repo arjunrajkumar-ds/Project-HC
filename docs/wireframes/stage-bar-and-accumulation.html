@@ -1,0 +1,813 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stage Bar & Accumulation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Pandora dark tokens, copied from templates/base.html so the wireframes read as the real app */
+:root{
+  --bg:#0a0b0d; --panel:#111316; --panel-alt:#16191d; --panel-soft:#1a1d21; --surface-2:#22262c;
+  --border:#1f242b; --border-bright:#2a313a; --text:#d5dae0; --text-strong:#edf0f3; --muted:#8b93a0;
+  --dim:#6b7480; --dimmer:#3f4651; --accent:#d4a574; --accent-soft:rgba(212,165,116,.12);
+  --green:#7fb069; --red:#c97064; --scrim:rgba(0,0,0,.62);
+  --mg-sh:#d4a574; --mg-ar:#6bb0a8; --mg-co:#a785c2;
+  --font-sans:"Inter",-apple-system,system-ui,sans-serif;
+  --font-mono:"JetBrains Mono","SF Mono",Menlo,monospace;
+  --radius-sm:4px; --radius-md:6px; --radius-lg:14px;
+  --canvas:#050607; --note:#9aa3ae;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--canvas);color:var(--text);font-family:var(--font-sans)}
+button{font:inherit}
+.page{max-width:1240px;margin:0 auto;padding:28px 16px 80px}
+.doc-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 18px;margin-bottom:6px}
+.doc-h h1{font-size:22px;font-weight:600;letter-spacing:-.02em;color:var(--text-strong);margin:0}
+.doc-h .k{font-family:var(--font-mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.doc-sub{color:var(--note);font-size:13px;line-height:1.55;max-width:760px;margin:0 0 30px}
+.sec{border-top:1px solid var(--border);padding:28px 0 18px}
+.sec-h{display:flex;align-items:baseline;gap:12px;margin-bottom:4px}
+.sec-h .num{font-family:var(--font-mono);font-size:11px;color:var(--accent);letter-spacing:.1em}
+.sec-h h2{margin:0;font-size:18px;font-weight:600;color:var(--text-strong);letter-spacing:-.01em}
+.sec-sub{color:var(--note);font-size:13px;line-height:1.55;max-width:780px;margin:4px 0 22px}
+.row{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+.notes{flex:1 1 300px;min-width:0;max-width:460px}
+.notes ol{margin:0;padding:0;list-style:none;counter-reset:n}
+.notes li{counter-increment:n;position:relative;padding:0 0 12px 30px;font-size:13px;line-height:1.55;color:var(--note)}
+.notes li::before{content:counter(n);position:absolute;left:0;top:1px;width:19px;height:19px;border-radius:50%;
+  border:1px solid var(--accent);color:var(--accent);font-family:var(--font-mono);font-size:10px;display:flex;align-items:center;justify-content:center}
+.notes b{color:var(--text-strong);font-weight:600}
+.notes code{font-family:var(--font-mono);font-size:11.5px;color:var(--text);background:var(--panel-soft);padding:1px 5px;border-radius:3px}
+.ctl{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 16px}
+.ctl-h{font-family:var(--font-mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:14px 0 6px}
+.cbtn{background:var(--panel);border:1px solid var(--border-bright);color:var(--text);border-radius:var(--radius-md);
+  font-family:var(--font-mono);font-size:10.5px;padding:8px 10px;cursor:pointer;min-height:36px}
+.cbtn:hover{border-color:var(--dim)}
+.cbtn.pri{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.cbtn .sw{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:6px;vertical-align:0}
+
+/* ── phone frame ── */
+.phone{width:375px;max-width:100%;flex:none;border-radius:38px;border:1px solid #23272e;background:var(--bg);
+  box-shadow:0 0 0 8px #0e1013,0 30px 60px rgba(0,0,0,.5);overflow:hidden;position:relative}
+.phone .scr{height:760px;overflow:hidden;position:relative;display:flex;flex-direction:column}
+.sbar{height:34px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 26px;
+  font-family:var(--font-sans);font-size:12px;font-weight:600;color:var(--text-strong)}
+.pg{padding:0 16px;flex:1;min-height:0;overflow:hidden;position:relative}
+.cap{font-family:var(--font-mono);font-size:9px;color:var(--dim);text-align:center;margin-top:10px;letter-spacing:.06em}
+
+/* ── /train mock (context only) ── */
+.tr-head{display:flex;align-items:center;gap:9px;padding:4px 0 10px}
+.tr-title{font-size:21px;font-weight:600;letter-spacing:-.02em;color:var(--text-strong)}
+.tr-stat{font-family:var(--font-mono);font-size:10px;color:var(--dim)}
+.tr-stat em{font-style:normal;color:var(--text-strong)}
+.tr-ic{margin-left:auto;width:40px;height:40px;border-radius:var(--radius-md);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;color:var(--muted);font-family:var(--font-mono)}
+.mock-cov{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:6px 10px;margin:10px 0}
+.mrow{display:flex;align-items:center;gap:9px;padding:7px 4px;border-top:1px solid var(--border)}
+.mrow:first-child{border-top:0}
+.mrow .g{font-family:var(--font-mono);font-size:9px;letter-spacing:.07em;text-transform:uppercase;width:66px}
+.mrow .ms{display:flex;gap:3px}
+.mrow .ms i{width:5px;height:15px;border-radius:2px;display:block;box-shadow:inset 0 0 0 1px currentColor;position:relative;overflow:hidden}
+.mrow .ms i.f{background:currentColor}
+.mrow .rt{margin-left:auto;font-family:var(--font-mono);font-size:8.5px;color:var(--dimmer)}
+.mock-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px}
+.mock-card .crumb{font-family:var(--font-mono);font-size:8px;letter-spacing:.13em;text-transform:uppercase;color:var(--accent)}
+.mock-card .xn{font-size:18px;font-weight:600;color:var(--text-strong);margin:5px 0 10px;letter-spacing:-.015em}
+.mt{display:grid;grid-template-columns:22px 1fr 1fr;gap:6px;font-family:var(--font-mono);font-size:10.5px;padding:8px 2px;border-top:1px solid var(--border);color:var(--text-strong)}
+.mt.h{font-size:7px;letter-spacing:.13em;color:var(--dimmer)}
+.mt .p{color:var(--dimmer)}
+.mlog{margin-top:10px;background:var(--text-strong);color:#0d0e10;border-radius:var(--radius-md);padding:14px;text-align:center;
+  font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.16em}
+.mfoot{position:absolute;left:0;right:0;bottom:0;border-top:1px solid var(--border);background:var(--bg);padding:9px 16px 26px;display:flex;gap:8px}
+.mfoot span{flex:1;border:1px solid var(--border);border-radius:var(--radius-md);padding:12px 6px;text-align:center;
+  font-family:var(--font-mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.mfoot span.c{flex:none;padding-inline:14px;color:var(--red);border-color:rgba(201,112,100,.42)}
+
+/* ═════════ 1 · STAGE BAR ═════════ */
+.sb{background:var(--bg);padding:7px 0 9px;border-bottom:1px solid var(--border);position:relative}
+.sb-cap{display:flex;align-items:baseline;gap:8px;margin:0 2px 6px;min-height:13px}
+.sb-cap .st{font-family:var(--font-mono);font-size:8px;letter-spacing:.15em;text-transform:uppercase;color:var(--dim);flex:none}
+.sb-cap .ex{font-size:11px;color:var(--text-strong);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-cap .ct{margin-left:auto;font-family:var(--font-mono);font-size:8.5px;color:var(--muted);flex:none;font-variant-numeric:tabular-nums}
+.sb-row{display:flex;gap:7px;align-items:stretch}
+.sb-chevs{flex:1;min-width:0;display:flex;height:40px}
+.cv{--pt:9px;position:relative;flex:1 1 0;min-width:0;margin-left:-5px;background:var(--panel-soft);cursor:pointer;
+  clip-path:polygon(0 0,calc(100% - var(--pt)) 0,100% 50%,calc(100% - var(--pt)) 100%,0 100%,var(--pt) 50%);
+  transition:flex-grow .5s cubic-bezier(.2,.8,.2,1),flex-basis .5s cubic-bezier(.2,.8,.2,1),background .3s;-webkit-tap-highlight-color:transparent}
+.cv:first-child{margin-left:0;clip-path:polygon(0 0,calc(100% - var(--pt)) 0,100% 50%,calc(100% - var(--pt)) 100%,0 100%)}
+.cv .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(212,165,116,.34);transition:width .55s cubic-bezier(.3,.7,.2,1),background .3s}
+.cv .tx{position:relative;z-index:2;height:100%;display:flex;flex-direction:column;justify-content:center;padding:0 10px 0 15px;min-width:0}
+.cv:first-child .tx{padding-left:9px}
+.cv .k{font-family:var(--font-mono);font-size:7.5px;letter-spacing:.12em;color:var(--dim);white-space:nowrap;transition:color .3s}
+.cv .n{font-size:9px;color:var(--dimmer);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;transition:color .3s}
+.cv .ok{display:none}
+/* active */
+.cv.active{background:rgba(212,165,116,.10)}
+.cv.active .k{color:var(--accent)}
+.cv.active .n{color:var(--text-strong)}
+.cv.active::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:linear-gradient(100deg,transparent 35%,rgba(212,165,116,.22) 50%,transparent 65%);background-size:260% 100%;animation:sheen 2.6s linear infinite}
+@keyframes sheen{from{background-position:140% 0}to{background-position:-40% 0}}
+/* done */
+.cv.done .fill{width:100%!important;background:var(--accent)}
+.cv.done .k{color:#2a1d10}
+.cv.done .n{color:#3a2918}
+.cv.done .ok{display:inline;margin-left:3px}
+.cv.just-done{animation:pop .6s .35s cubic-bezier(.3,1.6,.5,1) both}
+.cv.just-done::before{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;transform:translateX(-110%);
+  background:linear-gradient(100deg,transparent 30%,rgba(255,244,228,.7) 50%,transparent 70%);animation:sweep .55s .3s ease-out forwards}
+@keyframes sweep{to{transform:translateX(110%)}}
+@keyframes pop{0%{filter:brightness(1)}35%{filter:brightness(1.55)}100%{filter:brightness(1)}}
+.cv.arrive{animation:arrive .55s .6s cubic-bezier(.2,.9,.3,1.2) both}
+@keyframes arrive{0%{transform:translateX(-7px);filter:brightness(1.8)}100%{transform:none;filter:none}}
+/* optional T2: folded */
+.cv.fold{flex:0 0 13px;--pt:7px;background:repeating-linear-gradient(180deg,var(--dimmer) 0 3px,transparent 3px 6px)}
+.cv.fold .tx,.cv.fold .fill{opacity:0}
+.cv .tx{transition:opacity .25s .2s}
+.cv.unfold{animation:unfold .7s ease-out}
+@keyframes unfold{0%{filter:brightness(2)}100%{filter:none}}
+/* T3 tri-part */
+.cv.t3{flex:1.75 1 0;background:transparent}
+.cv.t3 .fill,.cv.t3 .tx{display:none}
+.parts{position:absolute;inset:0;display:flex;gap:2px;padding-left:4px}
+.cv.t3:first-child .parts{padding-left:0}
+.part{flex:1;position:relative;background:var(--panel-soft);overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.part:last-child{padding-right:6px}
+.part .pf{position:absolute;left:0;right:0;bottom:0;height:0;background:var(--c);opacity:.9;transition:height .5s cubic-bezier(.3,.7,.2,1)}
+.part .pl{position:relative;z-index:2;font-family:var(--font-mono);font-size:8px;letter-spacing:.08em;color:var(--c);font-weight:600;transition:color .3s}
+.part .pn{position:relative;z-index:2;font-family:var(--font-mono);font-size:7.5px;color:var(--dimmer);margin-top:2px;font-variant-numeric:tabular-nums}
+.part.hit .pn{color:var(--text)}
+.part.full .pl,.part.full .pn{color:#121212}
+.part.full.just{animation:pop .6s cubic-bezier(.3,1.6,.5,1)}
+.cv.t3.active .part{background:rgba(212,165,116,.07)}
+.cv.t3.active::after{z-index:3}
+.cv.t3 .t3k{position:absolute;left:12px;top:-1px;display:none}
+/* next button */
+.sb-next{flex:none;width:56px;border-radius:var(--radius-md);border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent);
+  font-family:var(--font-mono);font-size:8px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:1px;-webkit-tap-highlight-color:transparent}
+.sb-next b{font-size:15px;line-height:1;font-weight:500}
+.sb-next:active{background:rgba(212,165,116,.24)}
+.sb-next.fin{border-color:var(--text-strong);color:#0d0e10;background:var(--text-strong)}
+.sb.complete .cv{animation:wave .7s ease both;animation-delay:calc(var(--i) * 90ms)}
+@keyframes wave{0%,100%{filter:none;transform:none}40%{filter:brightness(1.7);transform:translateY(-2px)}}
+.states{display:flex;flex-direction:column;gap:14px;margin-top:6px}
+.state{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:6px 12px 2px;width:375px;max-width:100%}
+.state-l{font-family:var(--font-mono);font-size:9px;color:var(--note);letter-spacing:.06em;margin:4px 0 0}
+.state .sb{border-bottom:0}
+
+/* ═════════ 2 · FINISH RECAP ═════════ */
+.dimmed{filter:brightness(.38) saturate(.7)}
+.rc-sheet{position:absolute;left:0;right:0;bottom:0;top:96px;background:var(--panel);border-radius:18px 18px 0 0;
+  border-top:1px solid var(--border-bright);padding:10px 16px 20px;transform:translateY(102%);transition:transform .5s cubic-bezier(.2,.8,.2,1);overflow:hidden}
+.rc-sheet.on{transform:none}
+.grab{width:36px;height:4px;border-radius:2px;background:var(--border-bright);margin:0 auto 12px}
+.rc-k{font-family:var(--font-mono);font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+.rc-head{display:flex;align-items:flex-end;gap:12px;margin:6px 0 4px}
+.rc-big{font-size:40px;font-weight:700;letter-spacing:-.04em;color:var(--text-strong);line-height:1;font-variant-numeric:tabular-nums}
+.rc-big small{font-size:14px;font-weight:500;color:var(--muted);letter-spacing:0;margin-left:4px}
+.rc-mast{margin-left:auto;text-align:right;font-family:var(--font-mono);font-size:10px;color:var(--dim);line-height:1.5}
+.rc-mast b{display:block;font-size:20px;color:var(--accent);font-family:var(--font-sans);font-weight:700;letter-spacing:-.02em;transition:transform .3s}
+.rc-mast b.bump{animation:pop .6s cubic-bezier(.3,1.6,.5,1)}
+.rc-note{font-size:11px;color:var(--dim);margin:2px 0 14px;line-height:1.45}
+.rc-ex{border-top:1px solid var(--border);padding:12px 0 10px;opacity:0;transform:translateY(8px);transition:opacity .35s,transform .35s}
+.rc-ex.in{opacity:1;transform:none}
+.rc-exh{display:flex;align-items:baseline;gap:8px;margin-bottom:9px}
+.rc-exh .nm{font-size:13px;font-weight:600;color:var(--text-strong)}
+.rc-exh .wt{font-family:var(--font-mono);font-size:9.5px;color:var(--accent);background:var(--accent-soft);padding:2px 6px;border-radius:3px}
+.rc-exh .dl{margin-left:auto;font-family:var(--font-mono);font-size:9.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.rungs{display:flex;gap:4px}
+.rung{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px}
+.rcell{width:100%;height:44px;border-radius:6px;border:1px solid var(--border-bright);background:var(--panel-soft);
+  display:flex;flex-direction:column-reverse;align-items:center;justify-content:center;gap:2.5px;position:relative;transition:background .35s,border-color .35s,opacity .3s}
+.rcell.quiet{opacity:.38}
+.rcell.none{background:transparent;border-style:dashed;border-color:var(--dimmer)}
+.pip{width:6px;height:5px;border-radius:2px;border:1px solid #5e5e5e;box-sizing:border-box}
+.pip.on{background:var(--accent);border-color:var(--accent)}
+.pip.new{background:var(--accent);border-color:var(--accent);transform:scale(0);opacity:0}
+.pip.new.land{animation:land .45s cubic-bezier(.3,1.8,.5,1) forwards}
+@keyframes land{0%{transform:scale(0);opacity:0;box-shadow:0 0 0 0 rgba(212,165,116,.9)}60%{transform:scale(1.6);opacity:1}
+  100%{transform:scale(1);opacity:1;box-shadow:0 0 0 5px rgba(212,165,116,0)}}
+.rcell.mastered{background:var(--accent);border-color:var(--accent);box-shadow:0 0 12px rgba(212,165,116,.4)}
+.rcell.mastered .pip{background:#121212;border-color:#121212}
+.rcell .ovf{position:absolute;top:2px;right:3px;font-size:8px;font-weight:700;color:#121212}
+.rcell.flood{animation:flood .8s ease-out}
+@keyframes flood{0%{box-shadow:0 0 0 0 rgba(212,165,116,.95)}100%{box-shadow:0 0 0 14px rgba(212,165,116,0),0 0 12px rgba(212,165,116,.4)}}
+.rcell .burst{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;pointer-events:none}
+.rl{font-family:var(--font-mono);font-size:8px;color:var(--dim);font-variant-numeric:tabular-nums}
+.rl.hot{color:var(--text-strong)}
+.mtag{display:inline-block;font-family:var(--font-mono);font-size:8px;letter-spacing:.12em;color:#17120a;background:var(--accent);
+  padding:3px 6px;border-radius:3px;margin-top:8px;opacity:0;transform:scale(.6);transition:opacity .3s,transform .4s cubic-bezier(.3,1.7,.5,1)}
+.mtag.in{opacity:1;transform:none}
+.rc-done{position:absolute;left:16px;right:16px;bottom:22px;background:var(--text-strong);color:#0d0e10;border-radius:var(--radius-md);
+  padding:14px;text-align:center;font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.16em}
+
+/* ═════════ 3 · ALT VIEWS ═════════ */
+.av-card{background:var(--panel-alt);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 14px 12px}
+.av-top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.av-t{font-family:var(--font-mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.av-seg{margin-left:auto;display:inline-flex;border:1px solid var(--border);border-radius:999px;overflow:hidden}
+.av-seg span{font-family:var(--font-mono);font-size:8.5px;letter-spacing:.02em;text-transform:uppercase;color:var(--dim);padding:4px 6px}
+.av-t{white-space:nowrap}
+.av-seg span+span{border-left:1px solid var(--border)}
+.av-seg span.on{color:var(--accent);background:var(--accent-soft)}
+.ex-pick{display:flex;gap:4px;flex-wrap:wrap;margin:8px 0 10px}
+.ex-pick button{background:var(--panel-soft);border:1px solid var(--border);color:var(--muted);border-radius:var(--radius-sm);
+  font-family:var(--font-mono);font-size:10px;padding:5px 8px;cursor:pointer}
+.ex-pick button.on{background:var(--text-strong);color:var(--bg);border-color:var(--text-strong)}
+.av-sum{display:flex;gap:14px;margin:2px 0 10px}
+.av-sum div{font-family:var(--font-mono);font-size:9px;color:var(--dim);letter-spacing:.05em}
+.av-sum b{display:block;font-family:var(--font-sans);font-size:17px;color:var(--text-strong);letter-spacing:-.02em;font-weight:600}
+.av-sum b.a{color:var(--accent)}
+svg text{font-family:var(--font-mono)}
+.climber{animation:bob 1.8s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
+.todaypulse{animation:tp 1.6s ease-in-out infinite}
+@keyframes tp{0%,100%{opacity:.35}50%{opacity:1}}
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
+.legend span{display:flex;align-items:center;gap:5px;font-family:var(--font-mono);font-size:9px;color:var(--dim)}
+.legend i{width:9px;height:9px;border-radius:50%;display:inline-block}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:1ms!important;animation-delay:0ms!important;transition-duration:1ms!important}
+}
+@media (max-width:420px){ .phone{border-radius:0;box-shadow:none;border:0} .phone .scr{height:720px} }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="doc-h"><h1>Stage bar &amp; scheme accumulation</h1><span class="k">wireframes · /train + home · 2026-10-18</span></div>
+  <p class="doc-sub">Interactive drafts that use the app's own tokens and your real numbers from <code style="font-family:var(--font-mono)">tracker.db</code>.
+  Every button on this page works. The build is written up in <code style="font-family:var(--font-mono)">docs/PLAN-stage-bar-and-accumulation-recap.md</code>.</p>
+
+  <!-- ══════════ 1 ══════════ -->
+  <section class="sec">
+    <div class="sec-h"><span class="num">01</span><h2>Stage bar on /train</h2></div>
+    <p class="sec-sub">A sticky strip under the Train header that stays on screen while you scroll. Chevrons run Warm-up → T1 #1 → T1 #2 → (T2) → T3.
+      Logging a set moves it forward automatically, and <b style="color:var(--text)">Next</b> lets you move on yourself.</p>
+    <div class="row">
+      <div class="phone"><div class="scr">
+        <div class="sbar"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="pg">
+          <div class="tr-head"><span class="tr-title">Train</span><span class="tr-stat" id="m-stat"><em>0</em> sets</span><span class="tr-ic">∑</span></div>
+          <div id="bar-live"></div>
+          <div class="mock-cov" id="m-cov"></div>
+          <div class="mock-card">
+            <div class="crumb" id="m-crumb">Legs · squat</div>
+            <div class="xn" id="m-xn">BB Squat</div>
+            <div class="mt h"><span>SET</span><span>PREV</span><span>TODAY</span></div>
+            <div class="mt"><span class="p">1</span><span class="p">100 × 5</span><span>100 × 5</span></div>
+            <div class="mt"><span class="p">2</span><span class="p">100 × 5</span><span style="color:var(--dimmer)">—</span></div>
+            <div class="mlog">LOG SET</div>
+          </div>
+        </div>
+        <div class="mfoot"><span>⌕ Change exercise</span><span class="c">Cardio</span></div>
+      </div></div>
+      <div class="notes">
+        <div class="ctl-h">Simulate</div>
+        <div class="ctl">
+          <button class="cbtn pri" id="sim-auto">▶ Auto-play a session</button>
+          <button class="cbtn" id="sim-reset">Reset</button>
+        </div>
+        <div class="ctl">
+          <button class="cbtn" data-log="warm">Warm-up set</button>
+          <button class="cbtn" data-log="t1:BB Squat">T1 · BB Squat</button>
+          <button class="cbtn" data-log="t1:BB Overhead Press">T1 · BB OHP</button>
+          <button class="cbtn" data-log="t2:DB Row">T2 · DB Row</button>
+        </div>
+        <div class="ctl">
+          <button class="cbtn" data-log="t3:sh:DB Lateral Raise"><span class="sw" style="background:var(--mg-sh)"></span>Shoulders</button>
+          <button class="cbtn" data-log="t3:ar:DB Skullcrusher"><span class="sw" style="background:var(--mg-ar)"></span>Arms</button>
+          <button class="cbtn" data-log="t3:co:Ab Wheel"><span class="sw" style="background:var(--mg-co)"></span>Core</button>
+          <button class="cbtn" data-next>Next ›</button>
+        </div>
+        <ol>
+          <li><b>Pinned in place.</b> It sits between the header and the date row with <code>position:sticky; top:0</code>, about 66px tall.
+            The caption line says which stage you're on, which lift, and progress toward its target.</li>
+          <li><b>Moving forward.</b> Your first set in a stage makes it active (sheen), and the fill grows with each set toward the target.
+            A set from a <i>later</i> stage marks everything before it done. <b>Next</b> finishes the current stage and moves on.</li>
+          <li><b>Done animation.</b> The fill completes, a light sweep passes across, the chevron flashes, and then the next one nudges in from the left.
+            When T3 is active, Next becomes <b>Finish</b> and opens the recap in section 02.</li>
+          <li><b>T2 is optional.</b> It stays as a 13px dotted notch. Logging a T2 set unfolds it into a full chevron, and you can also tap the notch to open it.
+            If it's folded, Next skips past it and the stage count drops to 4.</li>
+          <li><b>T3 has three parts.</b> SH / AR / CO each fill from the bottom in their muscle colour. Three sets fill a part, the same as the coverage meters.
+            You can do them in any order.</li>
+          <li><b>T1 #1 and #2</b> each take the name of the first <i>different</i> tier-1 lift you log. Tapping a done chevron jumps
+            the exercise card back to that lift.</li>
+        </ol>
+      </div>
+    </div>
+    <div class="ctl-h" style="margin-top:22px">Static states</div>
+    <div class="row" style="gap:18px">
+      <div class="states" id="states-a"></div>
+      <div class="states" id="states-b"></div>
+    </div>
+  </section>
+
+  <!-- ══════════ 2 ══════════ -->
+  <section class="sec">
+    <div class="sec-h"><span class="num">02</span><h2>Finish recap: scheme dots filling</h2></div>
+    <p class="sec-sub">Tapping Finish (double-tap, same as now) opens a sheet with each laddered lift from today. It shows only the weight you used, with
+      all its rungs. The new passes drop into their pips one at a time, and if a rung reaches the threshold (T&nbsp;=&nbsp;5) it fills with colour.
+      The numbers come from your history plus a sample session: OHP 4×5 @ 50, Skullcrusher 3×7 @ 30, DB Shoulder Press 3×6 @ 22.5.</p>
+    <div class="row">
+      <div class="phone"><div class="scr">
+        <div class="sbar"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="pg dimmed" id="rc-under">
+          <div class="tr-head"><span class="tr-title">Train</span><span class="tr-stat"><em>17</em> sets</span><span class="tr-ic">∑</span></div>
+          <div id="bar-done"></div>
+          <div class="mock-cov" id="m-cov2"></div>
+        </div>
+        <div class="rc-sheet" id="rc-sheet">
+          <div class="grab"></div>
+          <div class="rc-k">Session banked · Sun 18 Oct</div>
+          <div class="rc-head">
+            <div class="rc-big"><span id="rc-count">+0</span><small>passes</small></div>
+            <div class="rc-mast"><b id="rc-mcount">0</b>rungs mastered</div>
+          </div>
+          <div class="rc-note">Today now counts on the home panel.</div>
+          <div id="rc-list"></div>
+          <div class="rc-done">DONE</div>
+        </div>
+      </div></div>
+      <div class="notes">
+        <div class="ctl-h">Simulate</div>
+        <div class="ctl"><button class="cbtn pri" id="rc-play">▶ Play recap</button><button class="cbtn" id="rc-slow">Play at ½ speed</button></div>
+        <ol>
+          <li><b>When it plays.</b> <code>POST /api/gym/session/finish</code> now also returns <code>accumulation_delta</code>, the scheme viz with
+            and without today. The sheet runs entirely on that response, so nothing extra is fetched.</li>
+          <li><b>What it plays.</b> Lifts come in one by one (~0.9s apart). Rungs that didn't change are dimmed to 38%, so your eye goes to the
+            pips that pop in, each with a small ring. The <b>+N passes</b> counter goes up with every pip.</li>
+          <li><b>Mastery moment.</b> When the fifth pip lands, the cell fills with accent colour, glows, and a <b>MASTERED 3×7</b> tag
+            pops in. The counter on the right bumps up.</li>
+          <li><b>Rule change: finishing counts today.</b> The home panel used <code>before_today</code>. It now also includes today
+            when today's session is <code>finished = 1</code>. Logging another set reopens the session, which drops today out again.</li>
+          <li>If nothing laddered was passed (cardio-only, or nothing met a rung), the sheet shows today's summary instead and skips the animation.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ 3 ══════════ -->
+  <section class="sec">
+    <div class="sec-h"><span class="num">03</span><h2>Two alternate accumulation views</h2></div>
+    <p class="sec-sub">Each one would be a 4th and 5th option in the home panel's <i>Matrix / Bars / Rings</i> toggle, built from the same
+      <code style="font-family:var(--font-mono)">scheme_viz</code> data. View B also needs <code style="font-family:var(--font-mono)">pass_days</code> per exercise.
+      They use your real history; switch exercises below.</p>
+    <div class="row">
+      <div class="phone"><div class="scr">
+        <div class="sbar"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="pg" style="padding-top:6px">
+          <div class="av-card">
+            <div class="av-top"><span class="av-t">Accumulation</span>
+              <span class="av-seg"><span>Mtx</span><span>Bar</span><span>Rng</span><span class="on">Route</span><span>Log</span></span></div>
+            <div class="ex-pick" data-for="A"></div>
+            <div class="av-sum" id="A-sum"></div>
+            <svg id="A-svg" width="100%" viewBox="0 0 320 420"></svg>
+            <div class="legend"><span><i style="background:var(--accent)"></i>mastered</span><span><i style="border:2px solid var(--accent)"></i>in progress</span>
+              <span><i style="border:1px dashed #5e5e5e"></i>untouched</span><span>▲ you are here</span></div>
+          </div>
+        </div>
+      </div><div class="cap" style="padding-bottom:12px">A · ROUTE</div></div>
+      <div class="phone"><div class="scr">
+        <div class="sbar"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="pg" style="padding-top:6px">
+          <div class="av-card">
+            <div class="av-top"><span class="av-t">Accumulation</span>
+              <span class="av-seg"><span>Mtx</span><span>Bar</span><span>Rng</span><span>Route</span><span class="on">Log</span></span></div>
+            <div class="ex-pick" data-for="B"></div>
+            <div class="av-sum" id="B-sum"></div>
+            <svg id="B-svg" width="100%" viewBox="0 0 320 400"></svg>
+            <div class="legend"><span><i style="background:var(--accent)"></i>pass at top weight</span><span><i style="background:#757575"></i>lighter</span>
+              <span><i style="border:1px solid var(--text-strong)"></i>frontier</span></div>
+          </div>
+        </div>
+      </div><div class="cap" style="padding-bottom:12px">B · LEDGER</div></div>
+      <div class="notes">
+        <ol>
+          <li><b>A · Route.</b> The ladder drawn as a climbing route. Each floor is one weight (heaviest at the top), and each hold is a rung in
+            <code>TIER_BOUNDS</code> order. The rope between holds lights up once you've mastered the hold below it, so a lit line shows
+            work you can build on. A dashed <b>next floor</b> (+2.5 kg) sits above as the obvious next goal, and ▲ marks "you are here".</li>
+          <li><b>Why A.</b> The matrix answers "how much have I banked". The route answers "how far up am I, and what's next".
+            It reads like a game board, which is the point.</li>
+          <li><b>B · Ledger.</b> This one is about time. Columns are training days and rows are rungs, with harder rungs higher up.
+            Each dot is one pass, accent-coloured for that day's heaviest weight and grey for lighter ones. The white
+            <b>frontier</b> line steps to the hardest rung passed each day, and weight jumps show above the column. Gaps over 3 weeks are marked.</li>
+          <li><b>Why B.</b> It's the only view that shows <i>when</i> things happened, so you can see if you stalled, went back to a lighter weight, or broke through.
+            The tally on the right matches the matrix at the current weight.</li>
+          <li><b>Recap tie-in.</b> Both views mark today: a pulsing dashed column in B and new holds in A. So the home page
+            picks up where the Finish recap stopped.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+'use strict';
+const $=s=>document.querySelector(s);
+const MG={sh:'var(--mg-sh)',ar:'var(--mg-ar)',co:'var(--mg-co)'};
+const T3LBL={sh:'SH',ar:'AR',co:'CO'};
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ═════════ STAGE BAR COMPONENT ═════════ */
+function freshState(){
+  return {active:0, finished:false, stages:[
+    {key:'warm',k:'WARM-UP',name:'',sets:0,target:2,done:false},
+    {key:'t1a',k:'T1 · 1',name:'',sets:0,target:3,done:false},
+    {key:'t1b',k:'T1 · 2',name:'',sets:0,target:3,done:false},
+    {key:'t2',k:'T2',name:'',sets:0,target:3,done:false,optional:true,open:false},
+    {key:'t3',k:'T3',name:'',done:false,parts:{sh:0,ar:0,co:0},names:{}},
+  ]};
+}
+function makeBar(host,opts){
+  opts=opts||{};
+  const el=document.createElement('div'); el.className='sb';
+  el.innerHTML='<div class="sb-cap"><span class="st"></span><span class="ex"></span><span class="ct"></span></div>'
+    +'<div class="sb-row"><div class="sb-chevs"></div><button type="button" class="sb-next"><b>›</b><span>Next</span></button></div>';
+  host.appendChild(el);
+  const chevs=el.querySelector('.sb-chevs'), nextBtn=el.querySelector('.sb-next');
+  let S=freshState();
+  const nodes=S.stages.map((st,i)=>{
+    const c=document.createElement('div'); c.className='cv'+(st.key==='t3'?' t3':''); c.style.setProperty('--i',i);
+    if(st.key==='t3'){
+      c.innerHTML='<div class="parts">'+['sh','ar','co'].map(p=>
+        '<div class="part" data-p="'+p+'" style="--c:'+MG[p]+'"><span class="pf"></span><span class="pl">'+T3LBL[p]+'</span><span class="pn">0/3</span></div>').join('')+'</div>';
+    } else {
+      c.innerHTML='<span class="fill"></span><span class="tx"><span class="k">'+st.k+'<span class="ok">✓</span></span><span class="n"></span></span>';
+    }
+    c.addEventListener('click',()=>{ if(opts.static) return;
+      if(st.optional && !st.open){ open(i); } });
+    chevs.appendChild(c); return c;
+  });
+  nextBtn.addEventListener('click',()=>{ if(!opts.static) next(); });
+
+  function visibleCount(){ return S.stages.filter(s=>!(s.optional&&!s.open)).length; }
+  function visibleIndex(i){ let n=0; for(let j=0;j<=i;j++){ const s=S.stages[j]; if(!(s.optional&&!s.open)) n++; } return n; }
+  function markDone(i,anim){
+    const st=S.stages[i]; if(st.done) return; st.done=true;
+    if(anim && !opts.static){ const n=nodes[i]; n.classList.remove('just-done'); void n.offsetWidth; n.classList.add('just-done');
+      setTimeout(()=>n.classList.remove('just-done'),1200); }
+  }
+  function setActive(i,anim){
+    if(S.active===i) return; S.active=i;
+    if(anim && !opts.static){ const n=nodes[i]; n.classList.remove('arrive'); void n.offsetWidth; n.classList.add('arrive');
+      setTimeout(()=>n.classList.remove('arrive'),1300); }
+  }
+  function advanceTo(i,anim){
+    for(let j=0;j<i;j++){ const s=S.stages[j]; if(s.optional&&!s.open) continue; markDone(j,anim); }
+    setActive(i,anim);
+  }
+  function open(i){ const st=S.stages[i]; st.open=true; const n=nodes[i];
+    n.classList.add('unfold'); setTimeout(()=>n.classList.remove('unfold'),800);
+    if(i>S.active) advanceTo(i,true); render(); }
+  function log(kind,anim){
+    if(anim===undefined) anim=true;
+    const [t,a,b]=kind.split(':'); let i;
+    if(t==='warm'){ i=0; }
+    else if(t==='t1'){ const A=S.stages[1];
+      if(!A.name||A.name===a){ i=1; A.name=a; } else { i=2; S.stages[2].name=S.stages[2].name||a; } }
+    else if(t==='t2'){ i=3; if(!S.stages[3].open){ S.stages[3].open=true; if(anim&&!opts.static){ nodes[3].classList.add('unfold'); setTimeout(()=>nodes[3].classList.remove('unfold'),800);} }
+      S.stages[3].name=a; }
+    else { i=4; }
+    if(i>S.active) advanceTo(i,anim);
+    const st=S.stages[i];
+    if(t==='t3'){ st.parts[a]++; st.names[a]=b; st.name=b;
+      if(st.parts[a]===3 && anim && !opts.static){ const p=nodes[4].querySelector('[data-p="'+a+'"]'); p.classList.add('just'); setTimeout(()=>p.classList.remove('just'),700); } }
+    else st.sets++;
+    if(t!=='t3' && st.name==='' && t==='warm') st.name='Band pull-aparts';
+    render(); return i;
+  }
+  function next(){
+    if(S.active===4){ finish(); return; }
+    markDone(S.active,true);
+    let n=S.active+1; if(S.stages[n].optional && !S.stages[n].open) n++;
+    setActive(n,true); render();
+  }
+  function finish(){
+    markDone(4,false); S.finished=true; render();
+    if(opts.static) return;
+    el.classList.remove('complete'); void el.offsetWidth; el.classList.add('complete');
+    setTimeout(()=>el.classList.remove('complete'),1400);
+    if(opts.onFinish) setTimeout(opts.onFinish,900);
+  }
+  function render(){
+    S.stages.forEach((st,i)=>{
+      const n=nodes[i];
+      const folded=!!(st.optional&&!st.open);
+      n.classList.toggle('fold',folded);
+      n.classList.toggle('active',i===S.active && !S.finished && !folded);
+      n.classList.toggle('done',st.done && st.key!=='t3');
+      if(st.key==='t3'){
+        ['sh','ar','co'].forEach(p=>{ const v=st.parts[p], node=n.querySelector('[data-p="'+p+'"]');
+          node.querySelector('.pf').style.height=(st.done&&v===0?0:Math.min(v/3,1)*100)+'%';
+          node.querySelector('.pn').textContent=v+'/3';
+          node.classList.toggle('hit',v>0); node.classList.toggle('full',v>=3); });
+      } else {
+        n.querySelector('.fill').style.width=(st.done?100:Math.min(st.sets/st.target,1)*100)+'%';
+        n.querySelector('.n').textContent=st.name||(st.optional?'optional':(i===0?'—':'pick a lift'));
+      }
+    });
+    const a=S.stages[S.active];
+    el.querySelector('.st').textContent=S.finished?'Session done':('Stage '+visibleIndex(S.active)+' / '+visibleCount());
+    let exTxt, ct;
+    if(S.finished){ exTxt='All stages complete'; ct=''; }
+    else if(a.key==='t3'){ const hit=['sh','ar','co'].filter(p=>a.parts[p]>0).length;
+      exTxt=a.name?('T3 · '+a.name):'T3 · shoulders, arms, core'; ct=hit+' / 3 groups'; }
+    else { exTxt=(a.key==='warm'?'Warm-up':a.k.replace(' · ',' #'))+(a.name?' · '+a.name:''); ct=a.sets+' / '+a.target+' sets'; }
+    el.querySelector('.ex').textContent=exTxt; el.querySelector('.ct').textContent=ct;
+    const fin=S.active===4 && !S.finished;
+    nextBtn.classList.toggle('fin',fin);
+    nextBtn.innerHTML=S.finished?'<b>✓</b><span>Done</span>':fin?'<b>✓</b><span>Finish</span>':'<b>›</b><span>Next</span>';
+    nextBtn.style.opacity=S.finished?.45:1;
+    if(opts.onChange) opts.onChange(S);
+  }
+  function reset(){ S=freshState(); nodes.forEach(n=>n.className=n.className.replace(/ (active|done|fold|just-done|arrive)/g,'')); render(); }
+  render();
+  return {log,next,finish,reset,open,get state(){return S;},el,render};
+}
+
+/* ── coverage-strip mock (context) ── */
+const COV=[['shoulders','#d4a574','sh'],['arms','#6bb0a8','ar'],['core','#a785c2','co'],['chest','#e07a7a'],['back','#6b93c9'],['legs','#7fb069']];
+function covHTML(fills){
+  return COV.map(([k,c])=>{ const f=fills[k]||0;
+    return '<div class="mrow" style="color:'+c+'"><span class="g">'+k+'</span><span class="ms">'
+      +[0,1,2,3].map(j=>'<i class="'+(j<f?'f':'')+'"></i>').join('')+'</span><span class="rt">'+(f?'today':'4d')+'</span></div>'; }).join('');
+}
+
+/* live demo */
+let liveSets=0;
+const live=makeBar($('#bar-live'),{
+  onChange:S=>{
+    const fills={legs:S.stages[1].sets,shoulders:S.stages[2].sets+S.stages[4].parts.sh,back:S.stages[3].sets,arms:S.stages[4].parts.ar,core:S.stages[4].parts.co};
+    $('#m-cov').innerHTML=covHTML(fills);
+    const a=S.stages[S.active];
+    $('#m-xn').textContent=(a.key==='t3'?(a.name||'DB Lateral Raise'):(a.name||(a.key==='warm'?'Band pull-aparts':'BB Squat')));
+    $('#m-crumb').textContent=a.key==='warm'?'Warm-up':a.key==='t3'?'Tier 3':a.key==='t2'?'Tier 2':'Tier 1';
+  },
+  onFinish:()=>{ document.querySelector('#rc-sheet').scrollIntoView({behavior:'smooth',block:'center'}); setTimeout(()=>playRecap(1),600); }
+});
+document.querySelectorAll('[data-log]').forEach(b=>b.addEventListener('click',()=>{ live.log(b.dataset.log); liveSets++; $('#m-stat').innerHTML='<em>'+liveSets+'</em> sets'; }));
+document.querySelector('[data-next]').addEventListener('click',()=>live.next());
+let autoT=[];
+$('#sim-reset').addEventListener('click',()=>{ autoT.forEach(clearTimeout); autoT=[]; live.reset(); liveSets=0; $('#m-stat').innerHTML='<em>0</em> sets'; });
+$('#sim-auto').addEventListener('click',()=>{
+  autoT.forEach(clearTimeout); autoT=[]; live.reset(); liveSets=0;
+  const seq=['warm','warm','t1:BB Squat','t1:BB Squat','t1:BB Squat','next','t1:BB Overhead Press','t1:BB Overhead Press','t1:BB Overhead Press',
+    't3:sh:DB Lateral Raise','t3:sh:DB Lateral Raise','t3:ar:DB Skullcrusher','t3:sh:DB Lateral Raise','t3:ar:DB Skullcrusher','t3:co:Ab Wheel','t3:ar:DB Skullcrusher'];
+  seq.forEach((s,k)=>autoT.push(setTimeout(()=>{ if(s==='next') live.next(); else { live.log(s); liveSets++; $('#m-stat').innerHTML='<em>'+liveSets+'</em> sets'; } },400+k*850)));
+});
+
+/* static states */
+function snap(host,label,steps){
+  const w=document.createElement('div'); w.className='state'; host.appendChild(w);
+  const b=makeBar(w,{static:true}); steps.forEach(s=>s==='next'?b.next():s==='finish'?b.finish():s.startsWith('open')?b.open(3):b.log(s,false));
+  b.render();
+  const l=document.createElement('div'); l.className='state-l'; l.textContent=label; w.appendChild(l);
+}
+snap($('#states-a'),'a · fresh session. Warm-up active, T2 folded',[]);
+snap($('#states-a'),'b · warm-up auto-done by first T1 set; T1 #1 at 2/3',['warm','t1:BB Squat','t1:BB Squat']);
+snap($('#states-a'),'c · T1 #2 active (second different T1 lift)',['warm','t1:BB Squat','t1:BB Squat','t1:BB Squat','t1:BB Overhead Press']);
+snap($('#states-b'),'d · T2 unfolded by a DB Row set',['t1:BB Squat','t1:BB Overhead Press','t2:DB Row','t2:DB Row']);
+snap($('#states-b'),'e · T2 skipped, T3 in progress, SH full',['t1:BB Squat','t1:BB Overhead Press','t3:sh:x','t3:sh:x','t3:sh:x','t3:ar:DB Curl']);
+snap($('#states-b'),'f · finished',['t1:BB Squat','t1:BB Overhead Press','t2:DB Row','t3:sh:x','t3:ar:x','t3:co:x','finish']);
+
+/* ═════════ PASS ENGINE (mirrors app._build_scheme_viz) ═════════ */
+const BOUNDS={1:[[3,5],[3,5]],2:[[3,4],[6,8]],3:[[3,4],[8,12]]};
+const T=5;
+function ladder(t){ const [[s0,s1],[r0,r1]]=BOUNDS[t], L=[]; for(let s=s0;s<=s1;s++) for(let r=r0;r<=r1;r++) L.push([s,r]); return L; }
+function passesByDay(rows,tier){ // rows: [day,w,reps,n]
+  const g={}; rows.forEach(([d,w,r,n])=>{ const k=d+'|'+w; (g[k]=g[k]||{d,w,reps:{}}).reps[r]=(g[k].reps[r]||0)+n; });
+  const L=ladder(tier), out=[];
+  Object.values(g).forEach(({d,w,reps})=>L.forEach(([s,rr],ci)=>{
+    const cleared=Object.entries(reps).reduce((a,[k,n])=>a+(+k>=rr?n:0),0);
+    if(cleared>=s) out.push({d,w,ci}); }));
+  return out;
+}
+function tally(p){ const m={}; p.forEach(({w,ci})=>{ const k=ci+'@'+w; m[k]=(m[k]||0)+1; }); return m; }
+
+/* real rows from tracker.db (training day, kg, reps, sets) */
+const EX={
+  sk:{name:'DB Skullcrusher',short:'Skullcrusher',tier:2,rows:[['2026-06-09',25,3,8],['2026-07-03',27.5,8,3],['2026-07-08',30,6,4],['2026-07-11',30,9,3],['2026-07-13',30,9,6],['2026-08-23',30,8,1],['2026-08-23',30,10,2],['2026-09-07',30,7,4]],today:[['2026-10-18',30,7,3]]},
+  ohp:{name:'BB Overhead Press',short:'OHP',tier:1,rows:[['2026-07-09',50,5,4],['2026-07-29',55,2,1],['2026-07-29',55,3,1],['2026-08-25',50,6,1],['2026-08-25',55,2,1],['2026-08-25',55,3,1],['2026-09-07',50,5,4],['2026-10-03',45,4,2]],today:[['2026-10-18',50,5,4]]},
+  dsp:{name:'DB Shoulder Press',short:'DB Sh Press',tier:2,rows:[['2026-07-03',20,8,3],['2026-07-08',22.5,6,4],['2026-08-19',20,6,3],['2026-09-14',22.5,7,2],['2026-10-12',20,6,3]],today:[['2026-10-18',22.5,6,3]]},
+};
+const lbl=(s,r)=>s+'×'+r;
+const kg=w=>(w%1?w.toFixed(1):w)+' kg';
+
+/* ═════════ 2 · RECAP ═════════ */
+$('#bar-done').appendChild(document.createElement('div'));
+(function(){ const b=makeBar($('#bar-done'),{static:true}); ['t1:BB Squat','t1:BB Overhead Press','t3:sh:x','t3:sh:x','t3:sh:x','t3:ar:x','t3:ar:x','t3:ar:x','t3:co:x','t3:co:x','finish'].forEach(s=>s==='finish'?b.finish():b.log(s,false)); })();
+$('#m-cov2').innerHTML=covHTML({shoulders:4,arms:3,core:2,legs:3});
+
+let rcTimers=[];
+function buildRecap(){
+  const list=$('#rc-list'); list.innerHTML='';
+  const order=['ohp','sk','dsp'], plan=[];
+  order.forEach(id=>{
+    const e=EX[id], L=ladder(e.tier), w=e.today[0][1];
+    const before=tally(passesByDay(e.rows,e.tier)), after=tally(passesByDay(e.rows.concat(e.today),e.tier));
+    const box=document.createElement('div'); box.className='rc-ex';
+    const tw=e.today[0]; let gained=0;
+    const cells=L.map(([s,r],ci)=>{ const b=before[ci+'@'+w]||0, a=after[ci+'@'+w]||0; gained+=a-b; return {s,r,ci,b,a}; });
+    box.innerHTML='<div class="rc-exh"><span class="nm">'+e.name+'</span><span class="wt">'+kg(w)+'</span><span class="dl">'+tw[3]+'×'+tw[2]+' · +'+gained+'</span></div><div class="rungs"></div><div class="mt-wrap"></div>';
+    const rungs=box.querySelector('.rungs');
+    cells.forEach(c=>{
+      const r=document.createElement('div'); r.className='rung';
+      const cell=document.createElement('div'); cell.className='rcell';
+      const changed=c.a>c.b;
+      if(!changed) cell.classList.add('quiet');
+      if(c.b===0 && c.a===0) cell.classList.add('none');
+      if(c.b>=T) cell.classList.add('mastered');
+      const shown=Math.min(T,c.a);
+      for(let p=0;p<T;p++){ const pip=document.createElement('span'); pip.className='pip';
+        if(p<Math.min(c.b,T)) pip.classList.add('on'); else if(p<shown) pip.classList.add('new');
+        cell.appendChild(pip); }
+      if(c.b>T){ const o=document.createElement('span'); o.className='ovf'; o.textContent='+'+(c.b-T); cell.appendChild(o); }
+      r.appendChild(cell);
+      const l=document.createElement('span'); l.className='rl'+(changed?' hot':''); l.textContent=lbl(c.s,c.r); r.appendChild(l);
+      rungs.appendChild(r);
+      c.cell=cell; c.changed=changed;
+    });
+    list.appendChild(box);
+    plan.push({box,cells,e});
+  });
+  return plan;
+}
+function playRecap(speed){
+  speed=speed||1; rcTimers.forEach(clearTimeout); rcTimers=[];
+  const sheet=$('#rc-sheet'); sheet.classList.remove('on');
+  const plan=buildRecap(); let count=0, mast=0;
+  $('#rc-count').textContent='+0'; $('#rc-mcount').textContent='0';
+  const at=(ms,fn)=>rcTimers.push(setTimeout(fn,ms/speed));
+  at(80,()=>sheet.classList.add('on'));
+  let t=650;
+  plan.forEach(({box,cells})=>{
+    at(t,()=>box.classList.add('in')); t+=380;
+    cells.filter(c=>c.changed).forEach(c=>{
+      const news=[...c.cell.querySelectorAll('.pip.new')];
+      // passes beyond T (overflow) still count but have no pip to drop
+      const extra=(c.a-c.b)-news.length;
+      news.forEach(p=>{ at(t,()=>{ p.classList.add('land'); count++; $('#rc-count').textContent='+'+count; }); t+=150; });
+      for(let x=0;x<extra;x++){ at(t,()=>{ count++; $('#rc-count').textContent='+'+count;
+        let o=c.cell.querySelector('.ovf'); if(!o){o=document.createElement('span');o.className='ovf';c.cell.appendChild(o);} o.textContent='+'+(c.a-T); }); t+=150; }
+      if(c.b<T && c.a>=T){
+        at(t+120,()=>{ c.cell.classList.add('mastered','flood'); mast++; const m=$('#rc-mcount'); m.textContent=mast; m.classList.remove('bump'); void m.offsetWidth; m.classList.add('bump');
+          const tag=document.createElement('div'); tag.className='mtag'; tag.textContent='MASTERED '+lbl(c.s,c.r);
+          box.querySelector('.mt-wrap').appendChild(tag); requestAnimationFrame(()=>requestAnimationFrame(()=>tag.classList.add('in'))); });
+        t+=650;
+      }
+    });
+    t+=260;
+  });
+}
+$('#rc-play').addEventListener('click',()=>playRecap(1));
+$('#rc-slow').addEventListener('click',()=>playRecap(.5));
+// auto-play once when scrolled into view
+const io=new IntersectionObserver(es=>{ es.forEach(en=>{ if(en.isIntersecting){ playRecap(1); io.disconnect(); } }); },{threshold:.5});
+io.observe($('#rc-sheet').parentElement);
+
+/* ═════════ 3 · ALT VIEWS ═════════ */
+const NS='http://www.w3.org/2000/svg';
+function S(tag,attrs,parent,text){ const n=document.createElementNS(NS,tag); for(const k in attrs) n.setAttribute(k,attrs[k]); if(text!=null) n.textContent=text; if(parent) parent.appendChild(n); return n; }
+const ACC='#d4a574', GREYS=['#3a3a3a','#5e5e5e','#757575','#949494','#b7b7b7'];
+
+function exModel(id,withToday){
+  const e=EX[id], rows=withToday?e.rows.concat(e.today):e.rows, pd=passesByDay(rows,e.tier), m=tally(pd);
+  const weights=[...new Set(pd.map(p=>p.w))].sort((a,b)=>a-b);
+  // you-are-here: heaviest weight of the latest day, highest rung passed at it
+  const lastDay=rows.map(r=>r[0]).sort().pop();
+  const wLast=Math.max(...rows.filter(r=>r[0]===lastDay).map(r=>r[1]));
+  const colsAt=pd.filter(p=>p.w===wLast).map(p=>p.ci); const here={w:wLast,ci:colsAt.length?Math.max(...colsAt):null};
+  return {e,L:ladder(e.tier),pd,m,weights,here,rows};
+}
+
+/* A · ROUTE */
+function drawRoute(id){
+  const svg=$('#A-svg'); svg.innerHTML='';
+  const M=exModel(id,true), {L,m,here}=M;
+  const floors=M.weights.slice(); const top=floors[floors.length-1]+2.5; floors.push(top); // ghost next floor
+  const n=L.length, x0=84, x1=304, gap=(x1-x0)/(n-1), fh=Math.min(108,330/(floors.length-1||1));
+  const H=40+fh*(floors.length-1)+52; svg.setAttribute('viewBox','0 0 320 '+H);
+  const yOf=fi=>H-40-fi*fh;
+  const holds=[], R=10;
+  floors.forEach((w,fi)=>{ L.forEach(([s,r],ci)=>{ holds.push({w,fi,ci,s,r,x:x0+ci*gap,y:yOf(fi)-((ci%2)?10:0),n:m[ci+'@'+w]||0,ghost:fi===floors.length-1}); }); });
+  // altimeter
+  S('line',{x1:20,y1:yOf(0)+18,x2:20,y2:yOf(floors.length-1)-24,stroke:'#2a313a','stroke-width':1},svg);
+  floors.forEach((w,fi)=>{ const y=yOf(fi), g=fi===floors.length-1;
+    S('line',{x1:16,y1:y,x2:24,y2:y,stroke:g?'#3f4651':'#6b7480'},svg);
+    S('text',{x:28,y:y+3,'font-size':9,fill:g?'#6b7480':(w===here.w?'#edf0f3':'#8b93a0'),'font-weight':w===here.w?600:400},svg,(w%1?w.toFixed(1):w));
+    if(g) S('text',{x:28,y:y+14,'font-size':6.5,fill:'#3f4651','letter-spacing':'.08em'},svg,'NEXT');
+  });
+  S('text',{x:14,y:yOf(floors.length-1)-30,'font-size':7,fill:'#6b7480','letter-spacing':'.1em'},svg,'KG ↑');
+  // rope
+  for(let i=1;i<holds.length;i++){
+    const a=holds[i-1], b=holds[i]; if(a.fi!==b.fi) continue;
+    const lit=a.n>=T && !b.ghost;
+    S('path',{d:'M'+a.x+' '+a.y+' L'+b.x+' '+b.y,fill:'none',stroke:lit?ACC:(b.ghost?'#22262c':'#2a313a'),'stroke-width':lit?2:1.2,'stroke-dasharray':b.ghost?'3 3':'none'},svg);
+  }
+  // pitches: a heavier weight restarts at the easiest rung, so floors join on the left
+  for(let fi=0;fi<floors.length-1;fi++){
+    const a=holds.find(h=>h.fi===fi&&h.ci===0), b=holds.find(h=>h.fi===fi+1&&h.ci===0);
+    const lit=holds.filter(h=>h.fi===fi).some(h=>h.n>=T);
+    S('path',{d:'M'+(a.x-14)+' '+a.y+' L'+(a.x-14)+' '+b.y+' L'+(b.x-R)+' '+b.y,fill:'none',stroke:lit?ACC:'#2a313a','stroke-width':1.2,'stroke-dasharray':'3 3',opacity:.8},svg);
+    S('text',{x:a.x-18,y:(a.y+b.y)/2+3,'font-size':6.5,'text-anchor':'end',fill:'#6b7480'},svg,'+'+(floors[fi+1]-floors[fi]));
+  }
+  // holds
+  const C=2*Math.PI*R;
+  holds.forEach(h=>{
+    const g=S('g',{},svg);
+    if(h.ghost){ S('circle',{cx:h.x,cy:h.y,r:R,fill:'none',stroke:'#3f4651','stroke-dasharray':'2 3'},g); }
+    else if(h.n>=T){ S('circle',{cx:h.x,cy:h.y,r:R+4,fill:ACC,opacity:.14},g); S('circle',{cx:h.x,cy:h.y,r:R,fill:ACC},g);
+      S('text',{x:h.x,y:h.y+3,'font-size':8,'text-anchor':'middle',fill:'#121212','font-weight':700},g,h.n>T?'+'+(h.n-T):'✓'); }
+    else if(h.n>0){ S('circle',{cx:h.x,cy:h.y,r:R,fill:'#111316',stroke:'#2a313a','stroke-width':3},g);
+      S('circle',{cx:h.x,cy:h.y,r:R,fill:'none',stroke:ACC,'stroke-width':3,'stroke-dasharray':(C*h.n/T)+' '+C,transform:'rotate(-90 '+h.x+' '+h.y+')','stroke-linecap':'round'},g);
+      S('text',{x:h.x,y:h.y+3,'font-size':8,'text-anchor':'middle',fill:'#edf0f3'},g,h.n); }
+    else { S('circle',{cx:h.x,cy:h.y,r:R-2,fill:'none',stroke:'#5e5e5e','stroke-dasharray':'2 2'},g); }
+    if(h.fi===0||h.ghost) S('text',{x:h.x,y:h.y+(h.ghost?-16:22),'font-size':7,'text-anchor':'middle',fill:'#6b7480'},svg,lbl(h.s,h.r));
+  });
+  // climber
+  if(here.ci!=null){ const h=holds.find(x=>x.w===here.w&&x.ci===here.ci); if(h){
+    const g=S('g',{class:'climber'},svg);
+    S('path',{d:'M'+(h.x-5)+' '+(h.y-15)+' L'+(h.x+5)+' '+(h.y-15)+' L'+h.x+' '+(h.y-8)+' Z',fill:'#edf0f3'},g);
+  }}
+  // summit flag
+  const last=holds[holds.length-1];
+  S('path',{d:'M'+(last.x)+' '+(last.y-12)+' L'+last.x+' '+(last.y-30)+' L'+(last.x+11)+' '+(last.y-25)+' L'+last.x+' '+(last.y-20)},svg).setAttribute('fill','none');
+  svg.lastChild.setAttribute('stroke','#6b7480');
+  // summary
+  const real=holds.filter(h=>!h.ghost), mastered=real.filter(h=>h.n>=T).length, touched=real.filter(h=>h.n>0).length;
+  $('#A-sum').innerHTML='<div><b class="a">'+mastered+'</b>holds mastered</div><div><b>'+touched+'/'+real.length+'</b>touched</div><div><b>'+(here.ci!=null?lbl(...L[here.ci]):'—')+'</b>@ '+kg(here.w)+'</div>';
+}
+
+/* B · LEDGER */
+function drawLedger(id){
+  const svg=$('#B-svg'); svg.innerHTML='';
+  const M=exModel(id,false), {L}=M, e=M.e;
+  const todayP=passesByDay(e.rows.concat(e.today),e.tier).filter(p=>p.d==='2026-10-18');
+  const days=[...new Set(M.rows.map(r=>r[0]))].sort(); days.push('2026-10-18');
+  const rowsN=L.length, rh=Math.min(28,250/rowsN), top=34, left=36, right=286, H=top+rh*rowsN+44;
+  svg.setAttribute('viewBox','0 0 320 '+H);
+  const colW=(right-left)/days.length, xOf=i=>left+colW*(i+.5), yOf=ci=>top+rh*(rowsN-1-ci)+rh/2;
+  // grid rows
+  L.forEach(([s,r],ci)=>{ const y=yOf(ci);
+    S('line',{x1:left,y1:y,x2:right,y2:y,stroke:'#1a1d21'},svg);
+    S('text',{x:left-6,y:y+3,'font-size':8,'text-anchor':'end',fill:'#6b7480'},svg,lbl(s,r)); });
+  S('text',{x:4,y:top-14,'font-size':6.5,fill:'#6b7480','letter-spacing':'.1em'},svg,'HARDER ↑');
+  // per-day
+  const frontier=[]; let prevW=null;
+  days.forEach((d,i)=>{
+    const isToday=d==='2026-10-18';
+    const pd=isToday?todayP:M.pd.filter(p=>p.d===d);
+    const x=xOf(i);
+    if(isToday){ S('rect',{x:x-colW/2+2,y:top-6,width:colW-4,height:rh*rowsN+12,rx:4,fill:'none',stroke:'#3f4651','stroke-dasharray':'3 3'},svg); }
+    const dayW=pd.length?Math.max(...pd.map(p=>p.w)):Math.max(...M.rows.filter(r=>r[0]===d).map(r=>r[1]));
+    // weight change
+    if(prevW!=null && dayW!==prevW && pd.length){ S('text',{x,y:top-10,'font-size':7,'text-anchor':'middle',fill:dayW>prevW?ACC:'#8b93a0'},svg,(dayW>prevW?'↑':'↓')+(dayW%1?dayW.toFixed(1):dayW)); }
+    if(prevW==null && pd.length){ S('text',{x,y:top-10,'font-size':7,'text-anchor':'middle',fill:'#8b93a0'},svg,(dayW%1?dayW.toFixed(1):dayW)+'kg'); }
+    if(pd.length) prevW=dayW;
+    // gap marker
+    if(i>0){ const gapd=(new Date(d)-new Date(days[i-1]))/864e5; if(gapd>21){ const gx=left+colW*i;
+      S('line',{x1:gx,y1:top+rh*rowsN+4,x2:gx,y2:top+rh*rowsN+12,stroke:'#cc8f55'},svg);
+      S('text',{x:gx,y:top+rh*rowsN+34,'font-size':6.5,'text-anchor':'middle',fill:'#cc8f55'},svg,gapd+'d'); } }
+    // dots (one per rung; heaviest weight that day wins)
+    const best={}; pd.forEach(p=>{ if(best[p.ci]==null||p.w>best[p.ci]) best[p.ci]=p.w; });
+    Object.entries(best).forEach(([ci,w])=>{
+      const fill=w===dayW?ACC:GREYS[2];
+      S('circle',{cx:x,cy:yOf(+ci),r:Math.min(5,rh/2-1.5),fill,class:isToday?'todaypulse':''},svg);
+    });
+    const hi=Object.keys(best).length?Math.max(...Object.keys(best).map(Number)):null;
+    if(hi!=null && !isToday) frontier.push([x,yOf(hi)]);
+    if(isToday && hi!=null) frontier.push([x,yOf(hi),'t']);
+    // date
+    const dt=new Date(d+'T00:00:00');
+    S('text',{x,y:top+rh*rowsN+22,'font-size':6.5,'text-anchor':'middle',fill:isToday?'#edf0f3':'#6b7480'},svg,isToday?'TODAY':dt.toLocaleDateString('en-AU',{day:'numeric',month:'short'}).replace(' ',' '));
+  });
+  // frontier step line
+  if(frontier.length){ let dd='M'+frontier[0][0]+' '+frontier[0][1];
+    for(let i=1;i<frontier.length;i++){ const [x,y]=frontier[i]; const mx=(frontier[i-1][0]+x)/2; dd+=' H'+mx+' V'+y+' H'+x; }
+    S('path',{d:dd,fill:'none',stroke:'#edf0f3','stroke-width':1.2,opacity:.85},svg); }
+  // tally at current weight (right)
+  // tally includes today, so it matches what the recap just showed
+  const Mt=exModel(id,true), here=Mt.here; S('text',{x:right+16,y:top-10,'font-size':6.5,'text-anchor':'middle',fill:'#6b7480'},svg,'@'+(here.w%1?here.w.toFixed(1):here.w));
+  L.forEach((_,ci)=>{ const n=Mt.m[ci+'@'+here.w]||0, y=yOf(ci);
+    S('text',{x:right+16,y:y+3,'font-size':8.5,'text-anchor':'middle',fill:n>=T?ACC:(n?'#edf0f3':'#3f4651'),'font-weight':n>=T?700:400},svg,n>=T?n+'✓':n); });
+  const total=M.pd.length, sessions=new Set(M.pd.map(p=>p.d)).size;
+  $('#B-sum').innerHTML='<div><b>'+total+'</b>passes</div><div><b>'+sessions+'</b>days w/ a pass</div><div><b class="a">+'+todayP.length+'</b>today</div>';
+}
+
+function picker(which,draw){
+  const box=document.querySelector('.ex-pick[data-for="'+which+'"]'); let cur='sk';
+  box.innerHTML=Object.entries(EX).map(([id,e])=>'<button data-id="'+id+'" class="'+(id===cur?'on':'')+'">'+e.short+'</button>').join('');
+  box.addEventListener('click',ev=>{ const b=ev.target.closest('button'); if(!b) return; cur=b.dataset.id;
+    box.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); draw(cur); });
+  draw(cur);
+}
+picker('A',drawRoute); picker('B',drawLedger);
+})();
+</script>
+</body>
+</html>

@@ -58,6 +58,37 @@ def _training_day(col):
 # The training day we are in right now.
 TODAY_SQL = "DATE('now', 'localtime', '-{h} hours')".format(h=ROLLOVER_HOUR)
 
+
+def _day_sql(date_iso=None):
+    """Return (sql_expr, params) for the training day to operate on.
+
+    None          -> the current training day (TODAY_SQL), no params.
+    'YYYY-MM-DD'  -> that exact day, as a bound parameter.
+
+    Callers interpolate sql_expr where they currently write TODAY_SQL and
+    PREPEND params to their parameter tuple. This keeps the day boundary a
+    single source of truth: logging/rehydrate/undo/prev-column all default to
+    today and accept an explicit past day through the same door."""
+    if not date_iso:
+        return TODAY_SQL, ()
+    return "DATE(?)", (date_iso,)
+
+
+def _valid_training_day(date_iso):
+    """Normalise an ISO date for use as a training day, or None if unusable.
+
+    Rejects non-dates and any day in the FUTURE (training-day aware, read
+    straight from SQLite so the -ROLLOVER_HOUR shift matches every other
+    comparison). Returns the 'YYYY-MM-DD' string on success."""
+    try:
+        date.fromisoformat(date_iso)
+    except (ValueError, TypeError):
+        return None
+    conn = _gym_db()
+    t = conn.execute("SELECT {today} AS d".format(today=TODAY_SQL)).fetchone()['d']
+    conn.close()
+    return date_iso if date_iso <= t else None
+
 # Allowed tracking_type values. weight_reps = load×reps×sets, reps = bodyweight
 # reps, time = timed hold/duration per set, weight_time = load held for a
 # duration per set (e.g. weighted plank, farmer's carry). cardio = duration +
@@ -465,18 +496,36 @@ def gym_add_function(muscle_group, key, label, sort_order=None):
 # ── Progression ──────────────────────────────────────────────────────────────
 
 def log_gym_set(exercise_id, weight_kg, reps, sets=1, successful=True,
-                session_id=None, duration_s=None, distance_m=None, setting=None):
+                session_id=None, duration_s=None, distance_m=None, setting=None,
+                recorded_at=None):
     """Record one completed set. No auto-suggestion.
     duration_s (seconds) is optional and only meaningful for timed work.
     distance_m (metres) + setting (free-text machine level/resistance) are
-    optional and only meaningful for cardio work."""
+    optional and only meaningful for cardio work.
+
+    recorded_at (TEXT 'YYYY-MM-DD HH:MM:SS') overrides the default
+    CURRENT_TIMESTAMP. This MUST be set for back-dated logging: every
+    recorded_at-grouped view (undo_last_today, get_previous_session_sets, the
+    week board, scheme accumulation) buckets by _training_day('recorded_at'),
+    so a set left on the UTC-now default would land on today even though its
+    session is back-dated. Stamp it at noon of the target day so the
+    -ROLLOVER_HOUR shift cannot misfile it. None keeps the live-path default."""
     conn = _gym_db()
-    cur = conn.execute(
-        "INSERT INTO gym_progression (exercise_id, weight_kg, sets, reps, successful, "
-        "session_id, duration_s, distance_m, setting) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (exercise_id, weight_kg, sets, reps, 1 if successful else 0, session_id,
-         duration_s, distance_m, setting)
-    )
+    if recorded_at:
+        cur = conn.execute(
+            "INSERT INTO gym_progression (exercise_id, weight_kg, sets, reps, successful, "
+            "session_id, duration_s, distance_m, setting, recorded_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (exercise_id, weight_kg, sets, reps, 1 if successful else 0, session_id,
+             duration_s, distance_m, setting, recorded_at)
+        )
+    else:
+        cur = conn.execute(
+            "INSERT INTO gym_progression (exercise_id, weight_kg, sets, reps, successful, "
+            "session_id, duration_s, distance_m, setting) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (exercise_id, weight_kg, sets, reps, 1 if successful else 0, session_id,
+             duration_s, distance_m, setting)
+        )
     conn.commit()
     new_id = cur.lastrowid
     conn.close()
@@ -509,25 +558,29 @@ def get_today_tally(exercise_id):
     return {'sets': row['sets'], 'reps': row['reps']}
 
 
-def undo_last_today(exercise_id, session_id=None):
-    """Delete the most recently logged set for this exercise within the current
-    training day. Used to walk back an accidental tap. Returns True if a row
-    was deleted.
+def undo_last_today(exercise_id, session_id=None, day=None):
+    """Delete the most recently logged set for this exercise within a training
+    day. Used to walk back an accidental tap. Returns True if a row was deleted.
 
     When session_id is given the undo is scoped to that session, so undo can
     never reach back into an earlier session that happens to share the day.
+    `day` ('YYYY-MM-DD') scopes the undo to a PAST training day; None (default)
+    is today. Combined with session_id scoping, an undo on a back-dated day can
+    never reach today's session.
     """
+    day_rhs, day_params = _day_sql(day)
     conn = _gym_db()
     params = [exercise_id]
     scope = ""
     if session_id is not None:
         scope = "AND session_id = ? "
         params.append(session_id)
+    params = params + list(day_params)
     row = conn.execute(
         "SELECT id FROM gym_progression "
         "WHERE exercise_id = ? {scope}AND {day} = {today} "
         "ORDER BY id DESC LIMIT 1".format(
-            scope=scope, day=_training_day('recorded_at'), today=TODAY_SQL),
+            scope=scope, day=_training_day('recorded_at'), today=day_rhs),
         params
     ).fetchone()
     if not row:
@@ -622,21 +675,28 @@ def start_gym_session():
     return session_id
 
 
-def get_or_create_today_gym_session():
-    """Find today's still-open gym session, or start a new one. Lets
-    one-touch logging (e.g. Muay Thai on the Train page) drop straight into
+def get_or_create_today_gym_session(day=None):
+    """Find the still-open gym session for a training day, or start a new one.
+    Lets one-touch logging (e.g. Muay Thai on the Train page) drop straight into
     the existing session/progression backend without a separate
-    Start/End Session step."""
+    Start/End Session step.
+
+    `day` ('YYYY-MM-DD') targets a PAST training day for back-dated logging;
+    None (the default) is today, so the live "log right now" path is unchanged.
+    A back-dated session is stamped performed_at at noon of that day so the
+    -ROLLOVER_HOUR shift can never misfile it into an adjacent training day."""
+    day_rhs, day_params = _day_sql(day)
     conn = _gym_db()
     row = conn.execute(
         "SELECT id FROM gym_sessions "
         "WHERE finished = 0 AND {day} = {today} "
         "ORDER BY id DESC LIMIT 1".format(
-            day=_training_day('performed_at'), today=TODAY_SQL)
+            day=_training_day('performed_at'), today=day_rhs),
+        day_params
     ).fetchone()
     if not row:
-        # Already finished today, then logged again: re-open that session rather
-        # than starting a second one. get_live_session_state() orders by
+        # Already finished that day, then logged again: re-open that session
+        # rather than starting a second one. get_live_session_state() orders by
         # `finished ASC`, so a new row would become "the" live session and every
         # set logged before Finish would vanish from the Train page — nothing
         # lost in the database, but on a phone mid-gym it reads as the app
@@ -644,7 +704,8 @@ def get_or_create_today_gym_session():
         row = conn.execute(
             "SELECT id FROM gym_sessions WHERE {day} = {today} "
             "ORDER BY id DESC LIMIT 1".format(
-                day=_training_day('performed_at'), today=TODAY_SQL)
+                day=_training_day('performed_at'), today=day_rhs),
+            day_params
         ).fetchone()
         if row:
             conn.execute("UPDATE gym_sessions SET finished = 0, ended_at = NULL WHERE id = ?",
@@ -652,6 +713,13 @@ def get_or_create_today_gym_session():
             conn.commit()
     if row:
         session_id = row['id']
+    elif day:
+        # Noon-stamp the back-dated session (see docstring).
+        cur = conn.execute(
+            "INSERT INTO gym_sessions (performed_at, finished) VALUES (?, 0)",
+            (day + " 12:00:00",))
+        conn.commit()
+        session_id = cur.lastrowid
     else:
         cur = conn.execute("INSERT INTO gym_sessions (performed_at, finished) VALUES (CURRENT_TIMESTAMP, 0)")
         conn.commit()
@@ -931,26 +999,30 @@ def get_e1rm_bests(max_reps=12):
     return {r['exercise_id']: r['best'] for r in rows if r['best']}
 
 
-def get_previous_session_sets(exercise_id, limit=12):
+def get_previous_session_sets(exercise_id, limit=12, before=None):
     """The ordered sets of the most recent PRIOR outing for one exercise.
 
     Returns {'day': 'YYYY-MM-DD'|None, 'days_since': int|None, 'sets': [...]}.
 
-    "Prior" is the newest training day strictly before today on which this
-    exercise was logged. Grouping by training day rather than session_id is
-    deliberate: 33 legacy rows imported by import_history.py carry
-    session_id IS NULL, and those are exactly the oldest history worth showing.
+    "Prior" is the newest training day strictly before the reference day on
+    which this exercise was logged. The reference day is today by default, or
+    `before` ('YYYY-MM-DD') when logging for a PAST day — so the PREV column
+    lines up with the outing before the day being logged, not before today.
+    Grouping by training day rather than session_id is deliberate: 33 legacy
+    rows imported by import_history.py carry session_id IS NULL, and those are
+    exactly the oldest history worth showing.
 
     Feeds the PREV column of the set table, so set 3 is compared against set 3
     instead of against an undifferentiated blob from last time.
     """
+    ref_rhs, ref_params = _day_sql(before)
     conn = _gym_db()
     day_expr = _training_day('recorded_at')
     drow = conn.execute(
         "SELECT MAX({day}) AS d FROM gym_progression "
         "WHERE exercise_id = ? AND {day} < {today}".format(
-            day=day_expr, today=TODAY_SQL),
-        (exercise_id,)
+            day=day_expr, today=ref_rhs),
+        (exercise_id, *ref_params)
     ).fetchone()
     prev_day = drow['d'] if drow else None
     if not prev_day:
@@ -964,7 +1036,7 @@ def get_previous_session_sets(exercise_id, limit=12):
         "ORDER BY recorded_at ASC, id ASC".format(day=day_expr),
         (exercise_id, prev_day)
     ).fetchall()
-    trow = conn.execute("SELECT {today} AS d".format(today=TODAY_SQL)).fetchone()
+    trow = conn.execute("SELECT {today} AS d".format(today=ref_rhs), ref_params).fetchone()
     conn.close()
 
     out = []
@@ -1070,21 +1142,27 @@ def _checklist_for_muscle(mg, logged_functions):
     return checklist
 
 
-def get_live_session_state():
-    """Return today's live-session state for rehydrate.
+def get_live_session_state(day=None):
+    """Return a day's live-session state for rehydrate.
 
-    Applies the lazy roll-over stamp first, then reads TODAY's open session and
-    every set logged against it. Muscle groups are derived; the function
-    checklist per muscle is derived from which functions have logged sets.
+    Applies the lazy roll-over stamp first, then reads the open session for the
+    training day and every set logged against it. Muscle groups are derived; the
+    function checklist per muscle is derived from which functions have logged
+    sets.
+
+    `day` ('YYYY-MM-DD') rehydrates a PAST training day for back-dated logging;
+    None (the default) is today, so the live path is unchanged.
     """
     apply_session_rollover()
 
+    day_rhs, day_params = _day_sql(day)
     conn = _gym_db()
     srow = conn.execute(
         "SELECT id FROM gym_sessions "
         "WHERE {day} = {today} "
         "ORDER BY finished ASC, id DESC LIMIT 1".format(
-            day=_training_day('performed_at'), today=TODAY_SQL)
+            day=_training_day('performed_at'), today=day_rhs),
+        day_params
     ).fetchone()
     if not srow:
         conn.close()
@@ -1155,3 +1233,169 @@ def get_live_session_state():
         'muscles': muscles,
         'current_exercise_id': current_exercise_id,
     }
+
+
+# ── Last-session card (Today screen) ─────────────────────────────────────────
+# The Today "Last session" card historically read the LEGACY sessions/
+# session_lifts/exercises tables via _shared_home_context(). Live gym logging
+# moved to gym_sessions/gym_progression/gym_exercises in the Train rehaul, so the
+# legacy read showed stale data (the newest legacy gym row for the scheme-engine
+# profile is months old). get_last_gym_session() reads the MODERN tables, and
+# get_last_session_multisource() picks the most recent across every live source.
+#
+# Both return the dict shape templates/_last_session.html expects:
+#   {id, type, date, exercise_names, total_sets, total_volume,
+#    distance_m, cardio_name, cardio_dur, cardio_dist, detail_href}
+# `date` is an ISO 'YYYY-MM-DD' string (the fmt_date filter's input), derived
+# through _training_day so the UTC/local two-calendar boundary is respected.
+# `detail_href` lets the card target the modern view: gym sessions have no
+# per-session legacy detail page, so they link to /train (B1b).
+
+
+def get_last_gym_session():
+    """Most recent MODERN gym session (gym_sessions) as a last-session card dict.
+
+    Returns None when there is no gym session. Day ordering goes through
+    _training_day('performed_at') so a pre-ROLLOVER_HOUR morning session is not
+    mis-dated to the previous UTC day. total_volume sums reps*weight_kg over the
+    session's gym_progression rows; a purely cardio-tracked session reports
+    type='cardio' with its first exercise name + duration/distance instead.
+    """
+    conn = _gym_db()
+    day_expr = _training_day('performed_at')
+    srow = conn.execute(
+        "SELECT id, performed_at, {day} AS training_day "
+        "FROM gym_sessions ORDER BY {day} DESC, id DESC LIMIT 1".format(day=day_expr)
+    ).fetchone()
+    if not srow:
+        conn.close()
+        return None
+    session_id = srow['id']
+    prog = conn.execute(
+        "SELECT exercise_id, weight_kg, sets, reps, duration_s, distance_m "
+        "FROM gym_progression WHERE session_id = ? ORDER BY recorded_at ASC, id ASC",
+        (session_id,)
+    ).fetchall()
+    conn.close()
+
+    meta = _exercise_meta_map()
+
+    # Ordered, de-duplicated exercise names (first-seen order).
+    names = []
+    seen = set()
+    all_cardio = bool(prog)
+    for r in prog:
+        m = meta.get(r['exercise_id'], {})
+        nm = m.get('name') or ('#%s' % r['exercise_id'])
+        if nm not in seen:
+            seen.add(nm)
+            names.append(nm)
+        if m.get('tracking_type') != 'cardio':
+            all_cardio = False
+
+    total_sets = sum((r['sets'] or 1) for r in prog)
+    total_volume = sum(((r['reps'] or 0) * (r['weight_kg'] or 0)) for r in prog)
+    cardio_dur = sum((r['duration_s'] or 0) for r in prog)
+    cardio_dist = sum((r['distance_m'] or 0) for r in prog)
+
+    card = {
+        'id': session_id,
+        'date': srow['training_day'],
+        'exercise_names': ', '.join(names),
+        'total_sets': total_sets,
+        'total_volume': total_volume,
+        'distance_m': 0,
+        'cardio_name': names[0] if names else None,
+        'cardio_dur': cardio_dur,
+        'cardio_dist': cardio_dist,
+        # Modern gym sessions have no legacy per-session detail page; the card
+        # points at the live Train view (B1b).
+        'detail_href': '/train',
+    }
+    # A session whose every exercise is cardio-tracked reads better as a cardio
+    # card (duration/distance) than as a 0-volume gym card.
+    card['type'] = 'cardio' if all_cardio else 'gym'
+    return card
+
+
+def get_last_session_multisource(pid, legacy_fallback=None):
+    """Pick the most recent session across every live source for this profile.
+
+    The scheme engine's gym data lives in the modern gym_* tables (which carry no
+    profile_id and so serve the single scheme-engine profile); swim/cardio/pilates
+    still live in their own stores. This gathers the newest candidate from each,
+    normalises to the last-session card dict, and returns the one with the latest
+    training day. `legacy_fallback` is the already-built legacy last_session row
+    (or None) — used for swim/cardio that have not been migrated, and as the
+    answer when there is no modern gym session at all.
+
+    Comparison is by the card's ISO `date` string (lexicographic == chronological
+    for YYYY-MM-DD), with the modern gym session winning ties on the same day
+    since finishing a gym session is the most recent explicit act.
+    """
+    candidates = []
+
+    gym = get_last_gym_session()
+    if gym and gym.get('date'):
+        candidates.append((gym['date'], 0, gym))
+
+    if legacy_fallback is not None:
+        lf = dict(legacy_fallback)
+        lf.setdefault('detail_href', '/session/%s' % lf.get('id'))
+        d = lf.get('date')
+        if d:
+            # Legacy rows sort BEHIND a same-day modern gym session (order key 1).
+            candidates.append((d, 1, lf))
+
+    if not candidates:
+        return None
+    # Latest date first; within a day the lower order-key (modern gym) wins.
+    candidates.sort(key=lambda c: (c[0], -c[1]), reverse=True)
+    return candidates[0][2]
+
+
+# ── Week board activity (Today screen "This week") ───────────────────────────
+# The week board classifies each day by what was trained, to pick a per-day
+# icon. For the scheme engine, gym days come from the MODERN gym_sessions/
+# gym_progression (the legacy sessions table is stale, so the board showed rest
+# tiles for real training days). Muay Thai is not a session type — it is a
+# function ('muay_thai') under the cardio muscle group (see
+# docs/PLAN-muay-thai-under-cardio.md), so a day is tagged 'muay_thai' when any
+# set logged that day is a muay_thai drill, and 'gym' when any non-muay-thai set
+# was logged. A day can carry both. Day bucketing goes through
+# _training_day('recorded_at') so morning sets land on the right day in UTC+n.
+
+
+def get_week_activity_days(monday_iso, sunday_iso):
+    """{ 'YYYY-MM-DD': [types] } for the modern gym week.
+
+    types is a subset of ('gym', 'muay_thai') per day, 'gym' first when both are
+    present (strength is the day's primary read; muay_thai shows as a secondary
+    marker). Days with no modern gym activity are simply absent from the map —
+    the caller merges these with any legacy swim/pilates activity it already has.
+    """
+    conn = _gym_db()
+    day_expr = _training_day('gp.recorded_at')
+    rows = conn.execute(
+        "SELECT {day} AS day, "
+        "       SUM(CASE WHEN ge.function = 'muay_thai' THEN 1 ELSE 0 END) AS mt, "
+        "       SUM(CASE WHEN ge.function IS NULL OR ge.function != 'muay_thai' "
+        "                THEN 1 ELSE 0 END) AS other "
+        "FROM gym_progression gp "
+        "JOIN gym_exercises ge ON ge.id = gp.exercise_id "
+        "WHERE {day} BETWEEN ? AND ? "
+        "GROUP BY {day}".format(day=day_expr),
+        (monday_iso, sunday_iso)
+    ).fetchall()
+    conn.close()
+
+    out = {}
+    for r in rows:
+        acts = []
+        if (r['other'] or 0) > 0:
+            acts.append('gym')
+        if (r['mt'] or 0) > 0:
+            acts.append('muay_thai')
+        if acts:
+            out[r['day']] = acts
+    return out

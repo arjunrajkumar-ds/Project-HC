@@ -47,9 +47,19 @@
 .wb-tile.swim    { background: var(--blue); }
 .wb-tile.pilates { background: var(--purple); }
 .wb-tile.cardio  { background: var(--waiting); }
+.wb-tile.muay_thai { background: var(--red, #d1495b); }
+.wb-tile { position: relative; }
+.wb-tile-badge {
+    position: absolute; right: -3px; bottom: -3px;
+    width: 17px; height: 17px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    border: 1.5px solid var(--panel-alt); box-sizing: border-box;
+}
+.wb-tile-badge.muay_thai { background: var(--red, #d1495b); }
+.wb-tile-badge .msym { font-size: 10px; color: #fff; }
 .wb-tile.active  { background: var(--accent); }
 .wb-tile.active .msym, .wb-tile.gym .msym, .wb-tile.swim .msym,
-.wb-tile.pilates .msym, .wb-tile.cardio .msym { color: #fff; }
+.wb-tile.pilates .msym, .wb-tile.cardio .msym, .wb-tile.muay_thai .msym { color: #fff; }
 .wb-tile.today { border: 2px solid var(--text-strong); }
 .wb-tile.empty { background: var(--panel-soft); border: 1px dashed var(--border); }
 .wb-tile.empty.today { border: 2px solid var(--accent); }
@@ -61,6 +71,7 @@
 .wb-legend-dot.gym { background: var(--green); }
 .wb-legend-dot.swim { background: var(--blue); }
 .wb-legend-dot.pilates { background: var(--purple); }
+.wb-legend-dot.muay_thai { background: var(--red, #d1495b); }
 
 .wb-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
 .wb-stat {
@@ -78,7 +89,7 @@
 .wb-stat-sub { font-family: var(--font-mono); font-size: 9px; color: var(--dimmer); margin-top: 4px; }
 </style>
 
-{%- set icons = {'gym':'fitness_center','swim':'pool','pilates':'self_improvement','cardio':'directions_run'} -%}
+{%- set icons = {'gym':'exercise','muay_thai':'sports_mma','swim':'pool','pilates':'self_improvement','cardio':'directions_run'} -%}
 {%- set ns = namespace(any_typed=false) -%}
 {%- for d in week_days -%}{%- if d.activities and d.activities|length > 0 -%}{%- set ns.any_typed = true -%}{%- endif -%}{%- endfor -%}
 
@@ -95,12 +106,13 @@
         <div class="wb-grid">
             {% for d in week_days %}
             {%- set acts = d.activities or [] -%}
-            {%- set primary = ('gym' if 'gym' in acts else ('swim' if 'swim' in acts else ('pilates' if 'pilates' in acts else ('cardio' if 'cardio' in acts else None)))) -%}
+            {%- set primary = ('gym' if 'gym' in acts else ('muay_thai' if 'muay_thai' in acts else ('swim' if 'swim' in acts else ('pilates' if 'pilates' in acts else ('cardio' if 'cardio' in acts else None))))) -%}
+            {%- set secondary = ('muay_thai' if ('muay_thai' in acts and primary != 'muay_thai') else None) -%}
             <div class="wb-day">
                 <span class="wb-day-name{% if d.is_today %} today{% endif %}">{{ d.day_short[:1] }}</span>
                 <span class="wb-day-num{% if not d.is_today and not d.active and not primary %} muted{% endif %}">{{ d.day_num }}</span>
                 {% if primary %}
-                    <div class="wb-tile {{ primary }}{% if d.is_today %} today{% endif %}"><span class="msym fill">{{ icons[primary] }}</span></div>
+                    <div class="wb-tile {{ primary }}{% if d.is_today %} today{% endif %}"><span class="msym fill">{{ icons[primary] }}</span>{% if secondary %}<span class="wb-tile-badge {{ secondary }}"><span class="msym fill">{{ icons[secondary] }}</span></span>{% endif %}</div>
                 {% elif d.active %}
                     <div class="wb-tile active{% if d.is_today %} today{% endif %}"><span class="msym fill">fitness_center</span></div>
                 {% else %}
@@ -114,6 +126,7 @@
             <span class="wb-legend-item"><span class="wb-legend-dot gym"></span>Gym</span>
             <span class="wb-legend-item"><span class="wb-legend-dot swim"></span>Swim</span>
             <span class="wb-legend-item"><span class="wb-legend-dot pilates"></span>Pilates</span>
+            <span class="wb-legend-item"><span class="wb-legend-dot muay_thai"></span>Muay Thai</span>
         </div>
         {% endif %}
     </div>

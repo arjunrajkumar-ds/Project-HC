@@ -11,7 +11,7 @@ from .database import init_db, get_db, get_session_cardio, get_cardio_choices, l
 from .swim_routes import bp as swim_bp
 from .pilates_routes import bp as pilates_bp
 from .database import TIER_BOUNDS
-from .gym_bank import get_weight_rep_day_groups, get_gym_bank, get_gym_bank_grouped, get_gym_exercise, gym_add_exercise, gym_update_exercise, gym_set_enabled, gym_archive_exercise, gym_unarchive_exercise, gym_delete_exercise, gym_reorder_function, get_gym_functions, gym_add_function, log_gym_set, get_today_tally, undo_last_today, get_or_create_today_gym_session, get_exercise_prefill, get_live_session_state, apply_session_rollover, get_exercise_recency, get_e1rm_bests, get_previous_session_sets, delete_gym_set, end_gym_session, TRACKING_TYPES, TRACKING_FIELDS, PROGRESSION_FIELD_LABELS, TIER_LABELS
+from .gym_bank import get_last_gym_session, get_last_session_multisource, get_week_activity_days, get_weight_rep_day_groups, get_gym_bank, get_gym_bank_grouped, get_gym_exercise, gym_add_exercise, gym_update_exercise, gym_set_enabled, gym_archive_exercise, gym_unarchive_exercise, gym_delete_exercise, gym_reorder_function, get_gym_functions, gym_add_function, log_gym_set, get_today_tally, undo_last_today, get_or_create_today_gym_session, get_exercise_prefill, get_live_session_state, apply_session_rollover, get_exercise_recency, get_e1rm_bests, get_previous_session_sets, delete_gym_set, end_gym_session, _valid_training_day, TRACKING_TYPES, TRACKING_FIELDS, PROGRESSION_FIELD_LABELS, TIER_LABELS
 app = Flask(__name__,
             template_folder=_os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'templates'),
             static_folder=_os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'static'))
@@ -689,6 +689,19 @@ def _shared_home_context(pid, today, actual_today):
         ORDER BY s.date DESC, s.id DESC LIMIT 1
     ''', (pid,)).fetchone()
 
+    # The legacy query above still serves ladder-engine profiles and remains the
+    # fallback for swim/cardio (not yet migrated off the legacy tables). The
+    # scheme engine's gym logging lives in the modern gym_* tables, so for it we
+    # pick the most recent session across every live source (modern gym +
+    # legacy swim/cardio). See docs/PLAN-last-session-rewire.md.
+    _legacy_last = dict(last_session) if last_session is not None else None
+    if _legacy_last is not None:
+        _legacy_last.setdefault('detail_href', '/session/%s' % _legacy_last.get('id'))
+    if get_workout_engine(pid) == 'scheme':
+        last_session = get_last_session_multisource(pid, legacy_fallback=_legacy_last)
+    else:
+        last_session = _legacy_last
+
     today_weight = get_body_weight(today_iso, pid)
     weight_history = get_body_weight_history(pid, days=30)
     macro_goals = get_macro_goals(pid)
@@ -715,6 +728,19 @@ def _shared_home_context(pid, today, actual_today):
         week_activity.setdefault(r['date'], [])
         if r['type'] not in week_activity[r['date']]:
             week_activity[r['date']].append(r['type'])
+
+    # Scheme engine: gym days live in the modern gym_* tables, and muay-thai days
+    # are detectable there (a 'muay_thai'-function set). Merge those in so the
+    # week board shows a barbell for gym and a fist for muay thai, instead of a
+    # rest tile. Legacy swim/pilates/cardio rows above are kept. Ladder profiles
+    # read legacy only. See docs/PLAN-last-session-rewire.md.
+    if get_workout_engine(pid) == 'scheme':
+        modern_days = get_week_activity_days(monday.isoformat(), sunday.isoformat())
+        for _day, _acts in modern_days.items():
+            bucket = week_activity.setdefault(_day, [])
+            for _a in _acts:
+                if _a not in bucket:
+                    bucket.append(_a)
     week_days = []
     for i in range(7):
         day = monday + timedelta(days=i)
@@ -1662,7 +1688,8 @@ def train():
                 'coverage': _GYM_COVERAGE_ORDER}
     return render_template('train.html', bank=bank, live=live, fajin=fajin,
                            taxonomy=taxonomy, coverage=coverage,
-                           total_enabled=total_enabled)
+                           total_enabled=total_enabled,
+                           actual_today=date_type.today().isoformat())
 
 
 @app.route('/api/gym/exercise/<int:exercise_id>', methods=['POST'])
@@ -1880,14 +1907,25 @@ def api_gym_log_set():
     if tt in ('time', 'weight_time', 'cardio') and not duration_s:
         return {'ok': False, 'error': 'duration required'}, 400
 
+    # Optional back-dated logging: a past training day from the Train date
+    # header. Absent/empty -> today (live path unchanged). Future/garbage -> 400.
+    raw_date = (data.get('date') or '').strip()
+    day = _valid_training_day(raw_date) if raw_date else None
+    if raw_date and day is None:
+        return {'ok': False, 'error': 'Invalid or future date'}, 400
+
     try:
-        session_id = get_or_create_today_gym_session()
+        session_id = get_or_create_today_gym_session(day)
+        # Back-dated sets must carry a recorded_at inside the target training
+        # day; otherwise every recorded_at-grouped view (undo, PREV column, week
+        # board) files them under today. Noon stamp mirrors the session row.
+        recorded_at = (day + " 12:00:00") if day else None
         log_id = log_gym_set(
             exercise_id, weight_kg, reps, sets=1, successful=successful,
             session_id=session_id, duration_s=duration_s,
-            distance_m=distance_m, setting=setting,
+            distance_m=distance_m, setting=setting, recorded_at=recorded_at,
         )
-        live = get_live_session_state()
+        live = get_live_session_state(day)
     except Exception as e:
         return {'ok': False, 'error': f'Could not save the set: {e}'}, 500
     return {'ok': True, 'id': log_id,
@@ -1902,21 +1940,31 @@ def api_gym_log_set_undo():
     exercise_id = _safe_int(data.get('exercise_id'), 0)
     if not exercise_id:
         return {'ok': False, 'error': 'Missing exercise_id'}, 400
-    # Scope the undo to today's live session so it can never reach back into an
-    # earlier session that happens to fall on the same day.
-    live = get_live_session_state()
-    removed = undo_last_today(exercise_id, session_id=live.get('session_id'))
+    raw_date = (data.get('date') or '').strip()
+    day = _valid_training_day(raw_date) if raw_date else None
+    if raw_date and day is None:
+        return {'ok': False, 'error': 'Invalid or future date'}, 400
+    # Scope the undo to the day's live session so it can never reach back into an
+    # earlier session that happens to fall on the same day — and, for a
+    # back-dated day, can never reach today's session.
+    live = get_live_session_state(day)
+    removed = undo_last_today(exercise_id, session_id=live.get('session_id'), day=day)
     if removed:
-        live = get_live_session_state()
+        live = get_live_session_state(day)
     return {'ok': True, 'removed': removed,
             'workout_so_far': live, 'checklist': live['muscles']}
 
 
 @app.route('/api/gym/live-session')
 def api_gym_live_session():
-    """Today's live-session state for rehydrate on load/refresh (§4.5).
-    Applies the ~4 AM lazy roll-over stamp (inside get_live_session_state)."""
-    return get_live_session_state()
+    """Live-session state for rehydrate on load/refresh (§4.5).
+    Applies the ~4 AM lazy roll-over stamp (inside get_live_session_state).
+    Optional ?date=YYYY-MM-DD rehydrates a past training day (Train date header);
+    absent -> today. A future/garbage date returns the empty-today state rather
+    than erroring, so a stale tab can never wedge the rehydrate."""
+    raw_date = request.args.get('date', '').strip()
+    day = _valid_training_day(raw_date) if raw_date else None
+    return get_live_session_state(day)
 
 
 @app.route('/api/gym/exercise/<int:exercise_id>/prefill')
@@ -1928,8 +1976,12 @@ def api_gym_exercise_prefill(exercise_id):
         return {'ok': False, 'error': 'Exercise not found'}, 404
     pf = get_exercise_prefill(exercise_id)
     # The PREV column of the set table. Fetched per exercise on open rather
-    # than for all ~50 up front, so page load is unchanged.
-    prev = get_previous_session_sets(exercise_id)
+    # than for all ~50 up front, so page load is unchanged. ?date= aligns the
+    # PREV outing with the day being logged (the newest outing strictly before
+    # it), not before today.
+    raw_date = request.args.get('date', '').strip()
+    before = _valid_training_day(raw_date) if raw_date else None
+    prev = get_previous_session_sets(exercise_id, before=before)
     return {'ok': True,
             'tracking_type': ex.get('tracking_type', 'weight_reps'),
             'name': ex.get('name'),
@@ -2052,6 +2104,12 @@ def api_gym_log_cardio():
     if not exercise_name:
         return {'ok': False, 'error': 'No exercise name'}, 400
 
+    # Optional back-dated logging (legacy session_cardio path). Absent -> today.
+    raw_date = (data.get('date') or '').strip()
+    day = _valid_training_day(raw_date) if raw_date else None
+    if raw_date and day is None:
+        return {'ok': False, 'error': 'Invalid or future date'}, 400
+
     pid = _profile_id()
     db = get_db()
 
@@ -2075,7 +2133,7 @@ def api_gym_log_cardio():
     db.close()
 
     duration_s = duration_min * 60 if duration_min else None
-    log_cardio_session(pid, date_type.today().isoformat(), exercise_id,
+    log_cardio_session(pid, day or date_type.today().isoformat(), exercise_id,
                        distance_m=distance_m if distance_m else None,
                        duration_s=duration_s)
     return {'ok': True}

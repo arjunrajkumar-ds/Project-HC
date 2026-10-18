@@ -40,7 +40,7 @@
     {%- set st = last_session.type | default('gym', true) -%}
     {%- set _icons = {'swim':'pool','cardio':'directions_run','pilates':'self_improvement','gym':'fitness_center'} -%}
     {%- set _titles = {'swim':'Swim','cardio':(last_session.cardio_name | default('Cardio', true)),'pilates':'Reformer Pilates','gym':'Gym'} -%}
-    <a href="/session/{{ last_session.id }}" class="last-session-card">
+    <a href="{{ last_session.detail_href | default('/session/' ~ last_session.id, true) }}" class="last-session-card">
         <div class="ls-icon {{ st if st in _icons else 'gym' }}">
             <span class="msym fill">{{ _icons[st] if st in _icons else 'fitness_center' }}</span>
         </div>

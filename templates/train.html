@@ -298,6 +298,33 @@
                font-size:11px; letter-spacing:.1em; text-transform:uppercase; padding:9px 11px;
                min-height:38px; border-radius:var(--radius-sm); cursor:pointer; flex:none; }
 .hidden { display:none !important; }
+
+/* ── Date header (back-dated logging) ───────────────────────────────────────
+   Prev/next around the selected training day, mirroring the home date-nav.
+   Pandora tokens only. Sits between the title row and the coverage strip. */
+.date-head { display:flex; align-items:center; gap:8px; padding:2px 0 11px; }
+.dh-nav { width:38px; height:38px; flex:none; border:1px solid var(--border);
+          background:var(--panel); color:var(--muted); border-radius:var(--radius-md);
+          font-family:var(--font-mono); font-size:17px; line-height:1; cursor:pointer;
+          -webkit-tap-highlight-color:transparent; }
+.dh-nav:active { background:var(--border-bright); }
+.dh-nav:disabled { opacity:.3; cursor:default; }
+.dh-label { flex:1; text-align:center; font-family:var(--font-mono); font-size:12px;
+            letter-spacing:.06em; text-transform:uppercase; color:var(--text-strong);
+            font-variant-numeric:tabular-nums; }
+.dh-label.past { color:var(--accent); }
+.dh-today { flex:none; border:1px solid var(--accent); background:var(--accent-soft);
+            color:var(--accent); border-radius:var(--radius-pill); font-family:var(--font-mono);
+            font-size:9px; letter-spacing:.1em; text-transform:uppercase; padding:8px 11px;
+            min-height:38px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+
+/* The one guardrail against logging to the wrong day: a persistent strip while
+   a past day is selected, so a back-dated set is never entered by accident. */
+.backdate-banner { display:flex; align-items:center; gap:7px; margin-bottom:11px;
+                   padding:9px 11px; border-radius:var(--radius-md);
+                   border:1px solid rgba(212,138,58,.45); background:rgba(212,138,58,.09);
+                   color:#d48a3a; font-family:var(--font-mono); font-size:10px;
+                   letter-spacing:.05em; }
 </style>
 {% endblock %}
 
@@ -313,6 +340,11 @@
     <button type="button" class="tr-ic" id="summary-cta" onclick="openSummary()"
             aria-label="Session summary">&#8721;</button>
   </div>
+
+  <!-- Date header: log for a previous training day. Hidden-cost on today
+       (renders "Today", › disabled); stepping back reveals the banner below. -->
+  <div class="date-head" id="date-head"></div>
+  <div class="backdate-banner hidden" id="backdate-banner"></div>
 
   <!-- Coverage strip: all six lifting groups, standing goals first -->
   <div id="cov-root"></div>
@@ -363,7 +395,8 @@
 const BANK     = {{ bank | tojson }};      // muscle -> function -> exercises (tier != 4)
 const COVERAGE = {{ coverage | tojson }};  // the six lifting groups, ordered, with staleness
 const FAJIN    = {{ fajin | tojson }};     // tier-4, reached contextually or from the pill
-let   LIVE     = {{ live | tojson }};      // today's rehydrated session
+let   LIVE     = {{ live | tojson }};      // the day's rehydrated session
+const ACTUAL_TODAY = {{ actual_today | tojson }}; // ISO 'YYYY-MM-DD' real today, for clamping
 
 const MG_COLORS = {chest:'#e07a7a',shoulders:'#d4a574',back:'#6b93c9',legs:'#7fb069',
                    core:'#a785c2',arms:'#6bb0a8',cardio:'#c97064',stability:'#8a8a8a',muay_thai:'#d1495b'};
@@ -388,9 +421,73 @@ let PICK_SCOPE = null; // 'cardio' narrows the picker to cardio only
 let PICK_Q = '';
 let PICK_BROWSE = null;
 let LAST_CARD_ID = null, LAST_CARD_PRIMED = false;   // see renderCard()'s samePass
+// Back-dating: the training day sets are logged against. null == today,
+// so every existing call path is byte-for-byte unchanged until the user
+// steps the date header back. Clamped to <= ACTUAL_TODAY (never the future).
+let LOG_DATE = null;
 
 function curEx(){ return CURRENT ? EX_BY_ID[CURRENT] : null; }
 function isCardio(){ const e = curEx(); return !!e && e.muscle_group === 'cardio'; }
+
+// ── Back-date helpers ─────────────────────────────────────────────────────
+// LOG_DATE null means "today": these all no-op so the live path is unchanged.
+function isBackdated(){ return !!LOG_DATE && LOG_DATE !== ACTUAL_TODAY; }
+// Append ?date= to a GET only when back-dating.
+function withDate(url){
+    if(!isBackdated()) return url;
+    return url + (url.indexOf('?')<0 ? '?' : '&') + 'date=' + encodeURIComponent(LOG_DATE);
+}
+// Add date to a POST body only when back-dating (mutates + returns it).
+function dateBody(body){ if(isBackdated()) body.date = LOG_DATE; return body; }
+
+// Date math on bare 'YYYY-MM-DD' strings (no TZ drift — treat as civil dates).
+function dayShift(iso, delta){
+    const [y,m,d] = iso.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m-1, d));
+    dt.setUTCDate(dt.getUTCDate()+delta);
+    return dt.toISOString().slice(0,10);
+}
+function curDayIso(){ return LOG_DATE || ACTUAL_TODAY; }
+function fmtDayLabel(iso){
+    if(iso === ACTUAL_TODAY) return 'Today';
+    const [y,m,d] = iso.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m-1, d));
+    const dow = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getUTCDay()];
+    const mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1];
+    return dow + ' ' + d + ' ' + mon;
+}
+// Switch the day, clamp to never-future, then rehydrate that day's session and
+// refresh the open exercise's PREV column.
+async function setDay(iso){
+    if(iso > ACTUAL_TODAY) iso = ACTUAL_TODAY;      // never navigate into the future
+    LOG_DATE = (iso === ACTUAL_TODAY) ? null : iso;
+    clearRest();                                     // a past day has no live rest timer
+    renderDateHeader();
+    await resyncLive();                              // reload sets for the chosen day
+    if(CURRENT) openExercise(CURRENT);               // re-pull PREV for the chosen day
+}
+function stepDay(delta){ setDay(dayShift(curDayIso(), delta)); }
+function resetToday(){ setDay(ACTUAL_TODAY); }
+
+// Date header (prev / label / next) + the past-day banner. Rebuilt on change.
+function renderDateHeader(){
+    const iso = curDayIso();
+    const atToday = (iso === ACTUAL_TODAY);
+    const host = document.getElementById('date-head');
+    if(host){
+        host.innerHTML =
+            '<button type="button" class="dh-nav" aria-label="Previous day" onclick="stepDay(-1)">&#8249;</button>'
+          + '<span class="dh-label' + (atToday?'':' past') + '">' + esc(fmtDayLabel(iso)) + '</span>'
+          + '<button type="button" class="dh-nav" aria-label="Next day"' + (atToday?' disabled':'')
+          + ' onclick="stepDay(1)">&#8250;</button>'
+          + (atToday ? '' : '<button type="button" class="dh-today" onclick="resetToday()">Today</button>');
+    }
+    const ban = document.getElementById('backdate-banner');
+    if(ban){
+        ban.classList.toggle('hidden', atToday);
+        if(!atToday) ban.textContent = '\u26A0  Logging for ' + fmtDayLabel(iso) + ' — not today';
+    }
+}
 
 // ── CSRF-aware fetch (preserved verbatim — REVIEW §1.2) ───────────────────
 // fetch() REJECTS on a dropped connection — phone Wi-Fi handing over mid-gym
@@ -998,7 +1095,7 @@ async function logSet(id, tt, extra){
     if(logInFlight) return;          // a double tap must not log twice (REVIEW §1.3)
     extra = extra || {};
     const btn=document.getElementById('log-tick');
-    const body={ exercise_id:id, successful:true };
+    const body=dateBody({ exercise_id:id, successful:true });
     if(tt==='weight_reps' || tt==='weight_time'){ body.weight_kg = parseFloat((document.getElementById('ws-w')||{}).value)||0; }
     if(tt==='weight_reps' || tt==='reps'){
         body.reps = parseInt((document.getElementById('ws-r')||{}).value)||0;
@@ -1079,7 +1176,7 @@ async function removeSet(setId, exId){
 // exercise's list rather than back in its old position. That is honest about
 // what happened and avoids inventing an update endpoint for it.
 async function relogSet(s){
-    const body={exercise_id:s.exercise_id, successful:true};
+    const body=dateBody({exercise_id:s.exercise_id, successful:true});
     if(s.weight_kg!=null) body.weight_kg=s.weight_kg;
     if(s.reps) body.reps=s.reps;
     if(s.duration_s) body.duration_s=s.duration_s;
@@ -1096,7 +1193,7 @@ async function openExercise(id){
     CURRENT = id; PREFILL = null; durReset(); durMode='endure';
     closePicker(); closeFajin();
     renderAll();
-    const r = await apiGet('/api/gym/exercise/'+id+'/prefill');
+    const r = await apiGet(withDate('/api/gym/exercise/'+id+'/prefill'));
     // A failed prefill degrades to the bank's own tracking_type with no
     // reference values rather than blocking the logger.
     if(r.ok && r.data.ok && CURRENT===id){ PREFILL = r.data; renderAll(); }
@@ -1313,7 +1410,7 @@ async function resyncLive(){
     if(resyncing || logInFlight) return;
     resyncing = true;
     try {
-        const r = await apiGet('/api/gym/live-session');
+        const r = await apiGet(withDate('/api/gym/live-session'));
         if(r.ok && r.data && Array.isArray(r.data.sets)){
             LIVE = r.data;
             if(!Array.isArray(LIVE.muscles)) LIVE.muscles = [];
@@ -1332,6 +1429,7 @@ window.addEventListener('pageshow', e=>{ if(e.persisted) resyncLive(); });
 (function init(){
     if(!Array.isArray(LIVE.sets)) LIVE.sets = [];
     if(!Array.isArray(LIVE.muscles)) LIVE.muscles = [];
+    renderDateHeader();
     let start = LIVE.current_exercise_id;
     if(!start || !EX_BY_ID[start]){
         const pool = allLoggable().filter(e=>e.muscle_group!=='cardio'
