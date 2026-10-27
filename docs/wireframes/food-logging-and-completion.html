@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Food Logging & Day-Fill</title>
+<style>
+/* The app's own font files (static/fonts), so this renders with exactly what home uses.
+   Paths are relative to docs/wireframes/. */
+@font-face{font-family:"Inter";font-weight:400;src:url(../../static/fonts/Inter-Regular.woff2) format("woff2")}
+@font-face{font-family:"Inter";font-weight:500;src:url(../../static/fonts/Inter-Medium.woff2) format("woff2")}
+@font-face{font-family:"Inter";font-weight:600;src:url(../../static/fonts/Inter-SemiBold.woff2) format("woff2")}
+@font-face{font-family:"Inter";font-weight:700;src:url(../../static/fonts/Inter-Bold.woff2) format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-weight:400;src:url(../../static/fonts/JetBrainsMono-Regular.woff2) format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-weight:500;src:url(../../static/fonts/JetBrainsMono-Medium.woff2) format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-weight:600 700;src:url(../../static/fonts/JetBrainsMono-SemiBold.woff2) format("woff2")}
+</style>
+<style>
+/* Pandora dark tokens, copied from templates/base.html so the wireframes read as the real app */
+:root{
+  --bg:#0a0b0d; --panel:#111316; --panel-alt:#16191d; --panel-soft:#1a1d21; --surface-2:#22262c;
+  --border:#1f242b; --border-bright:#2a313a; --text:#d5dae0; --text-strong:#edf0f3; --muted:#8b93a0;
+  --dim:#6b7480; --dimmer:#3f4651; --accent:#d4a574; --accent-soft:rgba(212,165,116,.12);
+  --green:#7fb069; --red:#c97064; --scrim:rgba(0,0,0,.62);
+  --mg-sh:#d4a574; --mg-ar:#6bb0a8; --mg-co:#a785c2;
+  --font-sans:"Inter",-apple-system,system-ui,sans-serif;
+  --font-mono:"JetBrains Mono","SF Mono",Menlo,monospace;
+  --radius-sm:4px; --radius-md:6px; --radius-lg:14px;
+  --canvas:#050607; --note:#9aa3ae;
+  /* Food wireframe accents — meal tints echo home.html FC_MEAL_COLORS, kept here as the
+     one hardcoded family this file is allowed (parallel to MG_COLORS in train.html). */
+  --carb:#6bb0a8; --fat:#c9a36b;
+  --m-bf:#d4a574; --m-lu:#7fb069; --m-di:#6bb0a8; --m-sn:#a785c2;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--canvas);color:var(--text);font-family:var(--font-sans)}
+button{font:inherit}
+.page{max-width:1240px;margin:0 auto;padding:28px 16px 80px}
+.doc-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 18px;margin-bottom:6px}
+.doc-h h1{font-size:22px;font-weight:600;letter-spacing:-.02em;color:var(--text-strong);margin:0}
+.doc-h .k{font-family:var(--font-mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.doc-sub{color:var(--note);font-size:13px;line-height:1.55;max-width:820px;margin:0 0 30px}
+.doc-sub code{font-family:var(--font-mono);font-size:11.5px;color:var(--text);background:var(--panel-soft);padding:1px 5px;border-radius:3px}
+.sec{border-top:1px solid var(--border);padding:28px 0 18px}
+.sec-h{display:flex;align-items:baseline;gap:12px;margin-bottom:4px}
+.sec-h .num{font-family:var(--font-mono);font-size:11px;color:var(--accent);letter-spacing:.1em}
+.sec-h h2{margin:0;font-size:18px;font-weight:600;color:var(--text-strong);letter-spacing:-.01em}
+.sec-sub{color:var(--note);font-size:13px;line-height:1.55;max-width:820px;margin:4px 0 22px}
+.row{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+.notes{flex:1 1 300px;min-width:0;max-width:460px}
+.notes ol{margin:0;padding:0;list-style:none;counter-reset:n}
+.notes li{counter-increment:n;position:relative;padding:0 0 12px 30px;font-size:13px;line-height:1.55;color:var(--note)}
+.notes li::before{content:counter(n);position:absolute;left:0;top:1px;width:19px;height:19px;border-radius:50%;
+  border:1px solid var(--accent);color:var(--accent);font-family:var(--font-mono);font-size:10px;display:flex;align-items:center;justify-content:center}
+.notes b{color:var(--text-strong);font-weight:600}
+.notes code{font-family:var(--font-mono);font-size:11.5px;color:var(--text);background:var(--panel-soft);padding:1px 5px;border-radius:3px}
+.ctl{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 16px}
+.ctl-h{font-family:var(--font-mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:14px 0 6px}
+.cbtn{background:var(--panel);border:1px solid var(--border-bright);color:var(--text);border-radius:var(--radius-md);
+  font-family:var(--font-mono);font-size:10.5px;padding:8px 10px;cursor:pointer;min-height:36px}
+.cbtn:hover{border-color:var(--dim)}
+.cbtn.pri{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.cbtn .sw{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:6px;vertical-align:0}
+
+/* phone frame */
+.phone{width:375px;max-width:100%;flex:none;border-radius:38px;border:1px solid #23272e;background:var(--bg);
+  box-shadow:0 0 0 8px #0e1013,0 30px 60px rgba(0,0,0,.5);overflow:hidden;position:relative}
+.phone .scr{height:760px;overflow:hidden;position:relative;display:flex;flex-direction:column}
+.sbar{height:34px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 26px;
+  font-family:var(--font-sans);font-size:12px;font-weight:600;color:var(--text-strong)}
+.pg{padding:0 16px;flex:1;min-height:0;overflow:hidden;position:relative}
+.cap{font-family:var(--font-mono);font-size:9px;color:var(--dim);text-align:center;margin-top:10px;letter-spacing:.06em}
+.hm-head{display:flex;align-items:baseline;gap:9px;padding:6px 0 10px}
+.hm-title{font-size:22px;font-weight:600;letter-spacing:-.02em;color:var(--text-strong)}
+.hm-date{font-family:var(--font-mono);font-size:10px;color:var(--dim);margin-left:auto}
+.states{display:flex;flex-direction:column;gap:14px;margin-top:6px}
+.state{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:8px 12px 4px;width:375px;max-width:100%}
+.state-l{font-family:var(--font-mono);font-size:9px;color:var(--note);letter-spacing:.06em;margin:4px 0 2px}
+</style>
+<style>
+/* ═══════════ 1 · DAY-FILL PANEL (plate ring + macro) ═══════════ */
+.df{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 15px 12px}
+.df-top{display:flex;align-items:center;gap:14px}
+.df-ring{flex:none;width:92px;height:92px;position:relative}
+.df-ring svg{width:92px;height:92px;transform:rotate(-90deg)}
+.df-ring .track{fill:none;stroke:var(--panel-soft);stroke-width:8}
+.df-ring .arc{fill:none;stroke-width:8;stroke-linecap:round;transition:stroke-dashoffset .6s cubic-bezier(.3,.7,.2,1),stroke .3s}
+.df-ring .arc.cal{stroke:var(--accent)}
+.df-ring .arc.pro{stroke:var(--green)}
+.df-ring .arc.over{stroke:var(--red)}
+.df-ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
+.df-ctr .pct{font-size:21px;font-weight:700;letter-spacing:-.03em;color:var(--text-strong);font-variant-numeric:tabular-nums;line-height:1}
+.df-ctr .pl{font-family:var(--font-mono);font-size:7px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.df-ring.hit .pct{color:var(--accent)}
+.df-meta{flex:1;min-width:0}
+.df-k{font-family:var(--font-mono);font-size:8px;letter-spacing:.17em;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
+.df-m{display:flex;flex-direction:column;gap:8px}
+.df-mrow .df-ml{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:3px}
+.df-mrow .lbl{font-family:var(--font-mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase}
+.df-mrow.cal .lbl{color:var(--accent)} .df-mrow.pro .lbl{color:var(--green)}
+.df-mrow .val{font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--text-strong);font-variant-numeric:tabular-nums}
+.df-mrow .val .g{font-size:9px;font-weight:400;color:var(--dim)}
+.df-track{height:6px;background:var(--panel-soft);border-radius:3px;overflow:hidden;position:relative}
+.df-fill{height:100%;border-radius:3px;width:0;transition:width .55s cubic-bezier(.3,.7,.2,1),background .3s}
+.df-mrow.cal .df-fill{background:var(--accent)} .df-mrow.pro .df-fill{background:var(--green)}
+.df-fill.over{background:var(--red)!important}
+/* overlay used for the grow-slide (mirrors home.html flAnimateBarGrowth) */
+.bar-grow{position:absolute;left:0;top:0;bottom:0;background:rgba(255,244,228,.45);border-radius:3px;transition:width .5s cubic-bezier(.3,.7,.2,1),opacity .4s;pointer-events:none}
+/* meal coverage dots */
+.df-meals{display:flex;gap:6px;margin-top:12px;padding-top:11px;border-top:1px solid var(--border)}
+.df-meal{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.df-dot{width:100%;height:4px;border-radius:2px;background:var(--panel-soft);transition:background .4s,box-shadow .4s}
+.df-meal.on .df-dot{background:var(--c)}
+.df-meal.just .df-dot{animation:dotpop .5s cubic-bezier(.3,1.6,.5,1)}
+@keyframes dotpop{0%{transform:scaleY(.4)}50%{transform:scaleY(1.9)}100%{transform:scaleY(1)}}
+.df-ml2{font-family:var(--font-mono);font-size:7px;letter-spacing:.08em;text-transform:uppercase;color:var(--dimmer)}
+.df-meal.on .df-ml2{color:var(--muted)}
+/* goal-reached flourish on the ring */
+.df-ring.flood::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--accent);animation:ringflood .8s ease-out}
+@keyframes ringflood{0%{transform:scale(.86);opacity:.95}100%{transform:scale(1.18);opacity:0}}
+.df-reached{font-family:var(--font-mono);font-size:8px;letter-spacing:.12em;color:#17120a;background:var(--accent);
+  padding:3px 7px;border-radius:3px;margin-left:8px;opacity:0;transform:scale(.6);transition:opacity .3s,transform .4s cubic-bezier(.3,1.7,.5,1)}
+.df-reached.in{opacity:1;transform:none}
+
+/* ═══════════ 2 · LOGGING (meal column + entry landing) ═══════════ */
+.fl{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-lg);padding:4px 10px 8px;margin-top:11px}
+.fl-col-header{display:flex;align-items:baseline;gap:8px;padding:9px 2px 6px}
+.fl-col-title{font-family:var(--font-mono);font-size:9px;letter-spacing:.13em;text-transform:uppercase;color:var(--c,var(--muted))}
+.fl-col-sum{margin-left:auto;font-family:var(--font-mono);font-size:8.5px;color:var(--dimmer);font-variant-numeric:tabular-nums}
+.fl-entries{display:flex;flex-direction:column}
+.fl-entry{display:flex;align-items:center;gap:9px;padding:8px 4px;border-top:1px solid var(--border);min-height:40px}
+.fl-entries .fl-entry:first-child{border-top:0}
+.fl-entry .en{flex:1;min-width:0;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fl-entry .ek{font-family:var(--font-mono);font-size:10px;color:var(--text-strong);font-variant-numeric:tabular-nums}
+.fl-entry .ep{font-family:var(--font-mono);font-size:9px;color:var(--green);font-variant-numeric:tabular-nums;width:34px;text-align:right}
+.fl-entry .ex{background:none;border:0;color:var(--dimmer);font-size:12px;cursor:pointer;padding:2px 4px;-webkit-tap-highlight-color:transparent}
+/* entry landing animation */
+.fl-entry.land{animation:entryland .5s cubic-bezier(.3,1.5,.5,1) both}
+@keyframes entryland{0%{opacity:0;transform:translateY(-10px) scale(.96);background:var(--accent-soft)}
+  60%{opacity:1;transform:translateY(0) scale(1)}100%{background:transparent}}
+.fl-empty{font-family:var(--font-mono);font-size:9.5px;color:var(--dimmer);font-style:italic;padding:9px 4px}
+/* add row */
+.fl-add{display:flex;gap:7px;margin-top:9px}
+.fl-input{flex:1;min-width:0;background:var(--panel-soft);border:1px solid var(--border);border-radius:var(--radius-md);
+  color:var(--text);font-family:var(--font-sans);font-size:12.5px;padding:9px 11px}
+.fl-input::placeholder{color:var(--dimmer)}
+.fl-input:focus{outline:none;border-color:var(--accent)}
+.fl-submit{flex:none;background:var(--text-strong);color:#0d0e10;border:0;border-radius:var(--radius-md);
+  font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.1em;padding:0 15px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.fl-submit:active{opacity:.85}
+.fl-recents{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+.fl-chip{background:var(--panel-soft);border:1px solid var(--border);color:var(--muted);border-radius:999px;
+  font-family:var(--font-mono);font-size:10px;padding:5px 10px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.fl-chip:active{border-color:var(--accent);color:var(--accent)}
+/* floating +N badge over the ring/number (mirrors home.html bar-popup) */
+.popup{position:absolute;font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--accent);pointer-events:none;
+  animation:popfloat 1s ease-out forwards}
+@keyframes popfloat{0%{opacity:0;transform:translateY(4px)}20%{opacity:1}100%{opacity:0;transform:translateY(-18px)}}
+
+/* ═══════════ 3 · DEFINE SHEET (unknown-macro branch) ═══════════ */
+.ds{position:absolute;left:0;right:0;bottom:0;background:var(--panel);border-radius:18px 18px 0 0;border-top:1px solid var(--border-bright);
+  padding:12px 16px 22px;transform:translateY(102%);transition:transform .45s cubic-bezier(.2,.8,.2,1)}
+.ds.on{transform:none}
+.ds .grab{width:36px;height:4px;border-radius:2px;background:var(--border-bright);margin:0 auto 12px}
+.ds-k{font-family:var(--font-mono);font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+.ds-nm{font-size:15px;font-weight:600;color:var(--text-strong);margin:4px 0 12px}
+.ds-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.ds-f label{display:block;font-family:var(--font-mono);font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:4px}
+.ds-f input{width:100%;background:var(--panel-soft);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text);
+  font-family:var(--font-mono);font-size:13px;padding:9px 10px}
+.ds-save{width:100%;margin-top:12px;background:var(--accent);color:var(--bg);border:0;border-radius:var(--radius-md);
+  font-family:var(--font-sans);font-size:13px;font-weight:600;padding:12px;cursor:pointer}
+
+@media (prefers-reduced-motion: reduce){
+  .df-ring .arc,.df-fill,.bar-grow,.fl-entry.land,.df-meal.just .df-dot,.df-ring.flood::after,.df-reached,.ds,.popup{
+    animation:none!important;transition:none!important}
+  .ds{transform:none}
+}
+</style>
+</head>
+<body>
+<div class="page">
+<div class="doc-h"><h1>Food logging &amp; day-fill</h1><span class="k">wireframes · home · 2026-10-18</span></div>
+<p class="doc-sub">The home-page parallel to the stage bar: make <b>logging a food</b> feel great, and give the day a quiet
+<b>filling-up</b> narrative. One plate ring (calories + protein toward goal) sits above the meal columns; adding an entry lands
+it in its meal, rolls the counters, slides the macro fills, lights the meal's coverage dot, and — only when a goal line is
+crossed — plays a one-shot flourish. Light completion by design: no streaks, no scores. Reuses the existing
+<code>macroBarUpdate()</code> / <code>flAnimateBarGrowth()</code> / <code>bar-popup</code> language from <code>_macro_bar.html</code> and
+<code>home.html</code>. Pandora tokens only; meal tints are the one hardcoded family (parallel to MG_COLORS). Everything works at
+375px; all motion is off under <code>prefers-reduced-motion</code>.</p>
+
+<!-- ═══════════ 01 ═══════════ -->
+<section class="sec">
+<div class="sec-h"><span class="num">01</span><h2>Logging a food — the entry lands</h2></div>
+<p class="sec-sub">Tap a meal's <b>+ add</b>, type (or tap a recent chip), submit. The row drops into the meal with a spring, the meal
+total ticks up, the plate ring + macro bars slide to their new value, and a <code>+kcal</code> badge floats off the ring. A food with
+no macros yet routes to the define sheet (03) instead of animating.</p>
+<div class="row">
+<div style="flex:1 1 300px">
+<div class="ctl-h">Simulate</div>
+<div class="ctl">
+<button class="cbtn pri" onclick="S.log('Lunch','78g Chicken breast',129,24.1)"><span class="sw" style="background:var(--m-lu)"></span>Log chicken → Lunch</button>
+<button class="cbtn" onclick="S.log('Breakfast','2 Weetbix',135,4.3)"><span class="sw" style="background:var(--m-bf)"></span>Log → Breakfast</button>
+<button class="cbtn" onclick="S.log('Snack','Protein bar',210,20)"><span class="sw" style="background:var(--m-sn)"></span>Log → Snack</button>
+</div>
+<div class="ctl">
+<button class="cbtn" onclick="S.logUnknown('Dinner','Nonna ragu')">Log unknown macro →</button>
+<button class="cbtn" onclick="S.reset()">Reset day</button>
+<button class="cbtn" onclick="S.toggleRM()">Toggle reduced-motion</button>
+</div>
+<div class="notes"><ol>
+<li><b>Land.</b> New row animates <code>entryland</code> .5s — drops in, settles, accent wash fades.</li>
+<li><b>Roll.</b> Meal total + ring % count up; macro fills slide (<code>.55s</code>) with a lighter grow-overlay on top.</li>
+<li><b>Badge.</b> <code>+129</code> floats off the ring for 1s.</li>
+<li><b>Recents.</b> Chips fill the name only — never a quantity (matches <code>flSetName</code>).</li>
+</ol></div>
+</div>
+<div class="phone"><div class="scr">
+<div class="sbar"><span>9:41</span><span>●●● ▮</span></div>
+<div class="pg">
+<div class="hm-head"><span class="hm-title">Today</span><span class="hm-date">SUN 18 OCT</span></div>
+<div id="df-mount"></div>
+<div id="fl-mount"></div>
+<div class="ds" id="ds"><div class="grab"></div>
+  <div class="ds-k">Define · macros unknown</div>
+  <div class="ds-nm" id="ds-nm">—</div>
+  <div class="ds-grid">
+    <div class="ds-f"><label>Calories</label><input value="0" inputmode="decimal"></div>
+    <div class="ds-f"><label>Protein (g)</label><input value="0" inputmode="decimal"></div>
+    <div class="ds-f"><label>Carbs (g)</label><input value="0" inputmode="decimal"></div>
+    <div class="ds-f"><label>Fat (g)</label><input value="0" inputmode="decimal"></div>
+  </div>
+  <button class="ds-save" onclick="S.closeDefine()">Save macros</button>
+</div>
+</div>
+<div class="cap">tap +add on a meal, or use Simulate</div>
+</div></div>
+</div>
+</section>
+
+<!-- ═══════════ 02 ═══════════ -->
+<section class="sec">
+<div class="sec-h"><span class="num">02</span><h2>Day-fill — the plate ring reaching goal</h2></div>
+<p class="sec-sub">The ring is calories (outer arc, accent) with protein as the inner readout; the two macro bars sit beside it, and a
+row of four coverage dots shows which meals have anything logged. Crossing a goal line fills the arc, pulses a <code>ringflood</code>
+halo once, and shows a <code>goal</code> tag. Over-goal turns the arc + bar <code>--red</code> and the readout shows the overage — never a
+failure state, just a colour.</p>
+<div class="row">
+<div style="flex:1 1 300px">
+<div class="ctl-h">Simulate</div>
+<div class="ctl">
+<button class="cbtn pri" onclick="S.fill(72,64)">Fill to 72% cal</button>
+<button class="cbtn" onclick="S.fill(100,96)">Hit calorie goal</button>
+<button class="cbtn" onclick="S.fill(114,108)">Go over goal</button>
+<button class="cbtn" onclick="S.reset()">Reset</button>
+</div>
+<div class="notes"><ol>
+<li><b>Arc.</b> <code>stroke-dashoffset</code> eases .6s to the new %; cap rounded.</li>
+<li><b>Reach.</b> At ≥100% the ring gets <code>hit</code> (accent number) + one <code>ringflood</code> pulse + a <code>goal</code> tag.</li>
+<li><b>Over.</b> Arc + fill flip to <code>--red</code>; readout reads <code>+120 kcal</code>.</li>
+<li><b>Dots.</b> Each covered meal lights in its tint; newly-covered one pops (<code>dotpop</code>).</li>
+</ol></div>
+</div>
+<div class="phone"><div class="scr">
+<div class="sbar"><span>9:41</span><span>●●● ▮</span></div>
+<div class="pg">
+<div class="hm-head"><span class="hm-title">Today</span><span class="hm-date">SUN 18 OCT</span></div>
+<div id="df-mount2"></div>
+</div>
+<div class="cap">calories ring + protein · meal dots</div>
+</div></div>
+</div>
+</section>
+
+<!-- ═══════════ 03 ═══════════ -->
+<section class="sec">
+<div class="sec-h"><span class="num">03</span><h2>Static states &amp; motion filmstrip</h2></div>
+<p class="sec-sub">Reference frames for the visual diff. The define sheet is the one modal path; the rest are inline.</p>
+<div class="ctl-h">Static states</div>
+<div class="states" id="states"></div>
+</section>
+</div>
+<script>
+/* ─────────────────────────────────────────────────────────────────────────
+   Food logging & day-fill — wireframe behaviour.
+   Pure demo state; the real app feeds the same shapes from home.html
+   (FL_ENTRIES, food_goals) and reuses macroBarUpdate()/flAnimateBarGrowth().
+   ───────────────────────────────────────────────────────────────────────── */
+const MEALS = [
+  {key:'Breakfast', ab:'BF', c:'var(--m-bf)'},
+  {key:'Lunch',     ab:'LU', c:'var(--m-lu)'},
+  {key:'Dinner',    ab:'DI', c:'var(--m-di)'},
+  {key:'Snack',     ab:'SN', c:'var(--m-sn)'},
+];
+const GOAL = {cal:2200, pro:170};
+const RECENTS = ['78g Chicken breast','2 Weetbix','Greek yoghurt','Protein bar','Banana'];
+const RING_R = 42, RING_C = 2*Math.PI*RING_R;
+
+let day = {entries:[], }; // {meal,name,cal,pro}
+const $ = s => document.querySelector(s);
+const el = (t,c)=>{const e=document.createElement(t); if(c)e.className=c; return e;};
+
+function totals(){
+  let cal=0,pro=0; const covered=new Set();
+  day.entries.forEach(e=>{cal+=e.cal; pro+=e.pro; covered.add(e.meal);});
+  return {cal,pro,covered};
+}
+
+/* ── Day-fill panel ── */
+function dayFillHTML(){
+  return `
+  <div class="df">
+    <div class="df-top">
+      <div class="df-ring" id="ring">
+        <svg viewBox="0 0 92 92">
+          <circle class="track" cx="46" cy="46" r="${RING_R}"></circle>
+          <circle class="arc cal" id="arc" cx="46" cy="46" r="${RING_R}"
+            stroke-dasharray="${RING_C}" stroke-dashoffset="${RING_C}"></circle>
+        </svg>
+        <div class="df-ctr"><span class="pct" id="ring-pct">0%</span><span class="pl">of goal</span></div>
+      </div>
+      <div class="df-meta">
+        <div class="df-k">Day fill <span class="df-reached" id="reached">goal</span></div>
+        <div class="df-m">
+          <div class="df-mrow cal">
+            <div class="df-ml"><span class="lbl">Calories</span><span class="val" id="cal-val">0<span class="g"> / ${GOAL.cal}</span></span></div>
+            <div class="df-track"><div class="df-fill" id="cal-fill"></div></div>
+          </div>
+          <div class="df-mrow pro">
+            <div class="df-ml"><span class="lbl">Protein</span><span class="val" id="pro-val">0<span class="g"> / ${GOAL.pro}g</span></span></div>
+            <div class="df-track"><div class="df-fill" id="pro-fill"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="df-meals" id="meals">
+      ${MEALS.map(m=>`<div class="df-meal" data-m="${m.key}" style="--c:${m.c}"><span class="df-dot"></span><span class="df-ml2">${m.ab}</span></div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function paintDayFill(root, opts){
+  opts=opts||{};
+  const t=totals();
+  const calPct = Math.min(140, t.cal/GOAL.cal*100);
+  const proPct = Math.min(140, t.pro/GOAL.pro*100);
+  const calOver=t.cal>GOAL.cal, proOver=t.pro>GOAL.pro;
+  // ring = calorie progress
+  const arc=root.querySelector('#arc');
+  const shown=Math.min(100,calPct);
+  arc.style.strokeDashoffset = RING_C*(1-shown/100);
+  arc.classList.toggle('over', calOver);
+  root.querySelector('#ring-pct').textContent = Math.round(calPct)+'%';
+  root.querySelector('#ring').classList.toggle('hit', calPct>=100);
+  // macro bars (+grow overlay on real increase)
+  function bar(fillId,valId,pct,over,val,goal,unit){
+    const fill=root.querySelector(fillId);
+    const old=parseFloat(fill.dataset.pct||'0');
+    const now=Math.min(100,pct);
+    fill.classList.toggle('over',over);
+    fill.style.width=now+'%'; fill.dataset.pct=now;
+    const vEl=root.querySelector(valId);
+    if(over) vEl.innerHTML=Math.round(val)+'<span class="g" style="color:var(--red)"> +'+Math.round(val-goal)+(unit==='g'?'g':'')+'</span>';
+    else vEl.innerHTML=Math.round(val)+'<span class="g"> / '+goal+(unit==='g'?'g':'')+'</span>';
+    if(opts.animate && now>old && !RM){
+      const tr=fill.parentElement; const ov=el('div','bar-grow'); ov.style.width=old+'%'; tr.appendChild(ov);
+      void ov.offsetWidth; requestAnimationFrame(()=>ov.style.width=now+'%');
+      ov.addEventListener('transitionend',function h(e){if(e.propertyName!=='width')return; ov.style.opacity='0'; setTimeout(()=>ov.remove(),400);},{once:true});
+    }
+  }
+  bar('#cal-fill','#cal-val',calPct,calOver,t.cal,GOAL.cal,'');
+  bar('#pro-fill','#pro-val',proPct,proOver,t.pro,GOAL.pro,'g');
+  // meal dots
+  root.querySelectorAll('.df-meal').forEach(d=>{
+    const on=t.covered.has(d.dataset.m);
+    const was=d.classList.contains('on');
+    d.classList.toggle('on',on);
+    if(on && !was && opts.animate && !RM){ d.classList.add('just'); setTimeout(()=>d.classList.remove('just'),520); }
+  });
+  // goal reached flourish (once, on crossing)
+  if(opts.animate && calPct>=100 && !day._reached && !RM){
+    day._reached=true;
+    const ring=root.querySelector('#ring'); ring.classList.add('flood'); setTimeout(()=>ring.classList.remove('flood'),820);
+    const tag=root.querySelector('#reached'); if(tag){tag.classList.add('in');}
+  }
+  if(calPct<100){ day._reached=false; const tag=root.querySelector('#reached'); if(tag)tag.classList.remove('in'); }
+}
+
+/* ── Meal columns ── */
+function mealsHTML(){
+  const by={}; MEALS.forEach(m=>by[m.key]=[]);
+  day.entries.forEach(e=>by[e.meal].push(e));
+  return MEALS.map(m=>{
+    const rows=by[m.key]; const sum=rows.reduce((s,e)=>s+e.cal,0);
+    const chips = m.key===activeAdd ? `
+      <div class="fl-add">
+        <input class="fl-input" id="fl-input" placeholder="e.g. 78g Chicken" autocomplete="off"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();S.submit('${m.key}')}">
+        <button class="fl-submit" onclick="S.submit('${m.key}')">ADD</button>
+      </div>
+      <div class="fl-recents">${RECENTS.slice(0,4).map(r=>`<button class="fl-chip" onclick="S.chip('${r.replace(/'/g,"\\'")}')">${r}</button>`).join('')}</div>` : '';
+    return `
+    <div class="fl" style="--c:${m.c}">
+      <div class="fl-col-header"><span class="fl-col-title">${m.key}</span>
+        <span class="fl-col-sum">${Math.round(sum)} kcal · ${rows.length}</span>
+        <button class="fl-submit" style="background:none;border:1px solid var(--border);color:var(--muted);margin-left:8px"
+          onclick="S.toggleAdd('${m.key}')">+ ADD</button></div>
+      <div class="fl-entries">
+        ${rows.length? rows.map(e=>`<div class="fl-entry${e._new?' land':''}" data-k="${e._k}">
+            <span class="en">${e.name}</span><span class="ek">${Math.round(e.cal)}</span>
+            <span class="ep">${e.pro.toFixed(1)}g</span><button class="ex" onclick="S.del(${e._k})">✕</button></div>`).join('')
+          : `<div class="fl-empty">Nothing logged</div>`}
+      </div>
+      ${chips}
+    </div>`;
+  }).join('');
+}
+
+let activeAdd=null, keyN=0, RM=false;
+
+function renderAll(opts){
+  $('#df-mount').innerHTML = dayFillHTML();
+  $('#fl-mount').innerHTML = mealsHTML();
+  paintDayFill($('#df-mount'), opts);
+  // clear one-shot flags after paint
+  day.entries.forEach(e=>e._new=false);
+  if(activeAdd){ const i=$('#fl-input'); if(i) setTimeout(()=>i.focus(),30); }
+}
+
+const S = {
+  log(meal,name,cal,pro){
+    day.entries.push({meal,name,cal,pro,_k:++keyN,_new:true});
+    activeAdd=null;
+    renderAll({animate:true});
+    floatBadge('+'+Math.round(cal));
+  },
+  logUnknown(meal,name){
+    day._pending={meal,name};
+    $('#ds-nm').textContent=name; $('#ds').classList.add('on');
+  },
+  closeDefine(){
+    $('#ds').classList.remove('on');
+    const p=day._pending; if(p){ this.log(p.meal,p.name,420,22); day._pending=null; }
+  },
+  submit(meal){
+    const i=$('#fl-input'); if(!i)return; const v=i.value.trim(); if(!v)return;
+    // demo macro resolution
+    this.log(meal, v, 150+Math.round(Math.random()*120), 8+Math.round(Math.random()*18));
+  },
+  chip(name){ const i=$('#fl-input'); if(i){i.value=name;i.focus();} },
+  toggleAdd(meal){ activeAdd = activeAdd===meal? null : meal; renderAll({}); },
+  del(k){ day.entries=day.entries.filter(e=>e._k!==k); renderAll({animate:false}); },
+  fill(calPct,proPct){
+    // synthesize entries to reach the target %
+    day.entries=[{meal:'Breakfast',name:'(filled)',cal:GOAL.cal*calPct/100,pro:GOAL.pro*proPct/100,_k:++keyN}];
+    day._reached=false;
+    renderAll({animate:true});
+  },
+  reset(){ day={entries:[]}; activeAdd=null; renderAll({}); const r=$('#df-mount2'); if(r){paintStatic();} },
+  toggleRM(){ RM=!RM; document.documentElement.style.setProperty('scroll-behavior','auto');
+    document.querySelector('.doc-sub').style.outline = RM?'1px dashed var(--accent)':'none'; alert('reduced-motion '+(RM?'ON':'OFF')+' (demo flag)'); },
+};
+window.S=S;
+
+/* floating +N badge over the ring */
+function floatBadge(txt){
+  if(RM)return; const ring=$('#df-mount #ring'); if(!ring)return;
+  const b=el('span','popup'); b.textContent=txt; b.style.left='60px'; b.style.top='6px';
+  ring.appendChild(b); b.addEventListener('animationend',()=>b.remove());
+}
+
+/* ── Section 02: its own mount, filled by Simulate ── */
+function render2(opts){ $('#df-mount2').innerHTML=dayFillHTML(); paintDayFill($('#df-mount2'),opts); }
+// bind S.fill/S.reset to also update mount2
+const _fill=S.fill.bind(S); S.fill=function(a,b){ _fill(a,b); render2({animate:true}); };
+const _reset=S.reset.bind(S); S.reset=function(){ _reset(); render2({}); };
+
+/* ── Static states (03) ── */
+function stateFrame(label, build){
+  const wrap=el('div','state'); const l=el('div','state-l'); l.textContent=label; wrap.appendChild(l);
+  const mount=el('div'); mount.innerHTML=dayFillHTML(); wrap.appendChild(mount); build(mount); return wrap;
+}
+function paintInto(mount, entries, reached){
+  const save=day; day={entries:entries.map((e,i)=>({...e,_k:i}))};
+  paintDayFill(mount,{animate:false}); if(reached){mount.querySelector('#ring').classList.add('hit','flood');} day=save;
+}
+function paintStatic(){
+  const host=$('#states'); if(!host)return; host.innerHTML='';
+  host.appendChild(stateFrame('a · empty day', m=>paintInto(m,[],false)));
+  host.appendChild(stateFrame('b · mid-day (2 meals, 54%)', m=>paintInto(m,[
+    {meal:'Breakfast',cal:620,pro:34},{meal:'Lunch',cal:560,pro:52}],false)));
+  host.appendChild(stateFrame('c · goal reached', m=>paintInto(m,[
+    {meal:'Breakfast',cal:620,pro:34},{meal:'Lunch',cal:700,pro:60},{meal:'Dinner',cal:900,pro:80}],true)));
+  host.appendChild(stateFrame('d · over goal', m=>{paintInto(m,[
+    {meal:'Breakfast',cal:720,pro:44},{meal:'Lunch',cal:800,pro:60},{meal:'Dinner',cal:950,pro:85},{meal:'Snack',cal:260,pro:14}],false);}));
+}
+
+/* init */
+renderAll({});
+render2({});
+paintStatic();
+</script>
+</body></html>

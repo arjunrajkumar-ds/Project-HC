@@ -1,0 +1,239 @@
+{# ──────────────────────────────────────────────────────────────────────────
+   Day-fill panel — calorie ring + protein bar + meal-coverage dots.
+   The home-page parallel to /train's stage bar: a quiet "the day is filling"
+   readout above the meal columns. The hero action is logging; this is LIGHT
+   completion only (no streaks, no score). See:
+     docs/PLAN-food-logging-completion.md     (decision: day-fill + logging-first)
+     docs/HANDOFF-food-logging-completion.md   (full spec + gaps G1–G11)
+
+   WHY a partial with its own <style>/<script>: matches the house pattern of
+   _macro_bar.html / _goals_panel.html (self-contained, shared-shell friendly).
+   WHY no server fields: it reads the same totals the food IIFE already computes
+   (sum of FL_ENTRIES vs food_goals) and is driven IN PLACE by window.dayFillUpdate(),
+   called from flRender() next to the (no-op on home) macroBarUpdate() hook — so the
+   ring never lives inside #fl-grid, which flRender rebuilds via innerHTML (G4).
+   NOTE: _macro_bar.html is NOT included on home, so this panel's own protein bar is
+   the protein display, and its ring badge is the ONE +kcal badge (G5).
+   ────────────────────────────────────────────────────────────────────────── #}
+<style>
+/* The ring is the ONLY new primitive; the protein bar reuses the macro-bar green
+   language and the +kcal badge reuses the existing .bar-popup class. Pandora tokens
+   only — the sole hardcoded family is the meal palette, defined ONCE in home.html's
+   :root (consumed here and by .fl-col), never duplicated here (G1). */
+.df { background: var(--panel); border: 1px solid var(--border);
+      border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 10px; }
+.df-top { display: flex; align-items: center; gap: 14px; }
+.df-ring { flex: none; width: 92px; height: 92px; position: relative; }
+.df-ring svg { width: 92px; height: 92px; transform: rotate(-90deg); display: block; }
+.df-ring .df-track { fill: none; stroke: var(--panel-soft); stroke-width: 8; }
+/* arc = calorie progress; the transition IS the ring's slide (removed, not the value,
+   under reduced-motion so it snaps to the correct final offset — G8). */
+.df-ring .df-arc { fill: none; stroke: var(--accent); stroke-width: 8; stroke-linecap: round;
+    transition: stroke-dashoffset .6s cubic-bezier(.3,.7,.2,1), stroke .3s; }
+.df-ring.over .df-arc { stroke: var(--red); }       /* G3: over-goal is a colour, not a failure */
+.df-ctr { position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 1px; }
+.df-pct { font-family: var(--font-sans); font-size: 20px; font-weight: 700; letter-spacing: -.03em;
+    color: var(--text-strong); font-variant-numeric: tabular-nums; line-height: 1; }
+.df-ring.hit .df-pct { color: var(--accent); }
+.df-ring.over .df-pct { color: var(--red); }
+.df-pl { font-family: var(--font-mono); font-size: 7px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--dim); }
+/* goal-reached halo + tag — fired ONCE on the crossing (G4), inert under reduced-motion (G8) */
+.df-ring.flood::after { content: ""; position: absolute; inset: -4px; border-radius: 50%;
+    border: 2px solid var(--accent); animation: df-ringflood .8s ease-out; }
+@keyframes df-ringflood { 0% { transform: scale(.86); opacity: .95; } 100% { transform: scale(1.18); opacity: 0; } }
+.df-tag { position: absolute; top: -4px; right: -2px; font-family: var(--font-mono); font-size: 8px;
+    letter-spacing: .12em; color: #17120a; background: var(--accent); padding: 2px 6px;
+    border-radius: 3px; opacity: 0; transform: scale(.6);
+    transition: opacity .3s, transform .4s cubic-bezier(.3,1.7,.5,1); pointer-events: none; }
+.df-tag.in { opacity: 1; transform: none; }
+.df-meta { flex: 1; min-width: 0; }
+.df-k { font-family: var(--font-mono); font-size: 8px; letter-spacing: .17em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 7px; }
+.df-cal-line { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--text-strong);
+    font-variant-numeric: tabular-nums; margin-bottom: 10px; }
+.df-cal-line .g { font-weight: 400; color: var(--dim); }
+.df-cal-line .ov { color: var(--red); }
+.df-mrow .df-ml { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 3px; }
+.df-mrow .lbl { font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--green); }
+.df-mrow .val { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--text-strong); font-variant-numeric: tabular-nums; }
+.df-mrow .val .g { font-size: 9px; font-weight: 400; color: var(--dim); }
+.df-mrow .val .ov { color: var(--red); }
+.df-track2 { height: 6px; background: var(--panel-soft); border-radius: 3px; overflow: hidden; position: relative; }
+.df-fill { height: 100%; border-radius: 3px; width: 0; background: var(--green);
+    transition: width .55s cubic-bezier(.3,.7,.2,1), background .3s; }
+.df-fill.over { background: var(--red); }
+/* meal-coverage dots — colour comes from the SHARED meal palette (home.html :root), never a 2nd set (G1) */
+.df-meals { display: flex; gap: 6px; margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--border); }
+.df-meal { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.df-dot { width: 100%; height: 4px; border-radius: 2px; background: var(--panel-soft);
+    transition: background .4s; transform-origin: center; }
+.df-meal.on[data-meal="breakfast"] .df-dot { background: var(--meal-breakfast); }
+.df-meal.on[data-meal="lunch"]     .df-dot { background: var(--meal-lunch); }
+.df-meal.on[data-meal="dinner"]    .df-dot { background: var(--meal-dinner); }
+.df-meal.on[data-meal="snack"]     .df-dot { background: var(--meal-snack); }
+.df-meal.just .df-dot { animation: df-dotpop .5s cubic-bezier(.3,1.6,.5,1); }
+@keyframes df-dotpop { 0% { transform: scaleY(.4); } 50% { transform: scaleY(1.9); } 100% { transform: scaleY(1); } }
+.df-ml2 { font-family: var(--font-mono); font-size: 7px; letter-spacing: .08em; text-transform: uppercase; color: var(--dimmer); }
+.df-meal.on .df-ml2 { color: var(--muted); }
+
+/* entry-landing spring on the just-logged row in #fl-grid. translateY/scale/opacity
+   ONLY — no translateX, so the narrow 4-col grid can't overflow horizontally (G11). */
+.fl-entry.fl-entry-new { animation: df-entryland .5s cubic-bezier(.3,1.5,.5,1) both; }
+@keyframes df-entryland {
+    0%   { opacity: 0; transform: translateY(-10px) scale(.96); background: var(--accent-soft); }
+    60%  { opacity: 1; transform: translateY(0) scale(1); }
+    100% { background: transparent; }
+}
+
+/* G8 — all day-fill motion off under reduced-motion. The ring still shows the correct
+   FINAL dashoffset (set directly in JS); only its transition is removed. The +kcal
+   badge is never created in JS under reduced-motion; display:none is belt-and-braces. */
+@media (prefers-reduced-motion: reduce) {
+    .df-ring .df-arc, .df-fill, .df-dot, .df-tag { transition: none !important; }
+    .df-ring.flood::after, .df-meal.just .df-dot, .fl-entry.fl-entry-new { animation: none !important; }
+    .bar-grow-overlay, .df-badge { display: none !important; }
+}
+</style>
+
+<div class="df" id="day-fill">
+  <div class="df-top">
+    <div class="df-ring" id="df-ring">
+      <svg viewBox="0 0 92 92" aria-hidden="true">
+        <circle class="df-track" cx="46" cy="46" r="42"></circle>
+        <circle class="df-arc" id="df-arc" cx="46" cy="46" r="42"
+                stroke-dasharray="263.894" stroke-dashoffset="263.894"></circle>
+      </svg>
+      <div class="df-ctr"><span class="df-pct" id="df-pct">0%</span><span class="df-pl">of goal</span></div>
+      <span class="df-tag" id="df-tag">goal</span>
+    </div>
+    <div class="df-meta">
+      <div class="df-k">Day fill</div>
+      <div class="df-cal-line" id="df-cal-line">0<span class="g"> / 0 kcal</span></div>
+      <div class="df-mrow">
+        <div class="df-ml"><span class="lbl">Protein</span><span class="val" id="df-pro-val">0<span class="g"> / 0g</span></span></div>
+        <div class="df-track2" id="df-pro-track"><div class="df-fill" id="df-pro-fill"></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="df-meals" id="df-meals">
+    <div class="df-meal" data-meal="breakfast"><span class="df-dot"></span><span class="df-ml2">BF</span></div>
+    <div class="df-meal" data-meal="lunch"><span class="df-dot"></span><span class="df-ml2">LU</span></div>
+    <div class="df-meal" data-meal="dinner"><span class="df-dot"></span><span class="df-ml2">DI</span></div>
+    <div class="df-meal" data-meal="snack"><span class="df-dot"></span><span class="df-ml2">SN</span></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // Ring circumference (r=42). The latch `reached` fires the goal flourish once on the
+  // crossing and re-arms when the total drops back below goal (G4/G6).
+  var RING_C = 2 * Math.PI * 42;
+  var reached = false;
+  function rm() { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+
+  // Driven IN PLACE by flRender() — never innerHTML'd (G4). opts.animateEntry (set only
+  // on a fresh log) gates the one-shot flourish, dot-pop and +kcal badge, so a delete or
+  // the initial paint moves the numbers without replaying motion (G6).
+  window.dayFillUpdate = function (totalCal, calGoal, totalPro, proGoal, coveredMeals, opts) {
+    opts = opts || {};
+    var animate = !!opts.animateEntry;
+    var reduced = rm();
+    var ring = document.getElementById('df-ring');
+    var arc  = document.getElementById('df-arc');
+    var pctEl = document.getElementById('df-pct');
+    var calLine = document.getElementById('df-cal-line');
+    if (!ring || !arc) return;
+
+    // ── Calorie ring ──────────────────────────────────────────────────────
+    if (!(calGoal > 0)) {
+      // G2: no / zero goal → empty ring, no arc, no flourish, "N kcal · no goal".
+      arc.style.strokeDashoffset = RING_C;
+      ring.classList.remove('hit', 'over', 'flood');
+      pctEl.textContent = '\u2014';
+      calLine.innerHTML = Math.round(totalCal) + '<span class="g"> kcal \u00b7 no goal</span>';
+      var tagNoGoal = document.getElementById('df-tag');
+      if (tagNoGoal) tagNoGoal.classList.remove('in');
+      reached = false;
+    } else {
+      var calPct = totalCal / calGoal * 100;        // NOT capped (G3)
+      var shown = Math.min(100, calPct);
+      arc.style.strokeDashoffset = RING_C * (1 - shown / 100);
+      var over = totalCal > calGoal;
+      ring.classList.toggle('over', over);
+      ring.classList.toggle('hit', calPct >= 100 && !over);
+      pctEl.textContent = Math.round(calPct) + '%';
+      if (over) calLine.innerHTML = Math.round(totalCal) + '<span class="g"> / ' + Math.round(calGoal)
+          + ' kcal</span> <span class="ov">+' + Math.round(totalCal - calGoal) + '</span>';
+      else calLine.innerHTML = Math.round(totalCal) + '<span class="g"> / ' + Math.round(calGoal) + ' kcal</span>';
+
+      var nowReached = calPct >= 100;
+      var tag = document.getElementById('df-tag');
+      if (nowReached && !reached) {
+        if (animate && !reduced) {               // pulse only on a real log that crosses
+          ring.classList.add('flood');
+          setTimeout(function () { ring.classList.remove('flood'); }, 820);
+        }
+        if (tag) tag.classList.add('in');
+      } else if (!nowReached) {
+        if (tag) tag.classList.remove('in');     // G6: dropped below goal → tag off, re-arm
+      }
+      reached = nowReached;
+    }
+
+    // ── Protein bar (reuses the macro-bar green + grow-overlay language) ────
+    var proFill = document.getElementById('df-pro-fill');
+    var proVal  = document.getElementById('df-pro-val');
+    if (proFill) {
+      var oldPct = parseFloat(proFill.dataset.pct || '0');
+      if (!(proGoal > 0)) {
+        proFill.style.width = '0%'; proFill.dataset.pct = 0; proFill.classList.remove('over');
+        if (proVal) proVal.innerHTML = Math.round(totalPro) + '<span class="g">g \u00b7 no goal</span>';
+      } else {
+        var proPct = totalPro / proGoal * 100;
+        var newPct = Math.min(100, proPct);
+        var proOver = totalPro > proGoal;
+        proFill.classList.toggle('over', proOver);
+        proFill.style.width = newPct + '%'; proFill.dataset.pct = newPct;
+        if (proVal) {
+          if (proOver) proVal.innerHTML = Math.round(totalPro) + '<span class="g"> / ' + Math.round(proGoal)
+              + 'g</span> <span class="ov">+' + Math.round(totalPro - proGoal) + '</span>';
+          else proVal.innerHTML = Math.round(totalPro) + '<span class="g"> / ' + Math.round(proGoal) + 'g</span>';
+        }
+        // Grow-overlay slide on an increase only. Reuses flAnimateBarGrowth, exposed on
+        // window by the food IIFE; the fill's own width transition carries the rest.
+        if (animate && !reduced && newPct > oldPct && typeof window.flAnimateBarGrowth === 'function') {
+          window.flAnimateBarGrowth('df-pro-track', oldPct, newPct);
+        }
+      }
+    }
+
+    // ── Meal-coverage dots ─────────────────────────────────────────────────
+    var covered = {};
+    (coveredMeals || []).forEach(function (m) { covered[m] = true; });
+    document.querySelectorAll('#df-meals .df-meal').forEach(function (d) {
+      var on = !!covered[d.getAttribute('data-meal')];
+      var was = d.classList.contains('on');
+      d.classList.toggle('on', on);
+      if (on && !was && animate && !reduced) {     // newly covered → pop
+        d.classList.add('just');
+        setTimeout(function () { d.classList.remove('just'); }, 520);
+      }
+    });
+
+    // ── +kcal badge: the ONE badge on home (the macro-bar badge no-ops here as
+    //    _macro_bar.html isn't included), floated off the ring (G5). ──────────
+    if (animate && !reduced) {
+      var addedCal = (opts.animateEntry && opts.animateEntry.calories) || 0;
+      if (addedCal > 0) {
+        var b = document.createElement('span');
+        b.className = 'bar-popup df-badge';       // reuse the existing badge styling
+        b.textContent = '+' + Math.round(addedCal);
+        ring.appendChild(b);
+        b.addEventListener('animationend', function () { b.remove(); });
+      }
+    }
+  };
+})();
+</script>

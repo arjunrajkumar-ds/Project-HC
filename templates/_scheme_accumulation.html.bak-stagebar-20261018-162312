@@ -1,0 +1,330 @@
+{# ── Scheme accumulation · read-only visualisation panel ───────────────────
+   Three views of how many times each (scheme, weight) pair has been PASSED
+   (result='completed') for one exercise:
+     • 1b  tally / dot-stack matrix   (full scheme × weight grid)
+     • 1f  segmented cumulative bar   (one focus weight)
+     • 1g  radial set                 (one focus weight)
+   Pill toggle switches views; a picker switches exercise; focus-weight chips
+   drive 1f/1g. All client-side over a server-seeded blob — no round-trips.
+   Server seeds `scheme_viz` = {exercises:[id...], data:{id:{...}}}.
+   Styling maps the wireframe hexes to Pandora tokens where equivalent;
+   the accent (#d4a574) is already var(--accent).
+#}
+<style>
+.sa-card { background: var(--panel-alt); border: 1px solid var(--border);
+           border-radius: var(--radius-lg); box-shadow: var(--elev-1); padding: 16px;
+           font-family: var(--font-sans); }
+.sa-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.sa-title { font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em;
+            text-transform: uppercase; color: var(--dim); }
+.sa-controls { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.sa-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sa-lbl { font-family: var(--font-mono); font-size: 9px; letter-spacing: .1em;
+          text-transform: uppercase; color: var(--dim); }
+/* pill toggle (view) + segmented look reused from weight chart */
+.sa-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
+.sa-seg button { background: transparent; border: none; cursor: pointer; color: var(--dim);
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: .04em; text-transform: uppercase;
+    padding: 5px 12px; -webkit-tap-highlight-color: transparent; }
+.sa-seg button + button { border-left: 1px solid var(--border); }
+.sa-seg button.active { color: var(--accent); background: var(--accent-soft); }
+.sa-select { background: var(--panel-soft); border: 1px solid var(--border); color: var(--text-strong);
+    border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 12px; padding: 5px 8px; }
+.sa-meta { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
+.sa-thresh { font-family: var(--font-mono); font-size: 11px; color: var(--dim); margin-left: auto; }
+/* focus chips */
+.sa-chips { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; background: var(--panel-soft);
+    border-radius: var(--radius-sm); align-self: flex-start; }
+.sa-chip { cursor: pointer; padding: 6px 10px; border-radius: var(--radius-sm);
+    font-family: var(--font-mono); font-size: 12px; background: transparent; color: var(--muted);
+    display: flex; align-items: center; gap: 6px; border: none; -webkit-tap-highlight-color: transparent; }
+.sa-chip.sel { background: var(--text-strong); color: var(--bg); }
+.sa-chip-dot { width: 6px; height: 6px; border-radius: 999px; }
+.sa-cap { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
+/* ── 1b matrix ── */
+.sa-matrix-scroll { overflow-x: auto; }
+.sa-colhead { display: flex; gap: 6px; align-items: flex-end; padding-bottom: 8px; }
+.sa-colhead-spacer { width: 104px; font-size: 12px; color: var(--dim); flex: none; }
+.sa-colhead-cell { width: 56px; text-align: center; font-family: var(--font-mono); font-weight: 500; font-size: 13px; flex: none; }
+.sa-body { position: relative; display: flex; flex-direction: column; }
+.sa-spine { position: absolute; left: 0; top: 0; bottom: 0; width: 1px; background: var(--line, #474747); }
+.sa-mrow { display: flex; gap: 6px; align-items: center; padding: 3px 0; }
+.sa-rowhead { width: 104px; height: 56px; display: flex; align-items: center; gap: 8px; position: relative; flex: none; }
+.sa-tick { width: 12px; height: 1px; background: var(--line, #474747); }
+.sa-wlabel { font-family: var(--font-mono); font-size: 13px; }
+.sa-heremark { position: absolute; left: -2px; top: 10px; bottom: 10px; width: 5px; background: var(--text-strong); border-radius: 2px; }
+.sa-cell { width: 56px; height: 56px; box-sizing: border-box; border-radius: 8px; flex: none;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; position: relative; }
+.sa-pipgrid { width: 42px; display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; }
+.sa-pip { width: 6px; height: 6px; box-sizing: border-box; border-radius: 999px; }
+.sa-overflow { font-family: var(--font-sans); font-weight: 600; font-size: 11px; line-height: 1; color: var(--bg); }
+/* ── 1f bars ── */
+.sa-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+.sa-legitem { display: flex; align-items: center; gap: 6px; }
+.sa-swatch { width: 12px; height: 12px; border-radius: 2px; flex: none; }
+.sa-leglabel { font-family: var(--font-mono); font-size: 12px; }
+.sa-bars { display: flex; flex-direction: column; gap: 6px; }
+.sa-brow { display: flex; align-items: center; gap: 12px; padding: 6px 8px; border-radius: 8px; }
+.sa-bscheme { width: 44px; font-family: var(--font-mono); font-weight: 500; font-size: 14px; flex: none; }
+.sa-btrack { flex: 1; height: 20px; box-sizing: border-box; border-radius: 4px; display: flex; gap: 2px; overflow: hidden; justify-content: flex-start; align-items: stretch; }
+.sa-bseg { flex: 0 0 auto; min-width: 0; display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-sans); font-weight: 600; font-size: 11px; overflow: hidden; white-space: nowrap; }
+.sa-bstatus { width: 120px; display: flex; justify-content: flex-end; align-items: center; gap: 4px;
+    font-family: var(--font-sans); font-weight: 600; font-size: 13px; font-variant-numeric: tabular-nums; flex: none; }
+.sa-bhere { width: 72px; font-size: 12px; color: var(--text-strong); flex: none; }
+.sa-foot { display: flex; justify-content: space-between; padding: 8px 92px 0 64px; font-family: var(--font-mono); font-size: 12px; color: var(--dim); }
+/* ── 1g rings ── */
+.sa-rings { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+.sa-ritem { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px 4px; border-radius: 8px; }
+.sa-ring { width: 76px; height: 76px; box-sizing: border-box; border-radius: 999px; display: flex; align-items: center; justify-content: center; }
+.sa-ring-inner { width: 62px; height: 62px; border-radius: 999px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
+.sa-rcount { font-family: var(--font-sans); font-weight: 600; font-size: 18px; font-variant-numeric: tabular-nums; }
+.sa-rden { font-family: var(--font-sans); font-weight: 400; font-size: 11px; }
+.sa-rscheme { font-family: var(--font-mono); font-weight: 500; font-size: 14px; }
+.sa-rtag { font-size: 12px; height: 16px; }
+.sa-empty { font-family: var(--font-mono); font-size: 12px; color: var(--dim); padding: 20px 4px; }
+.sa-material { font-family: 'Material Symbols Rounded'; font-weight: 600; }
+</style>
+
+<div class="sa-card" id="sa-card">
+  <div class="sa-head">
+    <span class="sa-title">Scheme accumulation</span>
+    <span class="sa-thresh" id="sa-thresh"></span>
+  </div>
+  <div class="sa-controls">
+    <div class="sa-row">
+      <span class="sa-lbl">Exercise</span>
+      <select class="sa-select" id="sa-ex"></select>
+      <span class="sa-meta" id="sa-exmeta"></span>
+    </div>
+    <div class="sa-row">
+      <span class="sa-lbl">View</span>
+      <div class="sa-seg" id="sa-view">
+        <button data-view="1b" class="active">Matrix</button>
+        <button data-view="1f">Bars</button>
+        <button data-view="1g">Rings</button>
+      </div>
+    </div>
+    <div class="sa-row" id="sa-focuswrap">
+      <span class="sa-lbl">Focus weight</span>
+      <div class="sa-chips" id="sa-chips"></div>
+    </div>
+  </div>
+  <div id="sa-stage"></div>
+</div>
+
+<script id="sa-seed" type="application/json">{{ scheme_viz | tojson }}</script>
+<script>
+(function () {
+  var card = document.getElementById('sa-card');
+  if (!card) return;
+  var SEED;
+  try { SEED = JSON.parse(document.getElementById('sa-seed').textContent); }
+  catch (e) { SEED = { exercises: [], data: {} }; }
+
+  // Pandora-mapped palette (hexes from the handoff that have no exact token)
+  var ACCENT='#d4a574', ACCENT_GLOW4='rgba(212,165,116,.4)', ACCENT_GLOW5='rgba(212,165,116,.5)',
+      ACCENT_GLOW6='rgba(212,165,116,.6)', MASTERED_INNER='#3a2e22',
+      BG='#121212', CARD='#1a1a1a', CTRL='#242424', BORDER='#2b2b2b', LINE='#474747',
+      PIP_EMPTY='#5e5e5e', T1='#fafafa', T3='#b7b7b7', T4='#949494', T5='#757575';
+  var GREY_RAMP=['#3a3a3a','#474747','#5e5e5e','#757575','#949494','#b7b7b7'];
+  var HERE_RING='0 0 0 2px '+BG+', 0 0 0 4px '+T1;
+
+  var state = { ex: SEED.exercises[0] || null, view: '1b', focus: null };
+
+  function cur() { return state.ex ? SEED.data[state.ex] : null; }
+  function clampT(T) { return Math.max(1, T || 10); }
+
+  // ── build exercise <select> ──
+  var exSel = document.getElementById('sa-ex');
+  exSel.innerHTML = SEED.exercises.map(function (id) {
+    var d = SEED.data[id]; return '<option value="' + id + '">' + d.name + '</option>';
+  }).join('');
+  exSel.value = state.ex;
+  exSel.addEventListener('change', function () {
+    state.ex = this.value; state.focus = null; sync();
+  });
+
+  // ── view pills ──
+  var viewSeg = document.getElementById('sa-view');
+  viewSeg.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    state.view = b.dataset.view;
+    Array.prototype.forEach.call(viewSeg.querySelectorAll('button'),
+      function (x) { x.classList.toggle('active', x === b); });
+    render();
+  });
+
+  function defaultFocus(d) {
+    if (d.current && d.current.weight_kg != null) {
+      for (var i = 0; i < d.weights.length; i++)
+        if (d.weights[i].kg === d.current.weight_kg) return i;
+    }
+    return d.weights.length ? d.weights.length - 1 : null;
+  }
+
+  function sync() {
+    var d = cur();
+    document.getElementById('sa-thresh').textContent = d ? ('threshold ' + clampT(d.T)) : '';
+    document.getElementById('sa-exmeta').textContent = d ? ('Tier ' + d.tier) : '';
+    if (d && state.focus == null) state.focus = defaultFocus(d);
+    renderChips(); render();
+  }
+
+  // ── focus chips (1f/1g only) ──
+  function renderChips() {
+    var d = cur(), wrap = document.getElementById('sa-focuswrap'), box = document.getElementById('sa-chips');
+    var showFocus = d && (state.view === '1f' || state.view === '1g') && d.weights.length;
+    wrap.style.display = showFocus ? '' : 'none';
+    if (!showFocus) return;
+    box.innerHTML = d.weights.map(function (w, i) {
+      var sel = i === state.focus;
+      var isCur = d.current && w.kg === d.current.weight_kg;
+      var dot = isCur ? '<span class="sa-chip-dot" style="background:' + (sel ? BG : T1) + '"></span>' : '';
+      return '<button class="sa-chip' + (sel ? ' sel' : '') + '" data-i="' + i + '">' + w.label + dot + '</button>';
+    }).join('');
+    Array.prototype.forEach.call(box.querySelectorAll('.sa-chip'), function (c) {
+      c.addEventListener('click', function () { state.focus = +this.dataset.i; renderChips(); render(); });
+    });
+  }
+
+  function getCount(d, ci, wi) { return d.passes[ci + ',' + wi] || 0; }
+
+  // ── 1b matrix ──
+  function renderMatrix(d) {
+    var T = clampT(d.T), html = '';
+    html += '<div class="sa-matrix-scroll"><div style="display:flex;flex-direction:column">';
+    // column header
+    html += '<div class="sa-colhead"><div class="sa-colhead-spacer">kg \u2191 heavier</div>';
+    d.cols.forEach(function (c, ci) {
+      var isCurCol = d.current && d.current.col === ci;
+      html += '<div class="sa-colhead-cell" style="color:' + (isCurCol ? T1 : T4) + '">' + c.label + '</div>';
+    });
+    html += '</div>';
+    // body: weights descending (heaviest top)
+    html += '<div class="sa-body"><div class="sa-spine"></div>';
+    var order = d.weights.map(function (_, i) { return i; }).reverse();
+    order.forEach(function (wi) {
+      var w = d.weights[wi];
+      var isHereRow = d.current && w.kg === d.current.weight_kg;
+      html += '<div class="sa-mrow"><div class="sa-rowhead"><div class="sa-tick"></div>' +
+              '<span class="sa-wlabel" style="font-weight:' + (isHereRow ? 600 : 400) + ';color:' + (isHereRow ? T1 : T3) + '">' + w.label + '</span>' +
+              (isHereRow ? '<div class="sa-heremark"></div>' : '') + '</div>';
+      d.cols.forEach(function (c, ci) {
+        var n = getCount(d, ci, wi);
+        var isHere = d.current && isHereRow && d.current.col === ci;
+        var state_ = n === 0 ? 'none' : (n >= T ? 'mastered' : 'progress');
+        var border, bg, shadow = isHere ? HERE_RING : 'none';
+        if (state_ === 'none')     { border = '1px dashed ' + LINE; bg = 'transparent'; }
+        else if (state_ === 'progress') { border = '1px solid ' + BORDER; bg = CARD; }
+        else { border = '1px solid ' + ACCENT; bg = ACCENT;
+               shadow = (isHere ? HERE_RING + ', ' : '') + '0 0 14px ' + ACCENT_GLOW4; }
+        var pips = '';
+        for (var p = 0; p < T; p++) {
+          var pbg, pbd;
+          if (state_ === 'mastered') { pbg = BG; pbd = '1px solid ' + BG; }
+          else if (p < n) { pbg = ACCENT; pbd = '1px solid ' + ACCENT; }
+          else { pbg = 'transparent'; pbd = '1px solid ' + PIP_EMPTY; }
+          pips += '<div class="sa-pip" style="background:' + pbg + ';border:' + pbd + '"></div>';
+        }
+        var overflow = (state_ === 'mastered' && n > T) ? '<span class="sa-overflow">+' + (n - T) + '</span>' : '';
+        html += '<div class="sa-cell" style="border:' + border + ';background:' + bg + ';box-shadow:' + shadow + '">' +
+                '<div class="sa-pipgrid">' + pips + '</div>' + overflow + '</div>';
+      });
+      html += '</div>';
+    });
+    html += '</div></div></div>';
+    return html;
+  }
+
+  // ── 1f segmented cumulative bar ──
+  function renderBars(d) {
+    var T = clampT(d.T), f = state.focus;
+    if (f == null) return '<div class="sa-empty">No passes logged for this exercise yet.</div>';
+    var wUpto = []; for (var i = 0; i <= f; i++) wUpto.push(i);  // weight indices ≤ focus
+    // legend
+    var legend = '<div class="sa-legend">' + wUpto.map(function (wi) {
+      var isF = wi === f, sw = isF ? ACCENT : GREY_RAMP[Math.min(wi, GREY_RAMP.length - 1)];
+      var lbl = d.weights[wi].label + (isF ? ' (focus)' : '');
+      return '<div class="sa-legitem"><div class="sa-swatch" style="background:' + sw + '"></div>' +
+             '<span class="sa-leglabel" style="color:' + (isF ? T1 : T4) + '">' + lbl + '</span></div>';
+    }).join('') + '</div>';
+    // maxTotal across all schemes at this focus
+    var maxTotal = 1;
+    d.cols.forEach(function (c, ci) {
+      var t = 0; wUpto.forEach(function (wi) { t += getCount(d, ci, wi); });
+      if (t > maxTotal) maxTotal = t;
+    });
+    var rows = d.cols.map(function (c, ci) {
+      var atFocus = getCount(d, ci, f);
+      var total = 0; wUpto.forEach(function (wi) { total += getCount(d, ci, wi); });
+      var isHere = d.current && d.current.col === ci && d.weights[f].kg === d.current.weight_kg;
+      var mastered = atFocus >= T;
+      var segs = wUpto.map(function (wi) {
+        var n = getCount(d, ci, wi); if (n <= 0) return '';
+        var isF = wi === f, frac = n / maxTotal;
+        var fill = isF ? ACCENT : GREY_RAMP[Math.min(wi, GREY_RAMP.length - 1)];
+        var light = !isF && wi >= 4;  // lightest greys → dark text
+        var txtcol = isF ? BG : (light ? BG : T1);
+        var num = frac > 0.035 ? ('<span>' + n + '</span>') : '';
+        var sh = (isF && mastered) ? ';box-shadow:0 0 10px ' + ACCENT_GLOW6 : '';
+        return '<div class="sa-bseg" title="' + d.weights[wi].label + '" style="flex:0 0 calc(' + (frac * 100) +
+               '% - 2px);width:calc(' + (frac * 100) + '% - 2px);background:' + fill + ';color:' + txtcol + sh + '">' + num + '</div>';
+      }).join('');
+      var trackBorder = total === 0 ? '1px dashed ' + LINE : '1px solid transparent';
+      var statusCol = mastered ? ACCENT : (atFocus === 0 ? T5 : T1);
+      var check = mastered ? '<span class="sa-material" style="font-size:16px">check</span>' : '';
+      return '<div class="sa-brow" style="box-shadow:' + (isHere ? HERE_RING : 'none') + '">' +
+             '<div class="sa-bscheme" style="color:' + (isHere ? T1 : T3) + '">' + c.label + '</div>' +
+             '<div class="sa-btrack" style="border:' + trackBorder + '">' + segs + '</div>' +
+             '<div class="sa-bstatus" style="color:' + statusCol + '">' + check + atFocus + ' / ' + T + ' here</div>' +
+             '<div class="sa-bhere">' + (isHere ? 'you are here' : '') + '</div></div>';
+    }).join('');
+    var foot = '<div class="sa-foot"><span>bar = all passes at weights \u2264 focus</span><span>right = at focus weight</span></div>';
+    return legend + '<div class="sa-bars">' + rows + '</div>' + foot;
+  }
+
+  // ── 1g radial set ──
+  function renderRings(d) {
+    var T = clampT(d.T), f = state.focus;
+    if (f == null) return '<div class="sa-empty">No passes logged for this exercise yet.</div>';
+    var items = d.cols.map(function (c, ci) {
+      var n = getCount(d, ci, f);
+      var isHere = d.current && d.current.col === ci && d.weights[f].kg === d.current.weight_kg;
+      var state_ = n === 0 ? 'none' : (n >= T ? 'mastered' : 'progress');
+      var pct = Math.min(n, T) / T * 100;
+      var outerBg, outerBorder = 'none', outerShadow = 'none', innerBg;
+      if (state_ === 'none') { outerBg = 'transparent'; outerBorder = '1px dashed ' + PIP_EMPTY; innerBg = 'transparent'; }
+      else if (state_ === 'progress') { outerBg = 'conic-gradient(' + ACCENT + ' ' + (pct * 3.6) + 'deg, ' + BORDER + ' 0deg)'; innerBg = CARD; }
+      else { outerBg = ACCENT; outerShadow = '0 0 14px ' + ACCENT_GLOW5; innerBg = MASTERED_INNER; }
+      var numCol = state_ === 'mastered' ? ACCENT : (state_ === 'none' ? T5 : T1);
+      var denCol = state_ === 'mastered' ? ACCENT : T4;
+      var tag = isHere ? '<span style="color:' + T1 + '">you are here</span>'
+              : state_ === 'mastered' ? '<span style="color:' + ACCENT + '">mastered</span>'
+              : state_ === 'none' ? '<span style="color:' + T5 + '">no passes yet</span>' : '';
+      return '<div class="sa-ritem" style="box-shadow:' + (isHere ? HERE_RING : 'none') + '">' +
+             '<div class="sa-ring" style="background:' + outerBg + ';border:' + outerBorder + ';box-shadow:' + outerShadow + '">' +
+             '<div class="sa-ring-inner" style="background:' + innerBg + '">' +
+             '<span class="sa-rcount" style="color:' + numCol + '">' + n + '</span>' +
+             '<span class="sa-rden" style="color:' + denCol + '">/ ' + T + '</span></div></div>' +
+             '<div class="sa-rscheme" style="color:' + (isHere ? T1 : T3) + '">' + c.label + '</div>' +
+             '<div class="sa-rtag">' + tag + '</div></div>';
+    }).join('');
+    return '<div class="sa-rings">' + items + '</div>';
+  }
+
+  function render() {
+    var d = cur(), stage = document.getElementById('sa-stage');
+    renderChips();
+    if (!d || !d.weights.length) {
+      stage.innerHTML = '<div class="sa-empty">No passes logged for this exercise yet. Rungs appear as weights are passed.</div>';
+      return;
+    }
+    stage.innerHTML = state.view === '1b' ? renderMatrix(d)
+                    : state.view === '1f' ? renderBars(d)
+                    : renderRings(d);
+  }
+
+  sync();
+})();
+</script>

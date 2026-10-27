@@ -89,6 +89,18 @@ def _valid_training_day(date_iso):
     conn.close()
     return date_iso if date_iso <= t else None
 
+
+def training_today():
+    """The current training day as 'YYYY-MM-DD' (HANDOFF §5.1).
+
+    Goes through TODAY_SQL so the ~4 AM roll-over boundary matches every other
+    day comparison in this module. NEVER DATE('now') / DATE(recorded_at), which
+    would reintroduce the two-calendar bug (REVIEW §1.1)."""
+    conn = _gym_db()
+    d = conn.execute("SELECT {today} AS d".format(today=TODAY_SQL)).fetchone()['d']
+    conn.close()
+    return d
+
 # Allowed tracking_type values. weight_reps = load×reps×sets, reps = bodyweight
 # reps, time = timed hold/duration per set, weight_time = load held for a
 # duration per set (e.g. weighted plank, farmer's carry). cardio = duration +
@@ -601,11 +613,14 @@ def get_weight_rep_day_groups(max_tier=3, before_today=True):
     weight and sets x reps, which mean nothing for a plank or a row machine
     session, and tier 4 (Fa Jin) is explosive work that is not laddered.
 
-    before_today excludes the current training day, so the panel is stable
-    mid-session and only ever reflects days that are actually finished. That
-    is the same `{day} < {today}` idiom get_previous_session_sets() uses, and
-    for the same reason it must go through _training_day() / TODAY_SQL rather
-    than a raw DATE().
+    before_today (default True) excludes the current training day, so the home
+    panel is stable mid-session and only reflects days that are actually
+    finished. Feature 02 (HANDOFF §5.2) now also calls it with before_today=False
+    to get EVERY day including today — the finish recap / _scheme_delta diff the
+    with-today and without-today pass counts, and the home panel includes today
+    once the session is finished. Either way the day boundary is the same
+    `{day} < {today}` idiom get_previous_session_sets() uses, through
+    _training_day() / TODAY_SQL rather than a raw DATE().
 
     COALESCE(sets, 1) folds in the legacy import_history rows, which collapse
     several identical sets into one row with sets > 1.
@@ -1076,6 +1091,37 @@ def _exercise_meta_map():
     return {r['id']: dict(r) for r in rows}
 
 
+# ── Stage-bar segment classification (Feature 01, HANDOFF §4.1) ─────────────
+# The /train stage bar groups a session's live sets into pinned stages:
+# Warm-up → T1 → T2 (optional) → T3[shoulders|arms|core]. The server tags each
+# set with its segment so the client derivation (stageState) stays a pure
+# function of the set list. 'warm' is NOT returned yet — warm-up sets carry no
+# is_warmup flag until train-rehaul phase 2 (PLAN-train-rehaul); it arrives then.
+STAGE_T2_GROUPS = ('chest', 'back', 'legs')
+STAGE_T3_PARTS = {'shoulders': 't3:sh', 'arms': 't3:ar', 'core': 't3:co'}
+
+
+def _stage_for(meta):
+    """Stage-bar segment for a set: 't1' | 't2' | 't3:sh' | 't3:ar' | 't3:co' | None.
+
+    Keyed off tier + muscle_group (HANDOFF §4.1). Tier 1 is always T1 (BB OHP and
+    DB Lateral Raise (heavy) are tier-1 shoulders, so they count as T1, not T3).
+    Tier 2/3 split by muscle: chest/back/legs are the optional T2 compound slot;
+    shoulders/arms/core are the three T3 accessory parts. Everything else — tier 4
+    (Fa Jin), cardio, stability, uncategorised, unknown — has no stage.
+    """
+    tier = meta.get('tier')
+    mg = meta.get('muscle_group')
+    if tier == 1:
+        return 't1'
+    if tier in (2, 3):
+        if mg in STAGE_T2_GROUPS:
+            return 't2'
+        if mg in STAGE_T3_PARTS:
+            return STAGE_T3_PARTS[mg]
+    return None
+
+
 def apply_session_rollover():
     """Lazy ~4 AM roll-over stamp (called on Train-page load).
 
@@ -1158,7 +1204,7 @@ def get_live_session_state(day=None):
     day_rhs, day_params = _day_sql(day)
     conn = _gym_db()
     srow = conn.execute(
-        "SELECT id FROM gym_sessions "
+        "SELECT id, finished FROM gym_sessions "
         "WHERE {day} = {today} "
         "ORDER BY finished ASC, id DESC LIMIT 1".format(
             day=_training_day('performed_at'), today=day_rhs),
@@ -1167,7 +1213,7 @@ def get_live_session_state(day=None):
     if not srow:
         conn.close()
         return {'session_id': None, 'has_sets': False, 'sets': [],
-                'muscles': [], 'current_exercise_id': None}
+                'muscles': [], 'current_exercise_id': None, 'finished': False}
     session_id = srow['id']
     prog = conn.execute(
         "SELECT id, exercise_id, weight_kg, sets, reps, duration_s, "
@@ -1190,6 +1236,7 @@ def get_live_session_state(day=None):
             'muscle_group': m.get('muscle_group'),
             'function': m.get('function'),
             'tier': m.get('tier'),
+            'stage': _stage_for(m),  # Feature 01 stage-bar segment (HANDOFF §4.1)
             'tracking_type': m.get('tracking_type', 'weight_reps'),
             'weight_kg': r['weight_kg'], 'reps': r['reps'],
             'duration_s': r['duration_s'],
@@ -1232,7 +1279,17 @@ def get_live_session_state(day=None):
         'sets': sets,
         'muscles': muscles,
         'current_exercise_id': current_exercise_id,
+        'finished': bool(srow['finished']),  # Feature 01/02 explicit done-state
     }
+
+
+def is_today_session_finished():
+    """True if today's live session is explicitly finished (HANDOFF §5.1).
+
+    Reads the same session get_live_session_state() would pick for today, so the
+    home panel's "today counts once finished" rule (Feature 02b) and the live
+    stage bar agree. Day boundary via TODAY_SQL only (REVIEW §1.1)."""
+    return bool(get_live_session_state().get('finished'))
 
 
 # ── Last-session card (Today screen) ─────────────────────────────────────────

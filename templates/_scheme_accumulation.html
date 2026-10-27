@@ -84,6 +84,19 @@
 .sa-rtag { font-size: 12px; height: 16px; }
 .sa-empty { font-family: var(--font-mono); font-size: 12px; color: var(--dim); padding: 20px 4px; }
 .sa-material { font-family: 'Material Symbols Rounded'; font-weight: 600; }
+/* ── Route view (Feature 03) — ported from wireframe §3 (.av-sum/.legend/.climber
+   + @keyframes bob), renamed per HANDOFF §3.2 to avoid colliding with .sa-legend. */
+.sa-rt-sum { display: flex; gap: 14px; margin: 2px 0 10px; }
+.sa-rt-sum div { font-family: var(--font-mono); font-size: 9px; color: var(--dim); letter-spacing: .05em; }
+.sa-rt-sum b { display: block; font-family: var(--font-sans); font-size: 17px; color: var(--text-strong); letter-spacing: -.02em; font-weight: 600; }
+.sa-rt-sum b.a { color: var(--accent); }
+.sa-rt-svg text { font-family: var(--font-mono); }
+.sa-rt-climber { animation: bob 1.8s ease-in-out infinite; }
+@keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+.sa-rt-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+.sa-rt-legend span { display: flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 9px; color: var(--dim); }
+.sa-rt-legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+@media (prefers-reduced-motion: reduce) { .sa-rt-climber { animation-duration: 1ms !important; } }
 </style>
 
 <div class="sa-card" id="sa-card">
@@ -103,6 +116,7 @@
         <button data-view="1b" class="active">Matrix</button>
         <button data-view="1f">Bars</button>
         <button data-view="1g">Rings</button>
+        <button data-view="route">Route</button>
       </div>
     </div>
     <div class="sa-row" id="sa-focuswrap">
@@ -129,6 +143,13 @@
       PIP_EMPTY='#5e5e5e', T1='#fafafa', T3='#b7b7b7', T4='#949494', T5='#757575';
   var GREY_RAMP=['#3a3a3a','#474747','#5e5e5e','#757575','#949494','#b7b7b7'];
   var HERE_RING='0 0 0 2px '+BG+', 0 0 0 4px '+T1;
+  // Route view (Feature 03) hexes, kept verbatim from the wireframe JS and named
+  // here per HANDOFF §3.2 (ACCENT/PIP_EMPTY/BG above are reused for the route).
+  var R_LINE='#2a313a', R_GHOST='#3f4651', R_DIM='#6b7480', R_MUTE='#8b93a0',
+      R_TEXT='#edf0f3', R_HOLDBG='#111316', R_ROPEGHOST='#22262c';
+  // HTML-escape for interpolated exercise names (the file had none before — §6).
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
   var state = { ex: SEED.exercises[0] || null, view: '1b', focus: null };
 
@@ -138,7 +159,7 @@
   // ── build exercise <select> ──
   var exSel = document.getElementById('sa-ex');
   exSel.innerHTML = SEED.exercises.map(function (id) {
-    var d = SEED.data[id]; return '<option value="' + id + '">' + d.name + '</option>';
+    var d = SEED.data[id]; return '<option value="' + id + '">' + esc(d.name) + '</option>';
   }).join('');
   exSel.value = state.ex;
   exSel.addEventListener('change', function () {
@@ -313,6 +334,105 @@
     return '<div class="sa-rings">' + items + '</div>';
   }
 
+  // ── Route view (Feature 03) ──
+  // The ladder drawn as a climbing route: one floor per weight (heaviest on top)
+  // plus a dashed +2.5 kg "NEXT" ghost floor, one hold per rung. Ported geometry-
+  // for-geometry from the wireframe drawRoute() (HANDOFF §6), returning an SVG
+  // string to match this file's string-building style.
+  function renderRoute(d) {
+    var T = clampT(d.T), cols = d.cols, n = cols.length;
+    var kgf = function (w) { return (w % 1) ? w.toFixed(1) : ('' + w); };
+    function attrs(o) { var s = ''; for (var k in o) s += ' ' + k + '="' + o[k] + '"'; return s; }
+    function N(tag, o) { return '<' + tag + attrs(o) + '/>'; }
+    function Tx(o, txt) { return '<text' + attrs(o) + '>' + esc(txt) + '</text>'; }
+
+    var floors = d.weights.map(function (w, i) { return { wi: i, kg: w.kg, ghost: false }; });
+    var topkg = (d.weights.length ? d.weights[d.weights.length - 1].kg : 0) + 2.5;
+    floors.push({ wi: null, kg: topkg, ghost: true });                 // ghost NEXT floor
+    var nf = floors.length;
+    var x0 = 84, x1 = 304, gap = n > 1 ? (x1 - x0) / (n - 1) : 0, fh = Math.min(108, 330 / ((nf - 1) || 1));
+    var H = 40 + fh * (nf - 1) + 52, R = 10, C = 2 * Math.PI * R;
+    var yOf = function (fi) { return H - 40 - fi * fh; };
+
+    var hereCi = (d.current && d.current.col != null) ? d.current.col : null, hereFi = null;
+    if (d.current && d.current.weight_kg != null)
+      for (var k = 0; k < floors.length; k++)
+        if (!floors[k].ghost && floors[k].kg === d.current.weight_kg) { hereFi = k; break; }
+
+    var holds = [];
+    floors.forEach(function (fl, fi) {
+      cols.forEach(function (c, ci) {
+        holds.push({ fi: fi, ci: ci, kg: fl.kg, ghost: fl.ghost,
+          n: fl.ghost ? 0 : getCount(d, ci, fl.wi),
+          x: x0 + ci * gap, y: yOf(fi) - ((ci % 2) ? 10 : 0) });
+      });
+    });
+
+    var S = '';
+    // altimeter
+    S += N('line', { x1: 20, y1: yOf(0) + 18, x2: 20, y2: yOf(nf - 1) - 24, stroke: R_LINE, 'stroke-width': 1 });
+    floors.forEach(function (fl, fi) {
+      var y = yOf(fi), g = fl.ghost, hereW = (d.current && fl.kg === d.current.weight_kg && !g);
+      S += N('line', { x1: 16, y1: y, x2: 24, y2: y, stroke: g ? R_GHOST : R_DIM });
+      S += Tx({ x: 28, y: y + 3, 'font-size': 9, fill: g ? R_DIM : (hereW ? R_TEXT : R_MUTE), 'font-weight': hereW ? 600 : 400 }, kgf(fl.kg));
+      if (g) S += Tx({ x: 28, y: y + 14, 'font-size': 6.5, fill: R_GHOST, 'letter-spacing': '.08em' }, 'NEXT');
+    });
+    S += Tx({ x: 14, y: yOf(nf - 1) - 30, 'font-size': 7, fill: R_DIM, 'letter-spacing': '.1em' }, 'KG \u2191');
+    // rope (same-floor segments; lit once the hold on the left is mastered)
+    for (var i = 1; i < holds.length; i++) {
+      var a = holds[i - 1], b = holds[i]; if (a.fi !== b.fi) continue;
+      var lit = a.n >= T && !b.ghost;
+      S += N('path', { d: 'M' + a.x + ' ' + a.y + ' L' + b.x + ' ' + b.y, fill: 'none',
+        stroke: lit ? ACCENT : (b.ghost ? R_ROPEGHOST : R_LINE), 'stroke-width': lit ? 2 : 1.2, 'stroke-dasharray': b.ghost ? '3 3' : 'none' });
+    }
+    // pitches: a heavier weight restarts at the easiest rung, so floors join on the left
+    for (var fi = 0; fi < nf - 1; fi++) {
+      var pa = holds.filter(function (h) { return h.fi === fi && h.ci === 0; })[0];
+      var pb = holds.filter(function (h) { return h.fi === fi + 1 && h.ci === 0; })[0];
+      var plit = holds.filter(function (h) { return h.fi === fi; }).some(function (h) { return h.n >= T; });
+      S += N('path', { d: 'M' + (pa.x - 14) + ' ' + pa.y + ' L' + (pa.x - 14) + ' ' + pb.y + ' L' + (pb.x - R) + ' ' + pb.y,
+        fill: 'none', stroke: plit ? ACCENT : R_LINE, 'stroke-width': 1.2, 'stroke-dasharray': '3 3', opacity: .8 });
+      S += Tx({ x: pa.x - 18, y: (pa.y + pb.y) / 2 + 3, 'font-size': 6.5, 'text-anchor': 'end', fill: R_DIM }, '+' + kgf(floors[fi + 1].kg - floors[fi].kg));
+    }
+    // holds
+    holds.forEach(function (h) {
+      if (h.ghost) { S += N('circle', { cx: h.x, cy: h.y, r: R, fill: 'none', stroke: R_GHOST, 'stroke-dasharray': '2 3' }); }
+      else if (h.n >= T) {
+        S += N('circle', { cx: h.x, cy: h.y, r: R + 4, fill: ACCENT, opacity: .14 });
+        S += N('circle', { cx: h.x, cy: h.y, r: R, fill: ACCENT });
+        S += Tx({ x: h.x, y: h.y + 3, 'font-size': 8, 'text-anchor': 'middle', fill: BG, 'font-weight': 700 }, h.n > T ? '+' + (h.n - T) : '\u2713');
+      } else if (h.n > 0) {
+        S += N('circle', { cx: h.x, cy: h.y, r: R, fill: R_HOLDBG, stroke: R_LINE, 'stroke-width': 3 });
+        S += N('circle', { cx: h.x, cy: h.y, r: R, fill: 'none', stroke: ACCENT, 'stroke-width': 3,
+          'stroke-dasharray': (C * h.n / T) + ' ' + C, transform: 'rotate(-90 ' + h.x + ' ' + h.y + ')', 'stroke-linecap': 'round' });
+        S += Tx({ x: h.x, y: h.y + 3, 'font-size': 8, 'text-anchor': 'middle', fill: R_TEXT }, '' + h.n);
+      } else { S += N('circle', { cx: h.x, cy: h.y, r: R - 2, fill: 'none', stroke: PIP_EMPTY, 'stroke-dasharray': '2 2' }); }
+      if (h.fi === 0 || h.ghost) S += Tx({ x: h.x, y: h.y + (h.ghost ? -16 : 22), 'font-size': 7, 'text-anchor': 'middle', fill: R_DIM }, cols[h.ci].label);
+    });
+    // climber (▲ you are here) — skip when the current rung is unknown
+    if (hereCi != null && hereFi != null) {
+      var hh = holds.filter(function (h) { return h.fi === hereFi && h.ci === hereCi; })[0];
+      if (hh) S += '<g class="sa-rt-climber">' + N('path', { d: 'M' + (hh.x - 5) + ' ' + (hh.y - 15) + ' L' + (hh.x + 5) + ' ' + (hh.y - 15) + ' L' + hh.x + ' ' + (hh.y - 8) + ' Z', fill: R_TEXT }) + '</g>';
+    }
+    // summit flag on the last ghost hold
+    var last = holds[holds.length - 1];
+    S += N('path', { d: 'M' + last.x + ' ' + (last.y - 12) + ' L' + last.x + ' ' + (last.y - 30) + ' L' + (last.x + 11) + ' ' + (last.y - 25) + ' L' + last.x + ' ' + (last.y - 20), fill: 'none', stroke: R_DIM });
+
+    var real = holds.filter(function (h) { return !h.ghost; });
+    var mastered = real.filter(function (h) { return h.n >= T; }).length;
+    var touched = real.filter(function (h) { return h.n > 0; }).length;
+    var hereLbl = (hereCi != null) ? cols[hereCi].label : '\u2014';
+    var hereAt = (d.current && d.current.weight_kg != null) ? ('@ ' + kgf(d.current.weight_kg) + ' kg') : '@ \u2014';
+    var sum = '<div class="sa-rt-sum"><div><b class="a">' + mastered + '</b>holds mastered</div>'
+            + '<div><b>' + touched + '/' + real.length + '</b>touched</div>'
+            + '<div><b>' + esc(hereLbl) + '</b>' + esc(hereAt) + '</div></div>';
+    var legend = '<div class="sa-rt-legend"><span><i style="background:' + ACCENT + '"></i>mastered</span>'
+            + '<span><i style="border:2px solid ' + ACCENT + '"></i>in progress</span>'
+            + '<span><i style="border:1px dashed ' + PIP_EMPTY + '"></i>untouched</span>'
+            + '<span>\u25b2 you are here</span></div>';
+    return sum + '<svg class="sa-rt-svg" width="100%" viewBox="0 0 320 ' + H + '">' + S + '</svg>' + legend;
+  }
+
   function render() {
     var d = cur(), stage = document.getElementById('sa-stage');
     renderChips();
@@ -322,6 +442,7 @@
     }
     stage.innerHTML = state.view === '1b' ? renderMatrix(d)
                     : state.view === '1f' ? renderBars(d)
+                    : state.view === 'route' ? renderRoute(d)
                     : renderRings(d);
   }
 

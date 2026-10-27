@@ -75,11 +75,18 @@
 
 /* ── Food logger (4-column grid) ─────────────────────────────────── */
 .fl-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+/* Meal palette — ONE source of truth, consumed by both the meal columns (.fl-col)
+   and the day-fill coverage dots (_day_fill.html). Promoted from the former
+   per-column hardcodes so there is a single palette, not two (HANDOFF G1). */
+:root {
+    --meal-breakfast: #f0b45f; --meal-lunch: #7fb069;
+    --meal-dinner: #6b93b8;    --meal-snack: #a887b8;
+}
 .fl-col { --meal-col: var(--accent); }
-.fl-col[data-meal="breakfast"] { --meal-col: #f0b45f; }
-.fl-col[data-meal="lunch"]     { --meal-col: #7fb069; }
-.fl-col[data-meal="dinner"]    { --meal-col: #6b93b8; }
-.fl-col[data-meal="snack"]     { --meal-col: #a887b8; }
+.fl-col[data-meal="breakfast"] { --meal-col: var(--meal-breakfast); }
+.fl-col[data-meal="lunch"]     { --meal-col: var(--meal-lunch); }
+.fl-col[data-meal="dinner"]    { --meal-col: var(--meal-dinner); }
+.fl-col[data-meal="snack"]     { --meal-col: var(--meal-snack); }
 .fl-col {
     display: flex; flex-direction: column;
     background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md);
@@ -392,6 +399,10 @@
 {# ── Today's nutrition (4-column grid) ────────────────────────────────── #}
 <section class="section">
     <p class="home-eyebrow">Today's food</p>
+    {# Day-fill panel: calorie ring + protein bar + meal-coverage dots. Sits ABOVE
+       #fl-grid (which flRender rebuilds via innerHTML, G4) and is updated in place by
+       window.dayFillUpdate(). See docs/HANDOFF-food-logging-completion.md. #}
+    {% include '_day_fill.html' %}
     <div id="fl-grid" class="fl-grid"></div>
 </section>
 
@@ -608,7 +619,11 @@
             html += '<div class="fl-col-entries">';
             if (rows.length) {
                 rows.forEach(function (e) {
-                    html += '<div class="fl-entry" data-id="' + e.id + '">'
+                    // Mark ONLY the just-logged entry so its row plays `entryland` once.
+                    // #fl-grid is innerHTML-rebuilt each render, so the class never
+                    // persists to replay on a later render (G4/G11).
+                    var isNew = (opts.animateEntry && opts.animateEntry.id === e.id) ? ' fl-entry-new' : '';
+                    html += '<div class="fl-entry' + isNew + '" data-id="' + e.id + '">'
                         + '<span class="fl-entry-name" onclick="openFoodCard(' + e.id + ')">' + flH(e.name) + '</span>'
                         + '<span class="fl-entry-kcal">' + Math.round(e.calories || 0) + '</span>'
                         + '<span class="fl-entry-pro">' + (e.protein_g || 0).toFixed(1) + 'g</span>'
@@ -643,7 +658,7 @@
         // Cumulative calorie + protein bars
         var totalCal = FL_ENTRIES.reduce(function(s, e) { return s + (e.calories || 0); }, 0);
         var totalPro = FL_ENTRIES.reduce(function(s, e) { return s + (e.protein_g || 0); }, 0);
-        var goalCal = {{ food_goals.calories or 0 }};
+        var goalCal = (window.flGoalCal != null) ? window.flGoalCal : {{ food_goals.calories or 0 }};
         var goalPro = {{ food_goals.protein_g or 0 }};
         var pct = goalCal > 0 ? Math.min(100, (totalCal / goalCal) * 100) : 0;
         var pctPro = goalPro > 0 ? Math.min(100, (totalPro / goalPro) * 100) : 0;
@@ -653,6 +668,32 @@
         // Refresh it live after every add/delete so the numbers stay in sync.
         if (typeof window.macroBarUpdate === 'function') {
             window.macroBarUpdate(totalCal, goalCal, totalPro, goalPro);
+        }
+
+        // Day-fill panel (ring + protein bar + meal-coverage dots). Lives in its own
+        // element ABOVE #fl-grid (never innerHTML'd, G4), updated in place here — the
+        // same pattern as macroBarUpdate. coveredMeals = meals with >=1 entry (derived,
+        // no schema change). opts carries animateEntry, which gates the one-shots.
+        var coveredMeals = MEAL_ORDER.filter(function (m) { return byMeal[m].length > 0; });
+        // Per-entry breakdown for the segmented calorie bar, in meal order
+        // (breakfast -> lunch -> dinner -> snack), then entry order within a meal.
+        // Derived here from the same byMeal grouping; no schema change (mirrors
+        // coveredMeals). Passed on opts so dayFillUpdate's signature is unchanged.
+        var calSegments = [];
+        MEAL_ORDER.forEach(function (m) {
+            byMeal[m].forEach(function (e) {
+                calSegments.push({
+                    id: e.id, name: e.name, meal: m,
+                    calories: e.calories || 0,
+                    protein_g: e.protein_g || 0,
+                    carbs_g: e.carbs_g || 0,
+                    fat_g: e.fat_g || 0
+                });
+            });
+        });
+        opts.calSegments = calSegments;
+        if (typeof window.dayFillUpdate === 'function') {
+            window.dayFillUpdate(totalCal, goalCal, totalPro, goalPro, coveredMeals, opts);
         }
 
         if (opts.animateEntry) {
@@ -682,6 +723,9 @@
             setTimeout(function () { overlay.remove(); }, 420);
         }, { once: true });
     }
+    // Exposed so the day-fill panel's protein bar (_day_fill.html, a separate script
+    // scope) can reuse the exact grow-overlay language instead of re-implementing it.
+    window.flAnimateBarGrowth = flAnimateBarGrowth;
 
     // Floating "+N" badge over a total-bar head, matching the row's own animation.
     function flShowBarPopup(headId, text) {
@@ -799,6 +843,7 @@
         } catch (_) { location.reload(); }
     };
 
+    window.flRender = flRender;   // Day-fill settings re-renders after a goal change
     flRender();
 })();
 </script>

@@ -4,8 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Stage Bar & Accumulation</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* The app's own font files (static/fonts), so this renders with exactly what /train and home use.
+   Paths are relative to docs/wireframes/. */
+@font-face{font-family:"Inter";font-weight:400;src:url(../../static/fonts/Inter-Regular.woff2) format("woff2")}
+@font-face{font-family:"Inter";font-weight:500;src:url(../../static/fonts/Inter-Medium.woff2) format("woff2")}
+@font-face{font-family:"Inter";font-weight:600;src:url(../../static/fonts/Inter-SemiBold.woff2) format("woff2")}
+@font-face{font-family:"Inter";font-weight:700;src:url(../../static/fonts/Inter-Bold.woff2) format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-weight:400;src:url(../../static/fonts/JetBrainsMono-Regular.woff2) format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-weight:500;src:url(../../static/fonts/JetBrainsMono-Medium.woff2) format("woff2")}
+@font-face{font-family:"JetBrains Mono";font-weight:600 700;src:url(../../static/fonts/JetBrainsMono-SemiBold.woff2) format("woff2")}
+</style>
 <style>
 /* Pandora dark tokens, copied from templates/base.html so the wireframes read as the real app */
 :root{

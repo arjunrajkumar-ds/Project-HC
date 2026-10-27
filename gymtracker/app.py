@@ -11,7 +11,8 @@ from .database import init_db, get_db, get_session_cardio, get_cardio_choices, l
 from .swim_routes import bp as swim_bp
 from .pilates_routes import bp as pilates_bp
 from .database import TIER_BOUNDS
-from .gym_bank import get_last_gym_session, get_last_session_multisource, get_week_activity_days, get_weight_rep_day_groups, get_gym_bank, get_gym_bank_grouped, get_gym_exercise, gym_add_exercise, gym_update_exercise, gym_set_enabled, gym_archive_exercise, gym_unarchive_exercise, gym_delete_exercise, gym_reorder_function, get_gym_functions, gym_add_function, log_gym_set, get_today_tally, undo_last_today, get_or_create_today_gym_session, get_exercise_prefill, get_live_session_state, apply_session_rollover, get_exercise_recency, get_e1rm_bests, get_previous_session_sets, delete_gym_set, end_gym_session, _valid_training_day, TRACKING_TYPES, TRACKING_FIELDS, PROGRESSION_FIELD_LABELS, TIER_LABELS
+from .energy import KJ_PER_KCAL
+from .gym_bank import get_last_gym_session, get_last_session_multisource, get_week_activity_days, get_weight_rep_day_groups, get_gym_bank, get_gym_bank_grouped, get_gym_exercise, gym_add_exercise, gym_update_exercise, gym_set_enabled, gym_archive_exercise, gym_unarchive_exercise, gym_delete_exercise, gym_reorder_function, get_gym_functions, gym_add_function, log_gym_set, get_today_tally, undo_last_today, get_or_create_today_gym_session, get_exercise_prefill, get_live_session_state, training_today, is_today_session_finished, apply_session_rollover, get_exercise_recency, get_e1rm_bests, get_previous_session_sets, delete_gym_set, end_gym_session, _valid_training_day, TRACKING_TYPES, TRACKING_FIELDS, PROGRESSION_FIELD_LABELS, TIER_LABELS
 app = Flask(__name__,
             template_folder=_os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'templates'),
             static_folder=_os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'static'))
@@ -559,9 +560,12 @@ def _home_week_metrics(profile_id, today, monday, goals, week_days):
 #     same thing as in the legacy ladder. Only tiers 1-3 qualify: tier 4 is Fa
 #     Jin (explosive, not laddered) and tier 5 is cardio (no weight axis).
 #
-# The current training day is excluded (get_weight_rep_day_groups' before_today),
-# so the panel never shifts under you mid-session and counts only days that are
-# actually finished.
+# By default the current training day is excluded (get_weight_rep_day_groups'
+# before_today), so the panel never shifts under you mid-session. Feature 02b
+# (HANDOFF §5.2) flips that once today's session is FINISHED:
+# build_scheme_home_context passes include_today=is_today_session_finished(), so a
+# finished today counts on the home panel — _build_scheme_viz still only ever
+# counts days that are done.
 SCHEME_VIZ_THRESHOLD = 5
 
 
@@ -577,17 +581,17 @@ def _gym_tier_ladder(tier):
             for reps_ in range(rmin, rmax + 1)]
 
 
-def _build_scheme_viz(threshold=None):
-    """Build the accumulation seed from gym_progression.
+def _scheme_pass_counts(rows):
+    """Aggregate weight-rep day groups into per-exercise pass counts.
 
-    Returns {'exercises': [id-as-str...], 'data': {id: {...}}} in the shape
-    templates/_scheme_accumulation.html expects, ordered by total passes desc.
-    An exercise with no passes is omitted so the panel stays quiet rather than
-    rendering a wall of empty grids.
+    Returns {exid: {'name','tier','days','last_day','pass_counts'}} where
+    pass_counts maps (col_index, weight) -> how many days passed that rung at that
+    weight, and 'days' maps (day, weight) -> {reps: n_sets} so callers can derive
+    the "you are here" position. Extracted from _build_scheme_viz (HANDOFF §5.2)
+    so the finish-recap delta can run two row-sets through identical pass logic.
+    A PASS is the full prescription on one training day: >=S sets of >=R reps at
+    weight W (see the module header + PLAN-scheme-accumulation-gym).
     """
-    T = max(1, int(threshold if threshold is not None else SCHEME_VIZ_THRESHOLD))
-    rows = get_weight_rep_day_groups(max_tier=3, before_today=True)
-
     per_ex = {}
     for r in rows:
         ex = per_ex.setdefault(r['exercise_id'], {
@@ -597,12 +601,8 @@ def _build_scheme_viz(threshold=None):
         if ex['last_day'] is None or r['day'] > ex['last_day']:
             ex['last_day'] = r['day']
 
-    data, totals = {}, {}
     for exid, ex in per_ex.items():
         ladder = _gym_tier_ladder(ex['tier'])
-        if not ladder:
-            continue
-
         pass_counts = {}          # (col_index, weight) -> passes
         for (day, weight), rep_counts in ex['days'].items():
             for ci, (need_sets, need_reps) in enumerate(ladder):
@@ -610,6 +610,34 @@ def _build_scheme_viz(threshold=None):
                 if cleared >= need_sets:
                     key = (ci, weight)
                     pass_counts[key] = pass_counts.get(key, 0) + 1
+        ex['pass_counts'] = pass_counts
+    return per_ex
+
+
+def _build_scheme_viz(threshold=None, include_today=False):
+    """Build the accumulation seed from gym_progression.
+
+    Returns {'exercises': [id-as-str...], 'data': {id: {...}}} in the shape
+    templates/_scheme_accumulation.html expects, ordered by total passes desc.
+    An exercise with no passes is omitted so the panel stays quiet rather than
+    rendering a wall of empty grids.
+
+    include_today (HANDOFF §5.2) is forwarded to get_weight_rep_day_groups as
+    before_today=not include_today: the home panel counts today only once its
+    session is finished (Feature 02b). The pass logic is unchanged — it is shared
+    with the finish recap through _scheme_pass_counts.
+    """
+    T = max(1, int(threshold if threshold is not None else SCHEME_VIZ_THRESHOLD))
+    rows = get_weight_rep_day_groups(max_tier=3, before_today=not include_today)
+    per_ex = _scheme_pass_counts(rows)
+
+    data, totals = {}, {}
+    for exid, ex in per_ex.items():
+        ladder = _gym_tier_ladder(ex['tier'])
+        if not ladder:
+            continue
+
+        pass_counts = ex['pass_counts']   # (col_index, weight) -> passes
         if not pass_counts:
             continue
 
@@ -643,6 +671,95 @@ def _build_scheme_viz(threshold=None):
 
     order = sorted(totals, key=lambda e: (-totals[e], data[str(e)]['name']))
     return {'exercises': [str(e) for e in order], 'data': data}
+
+
+def _home_rows(rows, today, today_finished):
+    """The day-rows that count on the home accumulation panel (HANDOFF §5.2).
+
+    Every finished day counts: day < today always, plus today itself once its
+    session is finished (Feature 02b). `rows` must come from
+    get_weight_rep_day_groups(before_today=False) so today is present to filter.
+    `today` is the training-day string from training_today()."""
+    return [r for r in rows
+            if r['day'] < today or (r['day'] == today and today_finished)]
+
+
+def _scheme_delta(live, day=None, threshold=None):
+    """Passes a day's session banked, for the finish recap (HANDOFF §5.2).
+
+    Diffs the home-panel pass counts WITHOUT day D against WITH day D, for any
+    training day D (D = day or today). Returns one item per (exercise, weight)
+    whose pass count rose: before/after per rung, the rungs that crossed T
+    ('mastered'), total passes gained (incl. overflow past T), and that day's reps
+    at that weight from live['sets']. Items follow first appearance in
+    live['sets'], then weight descending. The day boundary is training_today()/
+    TODAY_SQL only (REVIEW §1.1); an unfinished today never leaks into base or
+    after when D is a past day, because _home_rows gates today on its finished
+    state.
+    """
+    T = max(1, int(threshold if threshold is not None else SCHEME_VIZ_THRESHOLD))
+    today = training_today()
+    D = day or today
+    all_rows = get_weight_rep_day_groups(before_today=False)
+    base = [r for r in _home_rows(all_rows, today, is_today_session_finished())
+            if r['day'] != D]
+    day_rows = [r for r in all_rows if r['day'] == D]
+    before = _scheme_pass_counts(base)
+    after = _scheme_pass_counts(base + day_rows)
+
+    # live['sets'] is the authoritative order of what happened on D.
+    sets = live.get('sets') or []
+    ex_order = []
+    for s in sets:
+        exid = s.get('exercise_id')
+        if exid not in ex_order:
+            ex_order.append(exid)
+
+    items, seen = [], set()
+    for exid in ex_order:
+        aex = after.get(exid)
+        if not aex:
+            continue
+        ladder = _gym_tier_ladder(aex['tier'])
+        if not ladder:
+            continue
+        bpc = (before.get(exid) or {}).get('pass_counts', {}) if before.get(exid) else {}
+        apc = aex['pass_counts']
+        # weights where some rung's pass count rose on D, heaviest first.
+        weights = sorted({w for (ci, w) in apc if apc[(ci, w)] > bpc.get((ci, w), 0)},
+                         reverse=True)
+        for w in weights:
+            key = (exid, w)
+            if key in seen:
+                continue
+            seen.add(key)
+            cols, gained, mastered = [], 0, []
+            for ci, (s_, r_) in enumerate(ladder):
+                b = bpc.get((ci, w), 0)
+                a = apc.get((ci, w), 0)
+                gained += a - b
+                lbl = '%d\u00d7%d' % (s_, r_)
+                cols.append({'label': lbl, 'before': b, 'after': a})
+                if b < T <= a:
+                    mastered.append(lbl)
+            day_reps = [s['reps'] for s in sets
+                        if s.get('exercise_id') == exid
+                        and s.get('weight_kg') == w
+                        and s.get('tracking_type') == 'weight_reps'
+                        and s.get('reps')]
+            items.append({
+                'exercise_id': exid,
+                'name': aex['name'],
+                'tier': aex['tier'],
+                'T': T,
+                'weight_kg': w,
+                'weight_label': ('%.1f kg' % w) if (w % 1) else ('%d kg' % int(w)),
+                'day_reps': day_reps,
+                'cols': cols,
+                'gained': gained,
+                'mastered': mastered,
+            })
+    return items
 
 
 def _shared_home_context(pid, today, actual_today):
@@ -773,6 +890,10 @@ def _shared_home_context(pid, today, actual_today):
         'food_entries': food_entries, 'recent_foods': recent_foods,
         'food_totals': food_totals,
         'weekly_goals': weekly_goals, 'goal_foods': goal_foods,
+        # Energy display: DB is canonical kcal; the Day-fill panel offers a
+        # client-side kcal/kJ toggle and uses this factor to convert for display
+        # only (see gymtracker/energy.py — single source of truth for the factor).
+        'kj_per_kcal': KJ_PER_KCAL,
         # capability set drives per-profile shared panels (e.g. nicotine counter)
         'profile_caps': caps,
         # Private nicotine counter data — ONLY populated when the profile holds the
@@ -794,7 +915,7 @@ def build_scheme_home_context(pid, today, actual_today, shared):
     else:
         food_date_label = food_d.strftime('%a, %b %-d')
     return {
-        'scheme_viz': _build_scheme_viz(),
+        'scheme_viz': _build_scheme_viz(include_today=is_today_session_finished()),
         'food_date': food_date,
         'food_prev_date': (food_d - timedelta(days=1)).isoformat(),
         'food_next_date': (food_d + timedelta(days=1)).isoformat(),
@@ -1993,7 +2114,7 @@ def api_gym_exercise_prefill(exercise_id):
 
 @app.route('/api/gym/set/delete', methods=['POST'])
 def api_gym_set_delete():
-    """Remove one specific set from today's live session.
+    """Remove one specific set from the day's live session (today, or `date`).
 
     The redesigned Train page deletes by set id rather than by recency: its set
     table shows every set of the current exercise, and the one you want gone is
@@ -2009,27 +2130,39 @@ def api_gym_set_delete():
     if not set_id:
         return {'ok': False, 'error': 'Missing set_id'}, 400
 
-    live = get_live_session_state()
+    # Back-dated logging: the Train date header can show a PAST training day,
+    # and its set table offers the same delete button. Before this took a date
+    # the membership check below ran against TODAY's session, so deleting a
+    # set on a past day 404'd ("not in today's session") — or, with no session
+    # today, "No live session today". Same date contract as /api/gym/log-set:
+    # absent/empty -> today, future/garbage -> 400.
+    raw_date = (data.get('date') or '').strip()
+    day = _valid_training_day(raw_date) if raw_date else None
+    if raw_date and day is None:
+        return {'ok': False, 'error': 'Invalid or future date'}, 400
+
+    live = get_live_session_state(day)
     if not live.get('session_id'):
-        return {'ok': False, 'error': 'No live session today'}, 404
+        return {'ok': False, 'error': 'No session on that day' if day else 'No live session today'}, 404
     # 404, not 403: a stale tab pointing at an already-removed set should be
     # told so rather than left retrying.
     if not any(s['id'] == set_id for s in (live.get('sets') or [])):
-        return {'ok': False, 'error': 'That set is not in today\'s session'}, 404
+        return {'ok': False, 'error': 'That set is not in that day\'s session' if day
+                else 'That set is not in today\'s session'}, 404
 
     try:
         removed = delete_gym_set(set_id, session_id=live['session_id'])
     except Exception as e:
         return {'ok': False, 'error': f'Could not remove the set: {e}'}, 500
 
-    fresh = get_live_session_state()
+    fresh = get_live_session_state(day)
     return {'ok': True, 'removed': removed,
             'workout_so_far': fresh, 'checklist': fresh['muscles']}
 
 
 @app.route('/api/gym/session/finish', methods=['POST'])
 def api_gym_session_finish():
-    """Close today's live session.
+    """Close the live session for today, or for a back-dated day if `date` is sent.
 
     end_gym_session() has existed since the gym session tables were added, but
     nothing ever called it — ended_at was only ever stamped days late by the
@@ -2037,15 +2170,36 @@ def api_gym_session_finish():
     Finishing is cosmetic (every set is already persisted); what it buys is
     making "I am done" an explicit act instead of something inferred at 4 AM.
     """
-    live = get_live_session_state()
+    # Back-dated logging: finishing while the date header shows a past day must
+    # close THAT day's session. Before this took a date it always closed today's
+    # (or 404'd when today had none), while the page went on showing the past
+    # day as open. Same date contract as /api/gym/log-set.
+    data = request.get_json(silent=True) or {}
+    raw_date = (data.get('date') or '').strip()
+    day = _valid_training_day(raw_date) if raw_date else None
+    if raw_date and day is None:
+        return {'ok': False, 'error': 'Invalid or future date'}, 400
+
+    live = get_live_session_state(day)
     sid = live.get('session_id')
     if not sid:
-        return {'ok': False, 'error': 'No live session today'}, 404
+        return {'ok': False, 'error': 'No session on that day' if day else 'No live session today'}, 404
     try:
         end_gym_session(sid)
     except Exception as e:
         return {'ok': False, 'error': f'Could not finish the session: {e}'}, 500
-    return {'ok': True, 'workout_so_far': get_live_session_state()}
+    live = get_live_session_state(day)
+    # Finish recap (Feature 02, HANDOFF §5.2): the passes this day's session
+    # banked, measured against every other counted day. Computed in its OWN
+    # try/except so a recap failure can never fail the finish — every set is
+    # already persisted and the session is already closed above.
+    try:
+        delta = _scheme_delta(live, day)
+    except Exception as e:
+        app.logger.warning('finish recap delta failed: %s', e)
+        delta = []
+    return {'ok': True, 'workout_so_far': live,
+            'accumulation_delta': delta, 'day': day or training_today()}
 
 
 @app.route('/api/gym/quick-log', methods=['POST'])
@@ -2518,6 +2672,21 @@ def food_goals_set():
     current = get_macro_goals(pid)
     set_macro_goals(_safe_float(request.form.get('calories'), current['calories']), _safe_float(request.form.get('protein_g'), current['protein_g']), _safe_float(request.form.get('carbs_g'), current['carbs_g']), _safe_float(request.form.get('fat_g'), current['fat_g']), pid)
     return redirect(url_for('food'))
+
+
+@app.route('/food/api/calorie-goal', methods=['POST'])
+def food_api_calorie_goal():
+    """Set the daily calorie goal from the home Day-fill settings panel.
+    Body: {calories} in canonical kcal (the client converts from kJ). Other macro
+    goals are preserved. Returns JSON so the panel can re-render in place."""
+    data = request.get_json(silent=True) or {}
+    cal = _safe_float(data.get('calories'), -1)
+    if not (500 <= cal <= 10000):
+        return {'ok': False, 'error': 'Goal must be 500–10,000 kcal'}, 400
+    pid = _profile_id()
+    cur = get_macro_goals(pid)
+    set_macro_goals(round(cal), cur['protein_g'], cur['carbs_g'], cur['fat_g'], pid)
+    return {'ok': True, 'calories': round(cal)}
 
 
 # ── Weekly food goals (quest log) ───────────────────────────────────────

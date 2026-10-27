@@ -2126,12 +2126,18 @@ def get_nicotine_week(profile_id, monday_iso, sunday_iso):
 
 # ── Food tracking ──────────────────────────────────────────────────────
 
+_PROTEIN_G_PER_KG = {1: 2.205, 2: 0.8, 3: 0.8}
+_PROTEIN_G_PER_KG_DEFAULT = 2.205
+
+
 def get_macro_goals(profile_id=1):
     conn = get_db()
     row = conn.execute('SELECT * FROM macro_goals WHERE profile_id = ?', (profile_id,)).fetchone()
     goals = dict(row) if row else {'calories': 2000, 'protein_g': 150, 'carbs_g': 200, 'fat_g': 70, 'workout_target': 5}
 
-    # Dynamic protein goal: 1g per pound of bodyweight from most recent weigh-in
+    # Dynamic protein goal from the most recent weigh-in. Per-profile multiplier
+    # (g protein per kg bodyweight): Arjun (1) keeps 1 g/lb (~2.205 g/kg);
+    # Gayathri (2) and Raj (3) use 0.8 g/kg (adult RDA).
     latest_weight = conn.execute(
         "SELECT weight_kg FROM body_weight WHERE profile_id = ? ORDER BY date DESC LIMIT 1",
         (profile_id,)
@@ -2139,7 +2145,8 @@ def get_macro_goals(profile_id=1):
     conn.close()
 
     if latest_weight and latest_weight['weight_kg']:
-        goals['protein_g'] = round(latest_weight['weight_kg'] * 2.205)
+        g_per_kg = _PROTEIN_G_PER_KG.get(profile_id, _PROTEIN_G_PER_KG_DEFAULT)
+        goals['protein_g'] = round(latest_weight['weight_kg'] * g_per_kg)
 
     return goals
 

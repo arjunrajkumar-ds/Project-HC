@@ -47,7 +47,7 @@ os.environ['GYMTRACKER_DB'] = _DB
 
 from gymtracker import gym_bank          # noqa: E402
 gym_bank.DB_PATH = _DB
-from gymtracker.app import _build_scheme_viz, _gym_tier_ladder   # noqa: E402
+from gymtracker.app import _build_scheme_viz, _gym_tier_ladder, _scheme_delta   # noqa: E402
 
 FAILS = []
 
@@ -71,6 +71,15 @@ def _mkdb():
             tracking_type TEXT NOT NULL DEFAULT 'weight_reps',
             archived_at TEXT, sort_order INTEGER NOT NULL DEFAULT 0,
             exercise_class TEXT NOT NULL DEFAULT 'strength');
+        -- gym_sessions mirrors migrate_gym_sessions.py. Nothing here reads it
+        -- yet; it is in the fixture so the stage-bar / finish-recap work
+        -- (docs/HANDOFF-stage-bar-recap-route.md §4, "today counts once
+        -- finished") can query it without this suite crashing on a missing table.
+        CREATE TABLE gym_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            performed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            finished INTEGER NOT NULL DEFAULT 0,
+            ended_at TEXT);
         CREATE TABLE gym_progression (
             id INTEGER PRIMARY KEY AUTOINCREMENT, exercise_id INTEGER NOT NULL,
             weight_kg REAL, sets INTEGER, reps INTEGER,
@@ -192,6 +201,98 @@ def main():
     check("current carries a weight and a rung", d['current']['weight_kg'] == 60.0)
     check("weights are ascending",
           [w['kg'] for w in d['weights']] == sorted(w['kg'] for w in d['weights']))
+
+    print("\n[today] today counts on the home panel only once finished (Feature 02b)")
+    # A fresh pass TODAY for Squat at a brand-new weight, inside an OPEN session.
+    sid = conn.execute("INSERT INTO gym_sessions (performed_at, finished) VALUES (?, 0)",
+                       (_utc(at(0)),)).lastrowid
+    conn.commit()
+    for _ in range(3):
+        conn.execute("INSERT INTO gym_progression (exercise_id, weight_kg, sets, reps, recorded_at, session_id) "
+                     "VALUES (1, 72.5, 1, 5, ?, ?)", (_utc(at(0)), sid))
+    conn.commit()
+
+    def squat_72():
+        # The home panel's own rule: include today iff the session is finished.
+        d = _build_scheme_viz(include_today=gym_bank.is_today_session_finished())['data'].get('1')
+        if not d:
+            return None
+        cols = [c['label'] for c in d['cols']]
+        wi = {w['label']: i for i, w in enumerate(d['weights'])}
+        if '72.5 kg' not in wi:
+            return None
+        return d['passes'].get('%d,%d' % (cols.index('3×5'), wi['72.5 kg']))
+
+    check("open session today → is_today_session_finished() is False",
+          gym_bank.is_today_session_finished() is False)
+    check("today's 3×5@72.5 is EXCLUDED while the session is open", squat_72() is None)
+    conn.execute("UPDATE gym_sessions SET finished=1 WHERE id=?", (sid,))
+    conn.commit()
+    check("finishing the session → is_today_session_finished() is True",
+          gym_bank.is_today_session_finished() is True)
+    check("now today's 3×5@72.5 is INCLUDED on the home panel", squat_72() == 1)
+    conn.execute("UPDATE gym_sessions SET finished=0 WHERE id=?", (sid,))
+    conn.commit()
+    check("logging again reopens → today drops back out",
+          gym_bank.is_today_session_finished() is False and squat_72() is None)
+
+    print("\n[delta] the finish recap diffs today's passes against every other day (Feature 02)")
+    # Add two more of today's passes so the delta spans weights + exercises:
+    #   Squat 60 (already has one historical pass → overflow), Row 50 (3×6).
+    for _ in range(3):
+        conn.execute("INSERT INTO gym_progression (exercise_id, weight_kg, sets, reps, recorded_at, session_id) "
+                     "VALUES (1, 60.0, 1, 5, ?, ?)", (_utc(at(0)), sid))
+    for _ in range(3):
+        conn.execute("INSERT INTO gym_progression (exercise_id, weight_kg, sets, reps, recorded_at, session_id) "
+                     "VALUES (2, 50.0, 1, 6, ?, ?)", (_utc(at(0)), sid))
+    conn.commit()
+    # live is only read for item ORDER (first appearance) and day_reps; the
+    # before/after pass counts come from the DB. Squat appears before Row.
+    live = {'sets': (
+        [{'exercise_id': 1, 'weight_kg': 72.5, 'reps': 5, 'tracking_type': 'weight_reps'}] * 3 +
+        [{'exercise_id': 1, 'weight_kg': 60.0, 'reps': 5, 'tracking_type': 'weight_reps'}] * 3 +
+        [{'exercise_id': 2, 'weight_kg': 50.0, 'reps': 6, 'tracking_type': 'weight_reps'}] * 3)}
+    dl = _scheme_delta(live)
+    pairs = [(it['exercise_id'], it['weight_kg']) for it in dl]
+    check("only (exercise, weight) pairs that ROSE are returned",
+          pairs == [(1, 72.5), (1, 60.0), (2, 50.0)])
+    sq72 = dl[0]
+    check("Squat 72.5 label is '72.5 kg'", sq72['weight_label'] == '72.5 kg')
+    check("day_reps are today's reps at that weight", sq72['day_reps'] == [5, 5, 5])
+    c72 = {c['label']: c for c in sq72['cols']}
+    check("3×5@72.5 rose 0 → 1", c72['3×5']['before'] == 0 and c72['3×5']['after'] == 1)
+    check("4×3@72.5 stayed 0 → 0 (3 sets never clears a 4-set rung)",
+          c72['4×3']['before'] == 0 and c72['4×3']['after'] == 0)
+    check("gained counts every rung the day cleared (3×3/3×4/3×5)", sq72['gained'] == 3)
+    check("nothing mastered at the default T=5", sq72['mastered'] == [])
+    sq60 = dl[1]
+    c60 = {c['label']: c for c in sq60['cols']}
+    check("Squat 60 already had a pass → 1 → 2", c60['3×5']['before'] == 1 and c60['3×5']['after'] == 2)
+    check("Row is last and reports its reps", dl[2]['day_reps'] == [6, 6, 6])
+    # Threshold forces crossings so mastered / overflow are exercised.
+    dlT = _scheme_delta(live, threshold=1)
+    m72 = [it for it in dlT if it['exercise_id'] == 1 and it['weight_kg'] == 72.5][0]
+    check("at T=1 a 0→1 rung MASTERS (before < T <= after)",
+          set(m72['mastered']) >= {'3×3', '3×4', '3×5'})
+    o60 = [it for it in dlT if it['exercise_id'] == 1 and it['weight_kg'] == 60.0][0]
+    check("gained still counts passes PAST T as overflow (60: 1→2 at T=1)", o60['gained'] == 3)
+
+    print("\n[delta] a past day diffs against every OTHER counted day; today never leaks")
+    yiso = (today - timedelta(days=1)).isoformat()
+    for _ in range(3):
+        conn.execute("INSERT INTO gym_progression (exercise_id, weight_kg, sets, reps, recorded_at) "
+                     "VALUES (1, 80.0, 1, 5, ?)", (_utc(at(1)),))
+    conn.commit()
+    live_y = {'sets': [{'exercise_id': 1, 'weight_kg': 80.0, 'reps': 5, 'tracking_type': 'weight_reps'}] * 3}
+    ydl = _scheme_delta(live_y, day=yiso)
+    yids = [(it['exercise_id'], it['weight_kg']) for it in ydl]
+    check("the past-day delta surfaces that day's 80 kg pass", (1, 80.0) in yids)
+    check("an UNFINISHED today never leaks into a past-day delta",
+          (1, 72.5) not in yids and (1, 60.0) not in yids)
+    y80 = [it for it in ydl if it['weight_kg'] == 80.0][0]
+    cy = {c['label']: c for c in y80['cols']}
+    check("before excludes the day itself (0), after includes it (1)",
+          cy['3×5']['before'] == 0 and cy['3×5']['after'] == 1)
 
     conn.close()
     os.unlink(_DB)

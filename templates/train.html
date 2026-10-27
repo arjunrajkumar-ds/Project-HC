@@ -325,6 +325,166 @@
                    border:1px solid rgba(212,138,58,.45); background:rgba(212,138,58,.09);
                    color:#d48a3a; font-family:var(--font-mono); font-size:10px;
                    letter-spacing:.05em; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Stage bar (Feature 01) — ported character-for-character from
+   docs/wireframes/stage-bar-and-accumulation.html §1 (HANDOFF §3.1), with only
+   the §3.2 mechanical edits: non-.sb/.cv selectors scoped under `.sb `, and
+   .sb pinned sticky per §4.3. --c on each T3 part is set inline from MG_COLORS.
+   ══════════════════════════════════════════════════════════════════════════ */
+.sb{background:var(--bg);padding:7px 0 9px;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:50}
+.sb-cap{display:flex;align-items:baseline;gap:8px;margin:0 2px 6px;min-height:13px}
+.sb-cap .st{font-family:var(--font-mono);font-size:8px;letter-spacing:.15em;text-transform:uppercase;color:var(--dim);flex:none}
+.sb-cap .ex{font-size:11px;color:var(--text-strong);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-cap .ct{margin-left:auto;font-family:var(--font-mono);font-size:8.5px;color:var(--muted);flex:none;font-variant-numeric:tabular-nums}
+.sb-row{display:flex;gap:7px;align-items:stretch}
+.sb-chevs{flex:1;min-width:0;display:flex;height:40px}
+.cv{--pt:9px;position:relative;flex:1 1 0;min-width:0;margin-left:-5px;background:var(--panel-soft);cursor:pointer;
+  clip-path:polygon(0 0,calc(100% - var(--pt)) 0,100% 50%,calc(100% - var(--pt)) 100%,0 100%,var(--pt) 50%);
+  transition:flex-grow .5s cubic-bezier(.2,.8,.2,1),flex-basis .5s cubic-bezier(.2,.8,.2,1),background .3s;-webkit-tap-highlight-color:transparent}
+.cv:first-child{margin-left:0;clip-path:polygon(0 0,calc(100% - var(--pt)) 0,100% 50%,calc(100% - var(--pt)) 100%,0 100%)}
+.cv .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(212,165,116,.34);transition:width .55s cubic-bezier(.3,.7,.2,1),background .3s}
+.cv .tx{position:relative;z-index:2;height:100%;display:flex;flex-direction:column;justify-content:center;padding:0 10px 0 15px;min-width:0}
+.cv:first-child .tx{padding-left:9px}
+.cv .k{font-family:var(--font-mono);font-size:7.5px;letter-spacing:.12em;color:var(--dim);white-space:nowrap;transition:color .3s}
+.cv .n{font-size:9px;color:var(--dimmer);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;transition:color .3s}
+.cv .ok{display:none}
+.cv.active{background:rgba(212,165,116,.10)}
+.cv.active .k{color:var(--accent)}
+.cv.active .n{color:var(--text-strong)}
+.cv.active::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:linear-gradient(100deg,transparent 35%,rgba(212,165,116,.22) 50%,transparent 65%);background-size:260% 100%;animation:sheen 2.6s linear infinite}
+@keyframes sheen{from{background-position:140% 0}to{background-position:-40% 0}}
+.cv.done .fill{width:100%!important;background:var(--accent)}
+.cv.done .k{color:#2a1d10}
+.cv.done .n{color:#3a2918}
+.cv.done .ok{display:inline;margin-left:3px}
+.cv.just-done{animation:pop .6s .35s cubic-bezier(.3,1.6,.5,1) both}
+.cv.just-done::before{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;transform:translateX(-110%);
+  background:linear-gradient(100deg,transparent 30%,rgba(255,244,228,.7) 50%,transparent 70%);animation:sweep .55s .3s ease-out forwards}
+@keyframes sweep{to{transform:translateX(110%)}}
+@keyframes pop{0%{filter:brightness(1)}35%{filter:brightness(1.55)}100%{filter:brightness(1)}}
+.cv.arrive{animation:arrive .55s .6s cubic-bezier(.2,.9,.3,1.2) both}
+@keyframes arrive{0%{transform:translateX(-7px);filter:brightness(1.8)}100%{transform:none;filter:none}}
+.cv.fold{flex:0 0 13px;--pt:7px;background:repeating-linear-gradient(180deg,var(--dimmer) 0 3px,transparent 3px 6px)}
+.cv.fold .tx,.cv.fold .fill{opacity:0}
+.cv .tx{transition:opacity .25s .2s}
+.cv.unfold{animation:unfold .7s ease-out}
+@keyframes unfold{0%{filter:brightness(2)}100%{filter:none}}
+.cv.t3{flex:1.75 1 0;background:transparent}
+.cv.t3 .fill,.cv.t3 .tx{display:none}
+.sb .parts{position:absolute;inset:0;display:flex;gap:2px;padding-left:4px}
+.cv.t3:first-child .parts{padding-left:0}
+.sb .part{flex:1;position:relative;background:var(--panel-soft);overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.sb .part:last-child{padding-right:6px}
+.sb .part .pf{position:absolute;left:0;right:0;bottom:0;height:0;background:var(--c);opacity:.9;transition:height .5s cubic-bezier(.3,.7,.2,1)}
+.sb .part .pl{position:relative;z-index:2;font-family:var(--font-mono);font-size:8px;letter-spacing:.08em;color:var(--c);font-weight:600;transition:color .3s}
+.sb .part .pn{position:relative;z-index:2;font-family:var(--font-mono);font-size:7.5px;color:var(--dimmer);margin-top:2px;font-variant-numeric:tabular-nums}
+.sb .part.hit .pn{color:var(--text)}
+.sb .part.full .pl,.sb .part.full .pn{color:#121212}
+.sb .part.full.just{animation:pop .6s cubic-bezier(.3,1.6,.5,1)}
+.cv.t3.active .part{background:rgba(212,165,116,.07)}
+.cv.t3.active::after{z-index:3}
+.cv.t3 .t3k{position:absolute;left:12px;top:-1px;display:none}
+.sb-next{flex:none;width:56px;border-radius:var(--radius-md);border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent);
+  font-family:var(--font-mono);font-size:8px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:1px;-webkit-tap-highlight-color:transparent}
+.sb-next b{font-size:15px;line-height:1;font-weight:500}
+.sb-next:active{background:rgba(212,165,116,.24)}
+.sb-next.fin{border-color:var(--text-strong);color:#0d0e10;background:var(--text-strong)}
+/* Two-tap finish guard (HANDOFF §4.4) — app-only, no wireframe equivalent. */
+.sb-next.armed{border-color:var(--red);background:var(--red);color:#fff}
+.sb.complete .cv{animation:wave .7s ease both;animation-delay:calc(var(--i) * 90ms)}
+@keyframes wave{0%,100%{filter:none;transform:none}40%{filter:brightness(1.7);transform:translateY(-2px)}}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Finish recap (Feature 02) — ported from §2 (HANDOFF §3.1) with §3.2 edits
+   (bare .pip/.rcell/.rung/.rungs/.rl/.mtag/.grab scoped under #recap-panel) and
+   §3.4 deviations (app .sheet/.sheet-panel instead of .rc-sheet; keyframe slide
+   via rcUp since .sheet has no transition; Done is a normal .log-btn).
+   ══════════════════════════════════════════════════════════════════════════ */
+#recap-panel{border-top:1px solid var(--border-bright);border-radius:18px 18px 0 0}
+#recap-sheet.on #recap-panel{animation:rcUp .5s cubic-bezier(.2,.8,.2,1) both}
+@keyframes rcUp{from{transform:translateY(102%)}to{transform:none}}
+#recap-panel .grab{width:36px;height:4px;border-radius:2px;background:var(--border-bright);margin:0 auto 12px}
+.rc-k{font-family:var(--font-mono);font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+.rc-head{display:flex;align-items:flex-end;gap:12px;margin:6px 0 4px}
+.rc-big{font-size:40px;font-weight:700;letter-spacing:-.04em;color:var(--text-strong);line-height:1;font-variant-numeric:tabular-nums}
+.rc-big small{font-size:14px;font-weight:500;color:var(--muted);letter-spacing:0;margin-left:4px}
+.rc-mast{margin-left:auto;text-align:right;font-family:var(--font-mono);font-size:10px;color:var(--dim);line-height:1.5}
+.rc-mast b{display:block;font-size:20px;color:var(--accent);font-family:var(--font-sans);font-weight:700;letter-spacing:-.02em;transition:transform .3s}
+.rc-mast b.bump{animation:pop .6s cubic-bezier(.3,1.6,.5,1)}
+.rc-note{font-size:11px;color:var(--dim);margin:2px 0 14px;line-height:1.45}
+.rc-ex{border-top:1px solid var(--border);padding:12px 0 10px;opacity:0;transform:translateY(8px);transition:opacity .35s,transform .35s}
+.rc-ex.in{opacity:1;transform:none}
+.rc-exh{display:flex;align-items:baseline;gap:8px;margin-bottom:9px}
+.rc-exh .nm{font-size:13px;font-weight:600;color:var(--text-strong)}
+.rc-exh .wt{font-family:var(--font-mono);font-size:9.5px;color:var(--accent);background:var(--accent-soft);padding:2px 6px;border-radius:3px}
+.rc-exh .dl{margin-left:auto;font-family:var(--font-mono);font-size:9.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+#recap-panel .rungs{display:flex;gap:4px}
+#recap-panel .rung{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px}
+#recap-panel .rcell{width:100%;height:44px;border-radius:6px;border:1px solid var(--border-bright);background:var(--panel-soft);
+  display:flex;flex-direction:column-reverse;align-items:center;justify-content:center;gap:2.5px;position:relative;transition:background .35s,border-color .35s,opacity .3s}
+#recap-panel .rcell.quiet{opacity:.38}
+#recap-panel .rcell.none{background:transparent;border-style:dashed;border-color:var(--dimmer)}
+#recap-panel .pip{width:6px;height:5px;border-radius:2px;border:1px solid #5e5e5e;box-sizing:border-box}
+#recap-panel .pip.on{background:var(--accent);border-color:var(--accent)}
+#recap-panel .pip.new{background:var(--accent);border-color:var(--accent);transform:scale(0);opacity:0}
+#recap-panel .pip.new.land{animation:land .45s cubic-bezier(.3,1.8,.5,1) forwards}
+@keyframes land{0%{transform:scale(0);opacity:0;box-shadow:0 0 0 0 rgba(212,165,116,.9)}60%{transform:scale(1.6);opacity:1}
+  100%{transform:scale(1);opacity:1;box-shadow:0 0 0 5px rgba(212,165,116,0)}}
+#recap-panel .rcell.mastered{background:var(--accent);border-color:var(--accent);box-shadow:0 0 12px rgba(212,165,116,.4)}
+#recap-panel .rcell.mastered .pip{background:#121212;border-color:#121212}
+#recap-panel .rcell .ovf{position:absolute;top:2px;right:3px;font-size:8px;font-weight:700;color:#121212}
+#recap-panel .rcell.flood{animation:flood .8s ease-out}
+@keyframes flood{0%{box-shadow:0 0 0 0 rgba(212,165,116,.95)}100%{box-shadow:0 0 0 14px rgba(212,165,116,0),0 0 12px rgba(212,165,116,.4)}}
+#recap-panel .rcell .burst{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;pointer-events:none}
+#recap-panel .rl{font-family:var(--font-mono);font-size:8px;color:var(--dim);font-variant-numeric:tabular-nums}
+#recap-panel .rl.hot{color:var(--text-strong)}
+#recap-panel .mtag{display:inline-block;font-family:var(--font-mono);font-size:8px;letter-spacing:.12em;color:#17120a;background:var(--accent);
+  padding:3px 6px;border-radius:3px;margin-top:8px;opacity:0;transform:scale(.6);transition:opacity .3s,transform .4s cubic-bezier(.3,1.7,.5,1)}
+#recap-panel .mtag.in{opacity:1;transform:none}
+
+/* Reduced-motion (HANDOFF §3.1, ported from §242-244 but scoped to the new
+   stage-bar + recap selectors so the global reset is not reintroduced). */
+@media (prefers-reduced-motion: reduce){
+  #stage-root .cv, #stage-root .cv::after, #stage-root .cv::before, #stage-root .sb .part .pf, #stage-root .sb.complete .cv,
+  #recap-sheet.on #recap-panel, #recap-panel .pip, #recap-panel .pip.new.land, #recap-panel .rcell, #recap-panel .mtag,
+  #recap-panel .rc-ex, #recap-panel .rc-mast b{
+    animation-duration:1ms!important;animation-delay:0ms!important;transition-duration:1ms!important}
+}
+
+/* ── Mobile pass (2026-10-27): 44px targets, readable text, sheets, rest ── */
+.sheet-close { min-width:44px; min-height:44px; font-size:20px; }
+.sv button { width:44px; height:44px; font-size:18px; }
+.sv input { font-size:20px !important; min-height:44px; }
+.exrow { min-height:44px; }
+.exrow .en { font-size:13px; }
+.exrow .ed, .fnrow .fd { font-size:10px; }
+.fnrow .fl { font-size:10px; }
+.fnrow.done .fl { color:var(--dim); text-decoration:line-through; text-decoration-color:var(--dimmer); }
+.crow .gname { font-size:10.5px; }
+.crow.done .gname::after { content:" \2713"; color:var(--green); }
+.crow.done:not(.open) { opacity:.6; }
+.cov-k, .cov-hint { font-size:9.5px; }
+.act { font-size:10.5px; min-height:46px; }
+.log-btn { font-size:13px; padding:17px; min-height:56px; }
+.log-btn.saved { animation:logFlash .45s ease; }
+@keyframes logFlash { 0%{transform:scale(.97)} 50%{transform:scale(1.02)} 100%{transform:none} }
+.same-btn { width:100%; margin-top:10px; min-height:44px; background:var(--panel-soft);
+    border:1px dashed var(--border); border-radius:var(--radius-md); color:var(--text);
+    font-family:var(--font-mono); font-size:11px; letter-spacing:.06em; cursor:pointer;
+    -webkit-tap-highlight-color:transparent; }
+.same-btn:active { border-color:var(--accent); color:var(--accent); }
+.rest-t { font-size:26px !important; font-variant-numeric:tabular-nums; }
+.rest-k { font-size:10px; }
+.rest-sp button { min-width:44px; min-height:40px; font-size:11px; }
+.rest-bar.warn .rest-t { color:var(--accent); }
+body.sheet-lock { overflow:hidden; }
+.sheet-panel { touch-action:pan-y; }
+.sheet-panel::before { content:""; display:block; width:38px; height:4px; border-radius:2px;
+    background:var(--border); margin:-4px auto 10px; }
+@media (prefers-reduced-motion: reduce) { .log-btn.saved { animation:none; } }
 </style>
 {% endblock %}
 
@@ -340,6 +500,11 @@
     <button type="button" class="tr-ic" id="summary-cta" onclick="openSummary()"
             aria-label="Session summary">&#8721;</button>
   </div>
+
+  <!-- Stage bar (Feature 01): pinned Warm-up -> T1 -> T2(opt) -> T3 chevrons.
+       Sits above the date header + back-date banner (HANDOFF §4.3). Built once
+       by makeStageBar() and updated in place so transitions animate. -->
+  <div id="stage-root"></div>
 
   <!-- Date header: log for a previous training day. Hidden-cost on today
        (renders "Today", › disabled); stepping back reveals the banner below. -->
@@ -386,6 +551,10 @@
 </div>
 <div class="sheet" id="plate-sheet" onclick="if(event.target===this)closePlates()">
   <div class="sheet-panel" id="plate-panel"></div>
+</div>
+<!-- Finish recap (Feature 02): bottom sheet; content built by openRecap(). -->
+<div class="sheet" id="recap-sheet" onclick="if(event.target===this)closeRecap()">
+  <div class="sheet-panel" id="recap-panel"></div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -462,6 +631,7 @@ async function setDay(iso){
     if(iso > ACTUAL_TODAY) iso = ACTUAL_TODAY;      // never navigate into the future
     LOG_DATE = (iso === ACTUAL_TODAY) ? null : iso;
     clearRest();                                     // a past day has no live rest timer
+    STAGE_PREV = null;                               // new day: next render is a silent baseline (§4.6)
     renderDateHeader();
     await resyncLive();                              // reload sets for the chosen day
     if(CURRENT) openExercise(CURRENT);               // re-pull PREV for the chosen day
@@ -627,6 +797,9 @@ function runRest(){
 function renderRest(){
     if(!restEnd) return;
     const left = Math.round((restEnd - Date.now())/1000);
+    const rb = document.getElementById('rest-bar'); if(rb) rb.classList.toggle('warn', left>0 && left<=10);
+    if(left===10 && !window._restWarned){ window._restWarned = true; try { if(navigator.vibrate) navigator.vibrate(40); } catch(_){} }
+    if(left>10) window._restWarned = false;
     const t = document.getElementById('rest-time'), f = document.getElementById('rest-fill'),
           k = document.getElementById('rest-skip');
     if(t){ t.textContent = left>0 ? fmtDur(left) : 'GO'; t.classList.toggle('done', left<=0); }
@@ -692,7 +865,7 @@ function renderCoverage(){
         const right = total > 0
             ? '<span class="rt today">'+total+' today</span>'
             : '<span class="rt'+(stale?' stale':'')+'">'+dayLabel(g.days_since)+'</span>';
-        let html = '<button type="button" class="crow'+(open?' open':'')+'" style="--g:'+mgColor(g.key)+'" '
+        let html = '<button type="button" class="crow'+(open?' open':'')+((g.functions.length && g.functions.every(fn=>fnSetCount(g.key,fn.key)))?' done':'')+'" style="--g:'+mgColor(g.key)+'" '
             + 'onclick="toggleCov(\''+jsStr(g.key)+'\')">'
             + '<span class="mark'+(g.every_session?'':' off')+'"></span>'
             + '<span class="gname">'+esc(g.label)+'</span>' + meters + right + '</button>';
@@ -715,7 +888,7 @@ function renderCovExpand(g){
         const ds = fn.exercises.map(exDays).filter(d=>d!==null && d!==undefined);
         const coldest = ds.length ? Math.max.apply(null, ds) : null;
         const hit = fnSetCount(g.key, fn.key);
-        const head = '<div class="fnrow"><span class="fl">'+esc(fn.label)+'</span>'
+        const head = '<div class="fnrow'+(hit?' done':'')+'"><span class="fl">'+esc(fn.label)+'</span>'
             + '<span class="fd'+(hit?' ok':'')+'">'
             + (hit ? hit+' set'+(hit>1?'s':'') : dayLabel(ds.length?Math.min.apply(null,ds):null))
             + '</span></div>';
@@ -929,7 +1102,11 @@ function renderInputs(e, tt, keep){
 }
 function logButton(e,tt){
     const n = setsFor(e.id).length + 1;
-    return '<button type="button" class="log-btn" id="log-tick" onclick="logSet('+e.id+',\''+jsStr(tt)+'\')">'
+    const prev = setsFor(e.id).slice(-1)[0];
+    const same = (prev && (tt==='weight_reps' || tt==='reps'))
+        ? '<button type="button" class="same-btn" onclick="sameAsLast('+e.id+')">&#8634; Same as last &middot; '
+          + esc(setLabel(prev)) + '</button>' : '';
+    return same + '<button type="button" class="log-btn" id="log-tick" onclick="logSet('+e.id+',\''+jsStr(tt)+'\')">'
         + 'Log set '+n+'</button>';
 }
 
@@ -953,7 +1130,7 @@ function renderFajinRow(e){
         + '<span class="fp">&rsaquo;</span></button>';
 }
 
-function renderAll(){ renderStatus(); renderCoverage(); renderCard(); updateFajinPill(); }
+function renderAll(){ renderStatus(); renderCoverage(); renderCard(); updateFajinPill(); renderStage(); }
 
 // ── Steppers ──────────────────────────────────────────────────────────────
 // Per-field stepping rules. Reps, distance and the target are integers (reps
@@ -1119,6 +1296,7 @@ async function logSet(id, tt, extra){
     if(r.ok && r.data.ok){
         LIVE = r.data.workout_so_far;
         if(btn){ btn.classList.remove('saving'); btn.classList.add('saved'); btn.textContent='✓ Saved'; }
+        try { if(navigator.vibrate) navigator.vibrate(18); } catch(_){}
         const e = EX_BY_ID[id];
         // Cardio is continuous work, not sets with rest between them.
         if(e && e.muscle_group!=='cardio') startRest(e.rest_s || 90);
@@ -1159,7 +1337,7 @@ async function removeSet(setId, exId){
     const s=(LIVE.sets||[]).find(x=>x.id===setId);
     removeInFlight = true;
     let r;
-    try { r = await apiPost('/api/gym/set/delete', {set_id:setId}); }
+    try { r = await apiPost('/api/gym/set/delete', dateBody({set_id:setId})); }
     finally { removeInFlight = false; }
 
     if(r.ok && r.data.ok){
@@ -1391,12 +1569,18 @@ function renderSummary(){
 function closeSummary(){ finishArmed=false; document.getElementById('sum-sheet').classList.remove('on'); }
 async function finishSession(){
     finishArmed=false;
-    const r=await apiPost('/api/gym/session/finish', {});
+    // dateBody: a back-dated day finishes THAT day's session, not today's.
+    const r=await apiPost('/api/gym/session/finish', dateBody({}));
     if(r.ok && r.data.ok){
         closeSummary(); stopRest();
         LIVE = r.data.workout_so_far || LIVE;
-        renderAll();
-        toast('Session finished.');
+        renderAll();                                 // stage bar → finished (plays the complete wave)
+        // The finish recap (Feature 02): animate the day's banked passes. A
+        // cardio-only finish has an empty delta, so just toast. Both entry
+        // points (summary sheet + stage bar Finish) land here.
+        const delta = (r.data.accumulation_delta || []);
+        if(delta.length){ openRecap(delta, r.data.day); }
+        else { toast('Session finished.'); }
     } else { toast(r.offline ? 'No connection — not finished' : (r.data.error||'Could not finish the session')); }
 }
 
@@ -1414,7 +1598,7 @@ async function resyncLive(){
         if(r.ok && r.data && Array.isArray(r.data.sets)){
             LIVE = r.data;
             if(!Array.isArray(LIVE.muscles)) LIVE.muscles = [];
-            renderAll();
+            STAGE_SILENT = true; renderAll(); STAGE_SILENT = false;   // resync must not animate (§4.3)
         }
     } finally { resyncing = false; }
 }
@@ -1422,6 +1606,414 @@ document.addEventListener('visibilitychange', ()=>{
     if(document.visibilityState==='visible') resyncLive();
 });
 window.addEventListener('pageshow', e=>{ if(e.persisted) resyncLive(); });
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// Stage bar + Finish recap (Features 01 & 02). See docs/HANDOFF-stage-bar-
+// recap-route.md §4-§5. The bar is a pure function of the day's sets + a small
+// per-day manual state (Next/T2-open) + the session's `finished` flag; the DOM
+// is built once and updated in place so CSS transitions animate (§4.3). This
+// template is scheme-only (/train ∈ _SCHEME_ROUTES), so no engine check.
+// ══════════════════════════════════════════════════════════════════════════
+const T3_LBL = {sh:'SH', ar:'AR', co:'CO'};
+const T3_C   = {sh:MG_COLORS.shoulders, ar:MG_COLORS.arms, co:MG_COLORS.core};
+let STAGE_NODES = null;     // {el, chevs:[5], parts:{sh,ar,co}, nextBtn}
+let STAGE_PREV  = null;     // diff snapshot of the last render (null = first paint)
+let STAGE_SILENT = false;   // suppress one-shot animations (init/resync/day switch)
+let STAGE_LAST  = null;     // last derived state, for the interaction handlers
+let stageFinArmed = false, stageFinTimer = null;
+
+// Per-day manual state: Next-marked done keys + whether optional T2 is unfolded.
+// Keyed by the day so each back-dated day keeps its own (HANDOFF §4.2). try/catch
+// like readRest()/writeRest() — sessionStorage can throw in private mode.
+function stageManualKey(){ return 'train_stage_' + curDayIso(); }
+function readStageManual(){
+    try {
+        const r = JSON.parse(sessionStorage.getItem(stageManualKey()) || 'null');
+        if(r && typeof r === 'object')
+            return {done: Array.isArray(r.done) ? r.done : [], t2Open: !!r.t2Open};
+    } catch(e){}
+    return {done: [], t2Open: false};
+}
+function writeStageManual(m){
+    try { sessionStorage.setItem(stageManualKey(),
+        JSON.stringify({done: m.done || [], t2Open: !!m.t2Open})); } catch(e){}
+}
+
+// Pure derivation (HANDOFF §4.2): no DOM, no globals read beyond its args.
+function stageState(sets, manual, finished){
+    sets = sets || [];
+    manual = manual || {done:[], t2Open:false};
+    const done = new Set(manual.done || []);
+    const stages = [
+        {key:'warm', k:'WARM-UP', name:'', sets:0, target:2, lastExerciseId:null},
+        {key:'t1a',  k:'T1 · 1',  name:'', sets:0, target:3, lastExerciseId:null},
+        {key:'t1b',  k:'T1 · 2',  name:'', sets:0, target:3, lastExerciseId:null},
+        {key:'t2',   k:'T2',      name:'', sets:0, target:3, lastExerciseId:null, optional:true, open:false},
+        {key:'t3',   k:'T3',      name:'', target:3, parts:{sh:0,ar:0,co:0}, names:{}, lastExerciseId:null},
+    ];
+    // t1a is the FIRST distinct t1 exercise_id in log order; a 2nd (or later)
+    // distinct t1 lift is t1b. One lift in both slots collapses to a single T1.
+    const t1ids = [];
+    sets.forEach(s => { if(s.stage === 't1' && t1ids.indexOf(s.exercise_id) < 0) t1ids.push(s.exercise_id); });
+    const t1aId = (t1ids.length ? t1ids[0] : null);
+    sets.forEach(s => {
+        const st = s.stage;
+        if(st === 'warm'){ const g = stages[0]; g.sets++; g.name = s.exercise_name; g.lastExerciseId = s.exercise_id; }
+        else if(st === 't1'){
+            const g = (s.exercise_id === t1aId) ? stages[1] : stages[2];
+            g.sets++; g.name = s.exercise_name; g.lastExerciseId = s.exercise_id;
+        }
+        else if(st === 't2'){ const g = stages[3]; g.sets++; g.name = s.exercise_name; g.lastExerciseId = s.exercise_id; }
+        else if(st && st.indexOf('t3:') === 0){
+            const part = st.slice(3), g = stages[4];
+            if(g.parts[part] !== undefined){ g.parts[part]++; g.names[part] = s.exercise_name; }
+            g.name = s.exercise_name; g.lastExerciseId = s.exercise_id;
+        }
+    });
+    stages[3].open = stages[3].sets > 0 || !!manual.t2Open;
+    const visible = i => !(stages[i].optional && !stages[i].open);
+
+    let loggedIdx = 0;
+    stages.forEach((g,i) => {
+        const has = g.key === 't3' ? (g.parts.sh + g.parts.ar + g.parts.co > 0) : g.sets > 0;
+        if(has) loggedIdx = i;
+    });
+    let doneIdx = -1;
+    stages.forEach((g,i) => { if(done.has(g.key)) doneIdx = Math.max(doneIdx, i); });
+    let nextAfterDone = 0;
+    for(let i = doneIdx + 1; i < stages.length; i++){ if(visible(i)){ nextAfterDone = i; break; } }
+    let active = Math.max(loggedIdx, nextAfterDone, 0);
+    if(active > 4) active = 4;
+    if(!visible(active)) active = 4;    // never rest on a folded T2
+
+    stages.forEach((g,i) => {
+        if(g.key === 't3') g.done = !!finished;              // T3 is done only when finished
+        else g.done = done.has(g.key) || (visible(i) && i < active);
+    });
+    return {active, finished: !!finished, stages, visible: stages.map((_,i) => visible(i))};
+}
+
+// Build the DOM once (HANDOFF §4.3). renderStage() only toggles classes / text.
+function makeStageBar(){
+    const host = document.getElementById('stage-root');
+    if(!host || STAGE_NODES) return;
+    const el = document.createElement('div'); el.className = 'sb';
+    el.innerHTML =
+        '<div class="sb-cap"><span class="st"></span><span class="ex"></span><span class="ct"></span></div>'
+      + '<div class="sb-row"><div class="sb-chevs"></div>'
+      + '<button type="button" class="sb-next"><b>›</b><span>NEXT</span></button></div>';
+    host.appendChild(el);
+    const chevRow = el.querySelector('.sb-chevs');
+    const base = stageState([], {done:[], t2Open:false}, false);
+    const chevs = base.stages.map((st,i) => {
+        const c = document.createElement('div');
+        c.className = 'cv' + (st.key === 't3' ? ' t3' : '');
+        c.style.setProperty('--i', i);
+        if(st.key === 't3'){
+            c.innerHTML = '<div class="parts">' + ['sh','ar','co'].map(part =>
+                '<div class="part" data-p="' + part + '" style="--c:' + T3_C[part] + '">'
+              + '<span class="pf"></span><span class="pl">' + T3_LBL[part] + '</span>'
+              + '<span class="pn">0/3</span></div>').join('') + '</div>';
+        } else {
+            c.innerHTML = '<span class="fill"></span><span class="tx">'
+              + '<span class="k">' + st.k + '<span class="ok">✓</span></span>'
+              + '<span class="n"></span></span>';
+        }
+        c.addEventListener('click', () => onStageChevron(i));
+        chevRow.appendChild(c);
+        return c;
+    });
+    const parts = {}; ['sh','ar','co'].forEach(part => { parts[part] = chevs[4].querySelector('[data-p="' + part + '"]'); });
+    const nextBtn = el.querySelector('.sb-next');
+    nextBtn.addEventListener('click', onStageNext);
+    STAGE_NODES = {el, chevs, parts, nextBtn};
+}
+
+function renderStage(){
+    if(!STAGE_NODES){ makeStageBar(); if(!STAGE_NODES) return; }
+    const manual = readStageManual();
+    const S = stageState(LIVE.sets || [], manual, LIVE.finished);
+    STAGE_LAST = S;
+    const silent = STAGE_SILENT || STAGE_PREV === null;
+    const prev = STAGE_PREV || {done:new Set(), active:-1, t2Open:false, parts3:{sh:false,ar:false,co:false}, finished:false};
+    const nowDone = new Set(S.stages.filter(s => s.done).map(s => s.key));
+
+    S.stages.forEach((st,i) => {
+        const n = STAGE_NODES.chevs[i];
+        const folded = !!(st.optional && !st.open);
+        n.classList.toggle('fold', folded);
+        n.classList.toggle('active', i === S.active && !S.finished && !folded);
+        n.classList.toggle('done', st.done && st.key !== 't3');
+        if(st.key === 't3'){
+            ['sh','ar','co'].forEach(part => {
+                const v = st.parts[part], node = STAGE_NODES.parts[part];
+                node.querySelector('.pf').style.height = (st.done && v === 0 ? 0 : Math.min(v/3,1)*100) + '%';
+                node.querySelector('.pn').textContent = v + '/3';
+                node.classList.toggle('hit', v > 0);
+                node.classList.toggle('full', v >= 3);
+                if(!silent && v >= 3 && !prev.parts3[part]){ oneShot(node, 'just', 700); }
+            });
+        } else {
+            n.querySelector('.fill').style.width = (st.done ? 100 : Math.min(st.sets/st.target,1)*100) + '%';
+            n.querySelector('.n').textContent = st.name || (st.optional ? 'optional' : (i === 0 ? '—' : 'pick a lift'));
+            if(!silent && nowDone.has(st.key) && !prev.done.has(st.key)) oneShot(n, 'just-done', 1200);
+        }
+    });
+
+    // one-shots that are not per-node fill (§4.3)
+    if(!silent){
+        if(S.active > prev.active){ oneShot(STAGE_NODES.chevs[S.active], 'arrive', 1300); }
+        if(S.stages[3].open && !prev.t2Open){ oneShot(STAGE_NODES.chevs[3], 'unfold', 800); }
+        if(S.finished && !prev.finished){ oneShot(STAGE_NODES.el, 'complete', 1400); }
+    }
+
+    // caption + Next/Finish button
+    const a = S.stages[S.active];
+    const visCount = S.visible.filter(Boolean).length;
+    let visIndex = 0; for(let i = 0; i <= S.active; i++){ if(S.visible[i]) visIndex++; }
+    STAGE_NODES.el.querySelector('.st').textContent =
+        S.finished ? 'Session done' : ('Stage ' + visIndex + ' / ' + visCount);
+    let exTxt, ct;
+    if(S.finished){ exTxt = 'All stages complete'; ct = ''; }
+    else if(a.key === 't3'){
+        const hit = ['sh','ar','co'].filter(p => a.parts[p] > 0).length;
+        exTxt = a.name ? ('T3 · ' + a.name) : 'T3 · shoulders, arms, core';
+        ct = hit + ' / 3 groups';
+    } else {
+        exTxt = (a.key === 'warm' ? 'Warm-up' : a.k.replace(' · ', ' #')) + (a.name ? ' · ' + a.name : '');
+        ct = a.sets + ' / ' + a.target + ' sets';
+    }
+    STAGE_NODES.el.querySelector('.ex').textContent = exTxt;
+    STAGE_NODES.el.querySelector('.ct').textContent = ct;
+
+    const atFinish = S.active === 4 && !S.finished;
+    const btn = STAGE_NODES.nextBtn;
+    btn.classList.toggle('fin', atFinish && !stageFinArmed);
+    btn.classList.toggle('armed', atFinish && stageFinArmed);
+    btn.style.opacity = S.finished ? .45 : 1;
+    if(S.finished) btn.innerHTML = '<b>✓</b><span>DONE</span>';
+    else if(atFinish && stageFinArmed) btn.innerHTML = '<b>!</b><span>Tap again</span>';
+    else if(atFinish) btn.innerHTML = '<b>✓</b><span>FINISH</span>';
+    else btn.innerHTML = '<b>›</b><span>NEXT</span>';
+
+    STAGE_PREV = {done: nowDone, active: S.active, t2Open: S.stages[3].open,
+        parts3: {sh: S.stages[4].parts.sh >= 3, ar: S.stages[4].parts.ar >= 3, co: S.stages[4].parts.co >= 3},
+        finished: S.finished};
+}
+// Replay a one-shot animation class on a node (remove→reflow→add→cleanup).
+function oneShot(node, cls, ms){
+    node.classList.remove(cls); void node.offsetWidth; node.classList.add(cls);
+    setTimeout(() => node.classList.remove(cls), ms);
+}
+
+function onStageNext(){
+    const S = STAGE_LAST; if(!S || S.finished) return;              // DONE → disabled
+    if(S.active === 4){                                             // T3 → Finish (two-tap)
+        if(!LIVE.session_id){ toast('No session yet'); return; }
+        if(!stageFinArmed){
+            stageFinArmed = true; renderStage();
+            clearTimeout(stageFinTimer);
+            stageFinTimer = setTimeout(() => { stageFinArmed = false; renderStage(); }, 3000);
+            return;
+        }
+        clearTimeout(stageFinTimer); stageFinArmed = false;
+        finishSession();
+        return;
+    }
+    const key = S.stages[S.active].key;                            // Next → mark active done
+    const m = readStageManual();
+    if((m.done || []).indexOf(key) < 0){ m.done = (m.done || []).concat([key]); writeStageManual(m); }
+    renderStage();
+}
+function onStageChevron(i){
+    const S = STAGE_LAST; if(!S) return;
+    const st = S.stages[i];
+    if(st.optional && !st.open){                                   // folded T2 → unfold
+        const m = readStageManual(); m.t2Open = true; writeStageManual(m); renderStage(); return;
+    }
+    if(st.lastExerciseId && EX_BY_ID[st.lastExerciseId]) openExercise(st.lastExerciseId);
+}
+
+// ── Finish recap (Feature 02, HANDOFF §5.3) ────────────────────────────────
+// Uppercase day label for the recap header, e.g. "SUN 18 OCT". A separate
+// helper from fmtDayLabel() (which is title case + "Today"); _fmt_date (server)
+// is untouched per the handoff clarification.
+function recapDayLabel(iso){
+    const [y,m,d] = iso.split('-').map(Number);
+    const dt = new Date(Date.UTC(y, m-1, d));
+    const dow = ['SUN','MON','TUE','WED','THU','FRI','SAT'][dt.getUTCDay()];
+    const mon = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][m-1];
+    return dow + ' ' + d + ' ' + mon;
+}
+function fmtDayReps(reps){
+    if(!reps || !reps.length) return '';
+    const all = reps.every(r => r === reps[0]);
+    return all ? (reps.length + '×' + reps[0]) : reps.join(',');
+}
+let RECAP_TIMERS = [], RECAP_PLAN = null;
+const RECAP_REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function openRecap(delta, day){
+    day = day || curDayIso();
+    const isToday = (day === ACTUAL_TODAY);
+    const panel = document.getElementById('recap-panel');
+    panel.innerHTML =
+        '<div class="grab"></div>'
+      + '<div class="rc-k">Session banked · ' + recapDayLabel(day) + '</div>'
+      + '<div class="rc-head"><div class="rc-big"><span id="rc-count">+0</span><small>passes</small></div>'
+      + '<div class="rc-mast"><b id="rc-mcount">0</b>rungs mastered</div></div>'
+      + '<div class="rc-note">' + (isToday ? 'Today now counts on the home panel.'
+                                            : 'Already counted on the home panel.') + '</div>'
+      + '<div id="rc-list"></div>'
+      + '<button type="button" class="log-btn" onclick="closeRecap()">Done</button>';
+    RECAP_PLAN = buildRecapBlocks(delta);
+    document.getElementById('recap-sheet').classList.add('on');   // rcUp slide-up
+    playRecap();
+}
+function buildRecapBlocks(delta){
+    const list = document.getElementById('rc-list'); list.innerHTML = '';
+    const blocks = [];
+    (delta || []).forEach(item => {
+        const T = item.T || 5;
+        const box = document.createElement('div'); box.className = 'rc-ex';
+        box.innerHTML =
+            '<div class="rc-exh"><span class="nm">' + esc(item.name) + '</span>'
+          + '<span class="wt">' + esc(item.weight_label) + '</span>'
+          + '<span class="dl">' + fmtDayReps(item.day_reps) + ' · +' + item.gained + '</span></div>'
+          + '<div class="rungs"></div><div class="mt-wrap"></div>';
+        const rungs = box.querySelector('.rungs');
+        const cells = (item.cols || []).map(c => {
+            const rung = document.createElement('div'); rung.className = 'rung';
+            const cell = document.createElement('div'); cell.className = 'rcell';
+            const changed = c.after > c.before;
+            if(!changed) cell.classList.add('quiet');
+            if(c.before === 0 && c.after === 0) cell.classList.add('none');
+            if(c.before >= T) cell.classList.add('mastered');
+            const shown = Math.min(T, c.after);
+            for(let p = 0; p < T; p++){
+                const pip = document.createElement('span'); pip.className = 'pip';
+                if(p < Math.min(c.before, T)) pip.classList.add('on');
+                else if(p < shown) pip.classList.add('new');
+                cell.appendChild(pip);
+            }
+            if(c.before > T){ const o = document.createElement('span'); o.className = 'ovf'; o.textContent = '+' + (c.before - T); cell.appendChild(o); }
+            rung.appendChild(cell);
+            const l = document.createElement('span'); l.className = 'rl' + (changed ? ' hot' : ''); l.textContent = c.label;
+            rung.appendChild(l);
+            rungs.appendChild(rung);
+            return {cell, changed, before: c.before, after: c.after, label: c.label, T};
+        });
+        list.appendChild(box);
+        blocks.push({box, cells});
+    });
+    return blocks;
+}
+function playRecap(){
+    RECAP_TIMERS.forEach(clearTimeout); RECAP_TIMERS = [];
+    const plan = RECAP_PLAN; if(!plan) return;
+    const countEl = document.getElementById('rc-count'), mEl = document.getElementById('rc-mcount');
+    if(RECAP_REDUCE){ recapSnapFinal(); return; }
+    countEl.textContent = '+0'; mEl.textContent = '0';
+    let count = 0, mast = 0;
+    const at = (ms, fn) => RECAP_TIMERS.push(setTimeout(fn, ms));
+    let t = 650;
+    plan.forEach(({box, cells}) => {
+        at(t, () => box.classList.add('in')); t += 380;
+        cells.filter(c => c.changed).forEach(c => {
+            const news = [].slice.call(c.cell.querySelectorAll('.pip.new'));
+            const extra = (c.after - c.before) - news.length;         // overflow passes past T
+            news.forEach(pip => { at(t, () => { pip.classList.add('land'); count++; countEl.textContent = '+' + count; }); t += 150; });
+            for(let x = 0; x < extra; x++){ at(t, () => { count++; countEl.textContent = '+' + count;
+                let o = c.cell.querySelector('.ovf'); if(!o){ o = document.createElement('span'); o.className = 'ovf'; c.cell.appendChild(o); } o.textContent = '+' + (c.after - c.T); }); t += 150; }
+            if(c.before < c.T && c.after >= c.T){
+                at(t + 120, () => { c.cell.classList.add('mastered','flood'); mast++;
+                    mEl.textContent = mast; mEl.classList.remove('bump'); void mEl.offsetWidth; mEl.classList.add('bump');
+                    const tag = document.createElement('div'); tag.className = 'mtag'; tag.textContent = 'MASTERED ' + c.label;
+                    c.cell.closest('.rc-ex').querySelector('.mt-wrap').appendChild(tag);
+                    requestAnimationFrame(() => requestAnimationFrame(() => tag.classList.add('in'))); });
+                t += 650;
+            }
+        });
+        t += 260;
+    });
+}
+// Snap to the final state at once (reduced motion, or Done/scrim/reopen).
+function recapSnapFinal(){
+    const plan = RECAP_PLAN; if(!plan) return;
+    let count = 0, mast = 0;
+    plan.forEach(({box, cells}) => {
+        box.classList.add('in');
+        cells.forEach(c => {
+            if(!c.changed) return;
+            count += c.after - c.before;
+            [].slice.call(c.cell.querySelectorAll('.pip.new')).forEach(p => p.classList.add('land'));
+            if(c.after > c.T){ let o = c.cell.querySelector('.ovf'); if(!o){ o = document.createElement('span'); o.className = 'ovf'; c.cell.appendChild(o); } o.textContent = '+' + (c.after - c.T); }
+            if(c.before < c.T && c.after >= c.T){
+                c.cell.classList.add('mastered'); mast++;
+                const w = c.cell.closest('.rc-ex').querySelector('.mt-wrap');
+                if(!w.querySelector('.mtag')){ const tag = document.createElement('div'); tag.className = 'mtag in'; tag.textContent = 'MASTERED ' + c.label; w.appendChild(tag); }
+            }
+        });
+    });
+    const countEl = document.getElementById('rc-count'), mEl = document.getElementById('rc-mcount');
+    if(countEl) countEl.textContent = '+' + count;
+    if(mEl) mEl.textContent = mast;
+}
+function closeRecap(){
+    RECAP_TIMERS.forEach(clearTimeout); RECAP_TIMERS = [];
+    recapSnapFinal();
+    document.getElementById('recap-sheet').classList.remove('on');
+}
+
+// Load the previous set's numbers into the steppers (one tap for most sets).
+function sameAsLast(id){
+    const prev = setsFor(id).slice(-1)[0]; if(!prev) return;
+    const w = document.getElementById('ws-w'), r = document.getElementById('ws-r');
+    if(w && prev.weight_kg!=null) w.value = fmtW(prev.weight_kg);
+    if(r && prev.reps!=null) r.value = prev.reps;
+    try { if(navigator.vibrate) navigator.vibrate(10); } catch(_){}
+}
+
+// Keep the scroll position across in-place re-renders (log, undo, resync), so
+// the page doesn't jump while you're mid-set.
+(function keepScroll(){
+    const wrap = f => function(){
+        const y = window.scrollY, out = f.apply(this, arguments);
+        if(Math.abs(window.scrollY - y) > 1) window.scrollTo(0, y);
+        return out;
+    };
+    renderAll = wrap(renderAll); renderCoverage = wrap(renderCoverage); renderCard = wrap(renderCard);
+})();
+
+// Sheets: lock the page behind any open sheet, and swipe the panel down to close.
+(function sheetUX(){
+    const sheets = Array.from(document.querySelectorAll('.sheet'));
+    const sync = () => document.body.classList.toggle('sheet-lock', sheets.some(x=>x.classList.contains('on')));
+    const mo = new MutationObserver(sync);
+    sheets.forEach(sh => {
+        mo.observe(sh, {attributes:true, attributeFilter:['class']});
+        const p = sh.querySelector('.sheet-panel'); if(!p) return;
+        let y0 = null, dy = 0;
+        p.addEventListener('touchstart', ev => {
+            if(p.scrollTop > 0 || ev.touches.length !== 1){ y0 = null; return; }
+            y0 = ev.touches[0].clientY; dy = 0; p.style.transition = 'none';
+        }, {passive:true});
+        p.addEventListener('touchmove', ev => {
+            if(y0 === null) return;
+            dy = ev.touches[0].clientY - y0;
+            if(dy > 0 && p.scrollTop <= 0) p.style.transform = 'translateY('+dy+'px)';
+            else { dy = 0; p.style.transform = ''; }
+        }, {passive:true});
+        p.addEventListener('touchend', () => {
+            if(y0 === null) return;
+            const close = dy > 90; y0 = null;
+            p.style.transition = 'transform .18s ease'; p.style.transform = '';
+            setTimeout(() => { p.style.transition = ''; }, 200);
+            if(close) sh.dispatchEvent(new MouseEvent('click', {bubbles:true}));   // backdrop handler closes it
+        });
+    });
+})();
 
 // ── Init ──────────────────────────────────────────────────────────────────
 // Open on where the session left off; failing that, on the thing lifted most
@@ -1438,6 +2030,8 @@ window.addEventListener('pageshow', e=>{ if(e.persisted) resyncLive(); });
         start = pool.length ? pool[0].id : null;
     }
     readRest();
+    makeStageBar();
+    STAGE_SILENT = true; renderStage(); STAGE_SILENT = false;   // first paint is a silent baseline (§4.3)
     if(start) openExercise(start); else renderAll();
 })();
 </script>

@@ -1,6 +1,6 @@
 # PLAN — stage bar on /train, finish recap, two more accumulation views
 
-**Status:** 📐 drafted · wireframes only, no code changed · **Date:** 2026-10-18
+**Status:** ✅ 01, 02, 03-Route implemented · **Date:** 2026-10-18 (Ledger view intentionally out of scope — HANDOFF §2). See the Deviations section at the end.
 > Wireframes (interactive, real `tracker.db` numbers): `docs/wireframes/stage-bar-and-accumulation.html`.
 > Take the usual backups before the first edit: `templates/train.html`, `templates/_scheme_accumulation.html`,
 > `gymtracker/app.py`, `gymtracker/gym_bank.py` → `*.bak-stagebar-<ts>`. No schema change, so `tracker.db` is not backed up.
@@ -161,3 +161,34 @@ a lighter weight, breakthroughs). Route is the more fun one and could replace Ri
 3. **Should T3 complete itself?** It's currently manual (Next → Finish). The alternative is auto-completing when all three parts are full.
 4. **Today on home after finishing** means the home panel can change during the day if you finish, log one more set, and finish again.
    That's intended, since the panel follows Finish, but it's a change from "stable until the day ends".
+
+
+## Deviations & implementation notes (2026-10-18)
+
+Implemented per `docs/HANDOFF-stage-bar-recap-route.md` (Rev 2). Backups: all four
+files carry `.bak-stagebar-20261018-162312`. `tracker.db` never written.
+
+- **Ledger view (03-B) not built** — out of scope (HANDOFF §2). Only Matrix · Bars ·
+  Rings · **Route** ship in the home toggle.
+- **Recap container** uses the app `.sheet`/`.sheet-panel` with an `rcUp` keyframe
+  slide-up (`.sheet` has no transition), not the wireframe's `.rc-sheet` (HANDOFF §3.4).
+  Done is a normal `.log-btn`.
+- **Warm-up chevron** shows `—` (no name) rather than the wireframe's sample
+  "Band pull-aparts": warm-up data (`is_warmup`) is out of scope (§2, §4.1), so no
+  set is ever tagged `'warm'` yet. The warm chevron still auto-marks done once the
+  first T1 set lands. This affects reference states b/c/d/f (warm label only).
+- **`position: sticky` risk (UNVERIFIED in a browser here).** `base.html` sets
+  `body { overflow-x: hidden }`, which makes `body` a scroll container and can stop a
+  descendant `position: sticky` from pinning. Per HANDOFF §8 the bar is implemented
+  **sticky** (not `fixed`). If it fails to pin on iPhone Safari, the fix is to change
+  `base.html` `body { overflow-x: hidden }` → `overflow-x: clip` (clip does not create
+  a scroll container; Safari 16+). `base.html` is outside this change's 4-file scope,
+  so it was left untouched for Arjun to decide.
+- **Route "you are here" / weight set.** The Route floors are `scheme_viz`'s `weights`
+  (pass-weights ∪ current weight) — identical to the data the Matrix/Bars/Rings views
+  already use — so a current weight with no pass yet can add one extra floor vs. the
+  wireframe's pass-only weight set. Consistent across the whole panel.
+- **Verification.** `_build_scheme_viz()` no-arg output is byte-identical before/after
+  the refactor (checked on a DB copy). The pure logic was unit-checked: `stageState`
+  against reference states a-f, and `_scheme_delta` reproduces the recap reference
+  numbers exactly (OHP +6, Skullcrusher +2 / MASTERED 3×7, DSP +1 → +9, 1 mastered).
